@@ -1,5 +1,5 @@
 #include "scene.h"
 
-#include <stdexcept>
+#include <iostream>
 
-void gfx::Scene::Render() const { throw std::runtime_error{"Not implemented"}; }
+void gfx::Scene::Render() const { std::cerr << "Not implemented" << std::endl; }
