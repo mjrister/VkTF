@@ -30,7 +30,7 @@ gfx::Camera CreateCamera(const float aspect_ratio) {
 gfx::Mesh CreateMesh(const gfx::Device& device) {
   static constexpr glm::vec3 kTranslation{0.2f, -0.25f, 0.0f};
   static constexpr glm::vec3 kScale{0.35f};
-  auto mesh = gfx::obj_loader::LoadMesh(device, "assets/models/bunny.obj");
+  auto mesh = gfx::obj_loader::LoadMesh(device, "assets/models/buddha.obj");
   mesh.Translate(kTranslation);
   mesh.Scale(kScale);
   return mesh;
