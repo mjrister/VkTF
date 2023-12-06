@@ -1,12 +1,11 @@
 {
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "name": "mesh-simplification",
-  "version": "1.0.0",
+  "version-string": "1.0.0",
   "dependencies": [
+    "gl3w",
     "glfw3",
     "glm",
-    "glslang",
-    "gtest",
-    "vulkan-headers"
+    "gtest"
   ]
 }

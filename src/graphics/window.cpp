@@ -3,110 +3,70 @@
 #include <cassert>
 #include <format>
 #include <iostream>
-#include <print>
 #include <stdexcept>
 
 namespace {
 
-class GlfwContext {
-public:
-  static const GlfwContext& Get() {
-    static const GlfwContext kInstance;
-    return kInstance;
+void InitializeGlfw(const std::pair<int, int>& opengl_version) {
+  if (glfwInit() == GLFW_FALSE) {
+    throw std::runtime_error{"GLFW initialization failed"};
   }
-
-  GlfwContext(const GlfwContext&) = delete;
-  GlfwContext(GlfwContext&&) noexcept = delete;
-
-  GlfwContext& operator=(const GlfwContext&) = delete;
-  GlfwContext& operator=(GlfwContext&&) noexcept = delete;
-
-  ~GlfwContext() noexcept { glfwTerminate(); }
-
-private:
-  GlfwContext() {
 #ifndef NDEBUG
-    glfwSetErrorCallback([](const int error_code, const char* const description) {
-      std::println(std::cerr, "GLFW error {}: {}", error_code, description);
-    });
+  glfwSetErrorCallback([](const int error_code, const char* const description) {
+    std::cerr << std::format("GLFW Error ({}): {}\n", error_code, description);
+  });
+  glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE);
 #endif
-    if (glfwInit() == GLFW_FALSE) {
-      throw std::runtime_error{"GLFW initialization failed"};
-    }
-#ifdef GLFW_INCLUDE_VULKAN
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-#endif
-  }
-};
-
-using UniqueGlfwWindow = std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)>;
-
-UniqueGlfwWindow CreateGlfwWindow(const char* const title, const gfx::Window::Size& size) {
-  [[maybe_unused]] const auto& glfw_context = GlfwContext::Get();
-  auto* window = glfwCreateWindow(size.width, size.height, title, nullptr, nullptr);
-  if (window == nullptr) throw std::runtime_error{"GLFW window creation failed"};
-  return UniqueGlfwWindow{window, glfwDestroyWindow};
+  const auto [major_version, minor_version] = opengl_version;
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, major_version);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, minor_version);
+  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+  glfwWindowHint(GLFW_SAMPLES, 4);
 }
 
 }  // namespace
 
-gfx::Window::Window(const char* const title, const Size& size) : window_{CreateGlfwWindow(title, size)} {
-  glfwSetWindowUserPointer(window_.get(), this);
-  glfwSetInputMode(window_.get(), GLFW_STICKY_MOUSE_BUTTONS, GLFW_TRUE);
+qem::Window::Window(const char* const title,
+                    const std::pair<int, int>& window_dimensions,
+                    const std::pair<int, int>& opengl_version) {
+  InitializeGlfw(opengl_version);
+
+  const auto [width, height] = window_dimensions;
+  // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer)
+  window_ = glfwCreateWindow(width, height, title, nullptr, nullptr);
+  if (window_ == nullptr) throw std::runtime_error{"Window creation failed"};
+
+  glfwSetWindowUserPointer(window_, this);
+  glfwMakeContextCurrent(window_);
+  glfwSwapInterval(1);
+
+  glfwSetFramebufferSizeCallback(window_, [](GLFWwindow* /*window*/, const int new_width, const int new_height) {
+    glViewport(0, 0, new_width, new_height);
+  });
 
   glfwSetKeyCallback(
-      window_.get(),
+      window_,
       [](GLFWwindow* const window, const int key, const int /*scancode*/, const int action, const int /*modifiers*/) {
-        if (const auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window)); self->key_event_handler_) {
-          self->key_event_handler_(key, action);
+        if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+          glfwSetWindowShouldClose(window, GLFW_TRUE);
+        }
+        if (action == GLFW_PRESS) {
+          const auto* const self = static_cast<Window*>(glfwGetWindowUserPointer(window));
+          assert(self != nullptr);
+          if (self->on_key_press_) self->on_key_press_(key);
         }
       });
 
-  glfwSetCursorPosCallback(window_.get(), [](GLFWwindow* const window, const double x, const double y) {
-    if (const auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window)); self->cursor_event_handler_) {
-      self->cursor_event_handler_(static_cast<float>(x), static_cast<float>(y));
-    }
-  });
-
-  glfwSetScrollCallback(window_.get(), [](GLFWwindow* const window, const double /*x_offset*/, const double y_offset) {
-    if (const auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window)); self->scroll_event_handler_) {
-      self->scroll_event_handler_(static_cast<float>(y_offset));
-    }
+  glfwSetScrollCallback(window_, [](GLFWwindow* const window, const double x_offset, const double y_offset) {
+    const auto* const self = static_cast<Window*>(glfwGetWindowUserPointer(window));
+    assert(self != nullptr);
+    if (self->on_scroll_) self->on_scroll_(x_offset, y_offset);
   });
 }
 
-gfx::Window::Size gfx::Window::GetSize() const noexcept {
-  int width{}, height{};
-  glfwGetWindowSize(window_.get(), &width, &height);
-  return Size{.width = width, .height = height};
+qem::Window::~Window() noexcept {
+  if (window_ != nullptr) {
+    glfwDestroyWindow(window_);
+  }
+  glfwTerminate();
 }
-
-float gfx::Window::GetAspectRatio() const noexcept {
-  const auto [width, height] = GetSize();
-  return static_cast<float>(width) / static_cast<float>(height);
-}
-
-gfx::Window::Size gfx::Window::GetFramebufferSize() const noexcept {
-  int width{}, height{};
-  glfwGetFramebufferSize(window_.get(), &width, &height);
-  return Size{.width = width, .height = height};
-}
-
-#ifdef GLFW_INCLUDE_VULKAN
-
-std::span<const char* const> gfx::Window::GetInstanceExtensions() {
-  std::uint32_t required_extension_count{};
-  const auto* const* required_extensions = glfwGetRequiredInstanceExtensions(&required_extension_count);
-  if (required_extensions == nullptr) throw std::runtime_error{"No window surface instance extensions"};
-  return std::span{required_extensions, required_extension_count};  // pointer lifetime managed by GLFW
-}
-
-vk::UniqueSurfaceKHR gfx::Window::CreateSurface(const vk::Instance& instance) const {
-  VkSurfaceKHR surface{};
-  const auto result = static_cast<vk::Result>(glfwCreateWindowSurface(instance, window_.get(), nullptr, &surface));
-  vk::resultCheck(result, "Window surface creation failed");
-  const vk::ObjectDestroy<vk::Instance, VULKAN_HPP_DEFAULT_DISPATCHER_TYPE> deleter{instance};
-  return vk::UniqueSurfaceKHR{vk::SurfaceKHR{surface}, deleter};
-}
-
-#endif

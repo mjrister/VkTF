@@ -1,69 +1,59 @@
 #include "graphics/arcball.cpp"  // NOLINT(build/include)
 
-#include <limits>
+#include <cmath>
 
 #include <gtest/gtest.h>
 
-#include "graphics/window.h"
-
 namespace {
 
-constexpr auto kWindowWidth = 1920;
-constexpr auto kWindowHeight = 1080;
-constexpr gfx::Window::Size kWindowSize{.width = kWindowWidth, .height = kWindowHeight};
+TEST(ArcballTest, GetNormalizedDeviceCoordinates) {
+  constexpr auto kWidth = 300, kHeight = 200;
+  constexpr auto kWindowDimensions = std::make_pair(kWidth, kHeight);
 
-TEST(ArcballTest, GetNormalizedViewPositionConvertsScreenCoordiantesToNormalizedXyViewCoordiantes) {
-  static constexpr glm::vec2 kTopLeftCorner{0.0f, 0.0f};
-  static_assert(GetNormalizedViewPosition(kTopLeftCorner, kWindowSize) == glm::vec2{-1.0f, 1.0f});
+  constexpr auto kCursorPositionNdc0 = GetNormalizedDeviceCoordinates(glm::dvec2{0.f, 0.f}, kWindowDimensions);
+  static_assert(kCursorPositionNdc0.x == -1.0f);
+  static_assert(kCursorPositionNdc0.y == 1.0f);
 
-  static constexpr glm::vec2 kBottomLeftCorner{0.0f, kWindowHeight};
-  static_assert(GetNormalizedViewPosition(kBottomLeftCorner, kWindowSize) == glm::vec2{-1.0f, -1.0f});
+  constexpr auto kCursorPositionNdc1 = GetNormalizedDeviceCoordinates(glm::dvec2{0.f, kHeight}, kWindowDimensions);
+  static_assert(kCursorPositionNdc1.x == -1.0f);
+  static_assert(kCursorPositionNdc1.y == -1.0f);
 
-  static constexpr glm::vec2 kBottomRightCorner{kWindowWidth, kWindowHeight};
-  static_assert(GetNormalizedViewPosition(kBottomRightCorner, kWindowSize) == glm::vec2{1.0f, -1.0f});
+  constexpr auto kCursorPositionNdc2 = GetNormalizedDeviceCoordinates(glm::dvec2{kWidth, kHeight}, kWindowDimensions);
+  static_assert(kCursorPositionNdc2.x == 1.0f);
+  static_assert(kCursorPositionNdc2.y == -1.0f);
 
-  static constexpr glm::vec2 kTopRightCorner{kWindowWidth, 0.0f};
-  static_assert(GetNormalizedViewPosition(kTopRightCorner, kWindowSize) == glm::vec2{1.0f, 1.0f});
+  constexpr auto kCursorPositionNdc3 = GetNormalizedDeviceCoordinates(glm::dvec2{kWidth, 0.f}, kWindowDimensions);
+  static_assert(kCursorPositionNdc3.x == 1.0f);
+  static_assert(kCursorPositionNdc3.y == 1.0f);
 
-  static constexpr glm::vec2 kCenter{kWindowWidth / 2.0f, kWindowHeight / 2.0f};
-  static_assert(GetNormalizedViewPosition(kCenter, kWindowSize) == glm::vec2{0.0f, 0.0f});
+  constexpr auto kCursorPositionNdc4 =
+      GetNormalizedDeviceCoordinates(glm::dvec2{kWidth / 2.f, kHeight / 2.f}, kWindowDimensions);
+  static_assert(kCursorPositionNdc4.x == 0.f);
+  static_assert(kCursorPositionNdc4.y == 0.f);
+
+  constexpr auto kCursorPositionNdc5 = GetNormalizedDeviceCoordinates(glm::dvec2{-1.f, -1.f}, kWindowDimensions);
+  static_assert(kCursorPositionNdc5.x == -1.0f);
+  static_assert(kCursorPositionNdc5.y == 1.0f);
+
+  constexpr auto kCursorPositionNdc6 =
+      GetNormalizedDeviceCoordinates(glm::dvec2{kWidth + 1.f, kHeight + 1.f}, kWindowDimensions);
+  static_assert(kCursorPositionNdc6.x == 1.0f);
+  static_assert(kCursorPositionNdc6.y == -1.0f);
 }
 
-TEST(ArcballTest, GetNormalizedViewPositionClampsInTheRangeMinusOneToOne) {
-  static constexpr auto kHalfFloatMin = 0.5f * std::numeric_limits<float>::min();
-  static constexpr auto kHalfFloatMax = 0.5f * std::numeric_limits<float>::max();
-
-  static constexpr glm::vec2 kTopLeftCorner{kHalfFloatMin, kHalfFloatMin};
-  static_assert(GetNormalizedViewPosition(kTopLeftCorner, kWindowSize) == glm::vec2{-1.0f, 1.0f});
-
-  static constexpr glm::vec2 kBottomLeftCorner{kHalfFloatMin, kHalfFloatMax};
-  static_assert(GetNormalizedViewPosition(kBottomLeftCorner, kWindowSize) == glm::vec2{-1.0f, -1.0f});
-
-  static constexpr glm::vec2 kBottomRightCorner{kHalfFloatMax, kHalfFloatMax};
-  static_assert(GetNormalizedViewPosition(kBottomRightCorner, kWindowSize) == glm::vec2{1.0f, -1.0f});
-
-  static constexpr glm::vec2 kTopRightCorner{kHalfFloatMax, kHalfFloatMin};
-  static_assert(GetNormalizedViewPosition(kTopRightCorner, kWindowSize) == glm::vec2{1.0f, 1.0f});
+TEST(ArcballTest, GetArcballPositionForCursorInsideUnitSphere) {
+  constexpr glm::vec2 kCursorPositionNdc{0.5f, 0.25f};
+  const auto arcball_position = GetArcballPosition(kCursorPositionNdc);
+  EXPECT_FLOAT_EQ(arcball_position.x, kCursorPositionNdc.x);
+  EXPECT_FLOAT_EQ(arcball_position.y, kCursorPositionNdc.y);
+  EXPECT_FLOAT_EQ(arcball_position.z, 0.82915622f);
 }
 
-TEST(ArcballTest, GetArcballPositionForViewPositionInsideTheUnitSphere) {
-  static constexpr glm::vec2 kViewPosition{0.5f, 0.25f};
-  const auto arcball_position = GetArcballPosition(kViewPosition);
-  const auto x = arcball_position.x;
-  const auto y = arcball_position.y;
-  const auto z = arcball_position.z;
-  EXPECT_FLOAT_EQ(x, kViewPosition.x);
-  EXPECT_FLOAT_EQ(y, kViewPosition.y);
-  EXPECT_FLOAT_EQ(z, std::sqrt(1.0f - x * x - y * y));
-}
-
-TEST(ArcballTest, GetArcballPositionForViewPositionOutsideTheUnitSphere) {
-  constexpr glm::vec2 kViewPosition{0.75f, 0.85f};
-  const auto normalized_view_position = glm::normalize(kViewPosition);
-  const auto arcball_position = GetArcballPosition(kViewPosition);
-  EXPECT_FLOAT_EQ(arcball_position.x, normalized_view_position.x);
-  EXPECT_FLOAT_EQ(arcball_position.y, normalized_view_position.y);
+TEST(ArcballTest, GetArcballPositionForCursorOutsideUnitSphere) {
+  constexpr glm::vec2 kCursorPositionNdc{0.75f, 0.85f};
+  const auto arcball_position = GetArcballPosition(kCursorPositionNdc);
+  EXPECT_FLOAT_EQ(arcball_position.x, 0.66162163f);
+  EXPECT_FLOAT_EQ(arcball_position.y, 0.74983788f);
   EXPECT_FLOAT_EQ(arcball_position.z, 0.0f);
 }
-
 }  // namespace
