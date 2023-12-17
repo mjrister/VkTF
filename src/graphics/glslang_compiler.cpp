@@ -134,6 +134,7 @@ std::vector<std::uint32_t> GenerateSpirv(glslang_program_t* const program, const
 
 template <>
 struct std::formatter<glslang_stage_t> : std::formatter<std::string_view> {
+  // NOLINTNEXTLINE(runtime/references)
   [[nodiscard]] auto format(const glslang_stage_t stage, std::format_context& format_context) const {
     return std::formatter<std::string_view>::format(to_string(stage), format_context);
   }

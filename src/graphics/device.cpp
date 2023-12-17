@@ -83,7 +83,7 @@ vk::UniqueDevice CreateDevice(const vk::PhysicalDevice& physical_device,
                               const QueueFamilyIndices& queue_family_indices) {
   static constexpr auto kHighestNormalizedQueuePriority = 1.0f;
 
-  const auto device_queue_create_info =  // NOLINTNEXTLINE(whitespace/braces)
+  const auto device_queue_create_info =
       std::unordered_set{queue_family_indices.graphics_index, queue_family_indices.present_index}
       | std::views::transform([](const auto queue_family_index) {
           assert(queue_family_index != QueueFamilyIndices::kInvalidIndex);

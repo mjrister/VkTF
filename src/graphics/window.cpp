@@ -1,6 +1,5 @@
 #include "graphics/window.h"
 
-#include <cassert>
 #include <format>
 #include <iostream>
 #include <print>
@@ -83,8 +82,7 @@ gfx::Window::Extent gfx::Window::GetExtent() const noexcept {
 
 float gfx::Window::GetAspectRatio() const noexcept {
   const auto [width, height] = GetExtent();
-  assert(height > 0);
-  return static_cast<float>(width) / static_cast<float>(height);
+  return height == 0 ? 0.0f : static_cast<float>(width) / static_cast<float>(height);
 }
 
 gfx::Window::Extent gfx::Window::GetFramebufferExtent() const noexcept {

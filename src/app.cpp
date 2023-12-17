@@ -1,13 +1,8 @@
 #include "app.h"  // NOLINT(build/include_subdir)
 
-#include <cstdlib>
-#include <exception>
-#include <iostream>
-
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 
-#include "geometry/mesh_simplifier.h"
 #include "graphics/arcball.h"
 #include "graphics/obj_loader.h"
 
@@ -39,7 +34,7 @@ gfx::Mesh CreateMesh(const gfx::Device& device) {
 }  // namespace
 
 gfx::App::App()
-    : window_{"Mesh Simplification", Window::Extent{.width = kWindowWidth, .height = kWindowHeight}},
+    : window_{"VkRender", Window::Extent{.width = kWindowWidth, .height = kWindowHeight}},
       engine_{window_},
       camera_{CreateCamera(window_.GetAspectRatio())},
       mesh_{CreateMesh(engine_.device())} {
@@ -63,11 +58,6 @@ void gfx::App::HandleKeyEvent(const int key, const int action) {
     case GLFW_KEY_ESCAPE:
       window_.Close();
       break;
-    case GLFW_KEY_S: {
-      static constexpr auto kSimplificationRate = 0.5f;
-      mesh_ = mesh::Simplify(engine_.device(), mesh_, kSimplificationRate);
-      break;
-    }
     default:
       break;
   }
@@ -108,21 +98,4 @@ void gfx::App::HandleCursorEvent(const float x, const float y) {
 void gfx::App::HandleScrollEvent(const float y) {
   static constexpr auto kScaleSpeed = 0.02f;
   mesh_.Scale(glm::vec3{1.0f + kScaleSpeed * y});
-}
-
-int main() {
-  try {
-    gfx::App app;
-    app.Run();
-  } catch (const std::system_error& e) {
-    std::cerr << '[' << e.code() << "] " << e.what() << std::endl;
-    return EXIT_FAILURE;
-  } catch (const std::exception& e) {
-    std::cerr << e.what() << std::endl;
-    return EXIT_FAILURE;
-  } catch (...) {
-    std::cerr << "An unknown error occurred" << std::endl;
-    return EXIT_FAILURE;
-  }
-  return EXIT_SUCCESS;
 }
