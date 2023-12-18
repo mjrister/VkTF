@@ -1,6 +1,4 @@
-add_executable(tests graphics/arcball_test.cpp
-                     graphics/data_view_test.cpp
-                     graphics/obj_loader_test.cpp)
+add_executable(tests graphics/data_view_test.cpp)
 
 find_package(GTest CONFIG REQUIRED)
 

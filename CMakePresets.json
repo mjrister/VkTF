@@ -76,7 +76,7 @@
       }
     },
     {
-      "name": "window-x64-debug",
+      "name": "windows-x64-debug",
       "inherits": [
         "windows",
         "x64",
@@ -84,7 +84,7 @@
       ],
       "cacheVariables": {
         "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/vcpkg-triplets",
-        "VCPKG_TARGET_TRIPLET": "x64-windows-asan"
+        "VCPKG_TARGET_TRIPLET": "windows-x64-asan"
       }
     },
     {
@@ -114,8 +114,8 @@
   ],
   "buildPresets": [
     {
-      "name": "window-x64-debug",
-      "configurePreset": "window-x64-debug"
+      "name": "windows-x64-debug",
+      "configurePreset": "windows-x64-debug"
     },
     {
       "name": "windows-x64-release",
@@ -132,8 +132,8 @@
   ],
   "testPresets": [
     {
-      "name": "window-x64-debug",
-      "configurePreset": "window-x64-debug"
+      "name": "windows-x64-debug",
+      "configurePreset": "windows-x64-debug"
     },
     {
       "name": "windows-x64-release",

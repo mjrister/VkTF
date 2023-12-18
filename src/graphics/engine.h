@@ -15,7 +15,7 @@
 
 namespace gfx {
 class Camera;
-class Mesh;
+class Model;
 class Window;
 
 class Engine {
@@ -24,7 +24,7 @@ public:
 
   [[nodiscard]] const Device& device() const noexcept { return device_; }
 
-  void Render(const Camera& camera, const Mesh& mesh);
+  void Render(const Camera& camera, const Model& model);
 
 private:
   static constexpr std::size_t kMaxRenderFrames = 2;
@@ -38,6 +38,10 @@ private:
   Image depth_attachment_;
   vk::UniqueRenderPass render_pass_;
   std::vector<vk::UniqueFramebuffer> framebuffers_;
+  vk::UniqueDescriptorSetLayout descriptor_set_layout_;
+  vk::UniqueDescriptorPool descriptor_pool_;
+  std::vector<vk::DescriptorSet> descriptor_sets_;
+  std::vector<Buffer> uniform_buffers_;
   vk::UniquePipelineLayout graphics_pipeline_layout_;
   vk::UniquePipeline graphics_pipeline_;
   vk::UniqueCommandPool command_pool_;

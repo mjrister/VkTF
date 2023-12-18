@@ -34,7 +34,7 @@ private:
     }
 #ifdef GLFW_INCLUDE_VULKAN
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);  // TODO(matthew-rister): enable after implementing swapchain recreation
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);  // TODO(#50): enable after implementing swapchain recreation
 #endif
   }
 };

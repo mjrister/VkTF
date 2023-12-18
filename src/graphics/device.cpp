@@ -11,12 +11,13 @@
 #include <unordered_set>
 #include <vector>
 
+struct QueueFamilyIndices {
+  static constexpr std::uint32_t kInvalidIndex = std::numeric_limits<std::uint32_t>::max();
+  std::uint32_t graphics_index = kInvalidIndex;
+  std::uint32_t present_index = kInvalidIndex;
+};
+
 struct gfx::RankedPhysicalDevice {
-  struct QueueFamilyIndices {
-    static constexpr std::uint32_t kInvalidIndex = std::numeric_limits<std::uint32_t>::max();
-    std::uint32_t graphics_index = kInvalidIndex;
-    std::uint32_t present_index = kInvalidIndex;
-  };
   static constexpr std::uint32_t kInvalidRank = 0;
   vk::PhysicalDevice physical_device;
   vk::PhysicalDeviceLimits physical_device_limits;
@@ -25,8 +26,6 @@ struct gfx::RankedPhysicalDevice {
 };
 
 namespace {
-
-using QueueFamilyIndices = gfx::RankedPhysicalDevice::QueueFamilyIndices;
 
 std::optional<QueueFamilyIndices> FindQueueFamilyIndices(const vk::PhysicalDevice& physical_device,
                                                          const vk::SurfaceKHR& surface) {

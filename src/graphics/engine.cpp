@@ -11,13 +11,14 @@
 
 #include "graphics/camera.h"
 #include "graphics/mesh.h"
+#include "graphics/model.h"
 #include "graphics/shader_module.h"
 #include "graphics/window.h"
 
 namespace {
 
-struct VertexTransforms {
-  glm::mat4 model_view_transform;
+struct CameraTransforms {
+  glm::mat4 view_transform;
   glm::mat4 projection_transform;
 };
 
@@ -117,13 +118,71 @@ std::vector<vk::UniqueFramebuffer> CreateFramebuffers(const vk::Device& device,
          | std::ranges::to<std::vector>();
 }
 
-vk::UniquePipelineLayout CreateGraphicsPipelineLayout(const vk::Device& device) {
+vk::UniqueDescriptorSetLayout CreateDescriptorSetLayout(const vk::Device& device) {
+  static constexpr vk::DescriptorSetLayoutBinding kDescriptorSetLayoutBinding{
+      .binding = 0,
+      .descriptorType = vk::DescriptorType::eUniformBuffer,
+      .descriptorCount = 1,
+      .stageFlags = vk::ShaderStageFlagBits::eVertex};
+
+  return device.createDescriptorSetLayoutUnique(
+      vk::DescriptorSetLayoutCreateInfo{.bindingCount = 1, .pBindings = &kDescriptorSetLayoutBinding});
+}
+
+template <std::uint32_t N>
+vk::UniqueDescriptorPool CreateDescriptorPool(const vk::Device& device) {
+  static constexpr vk::DescriptorPoolSize kDescriptorPoolSize{.type = vk::DescriptorType::eUniformBuffer,
+                                                              .descriptorCount = 1};
+
+  return device.createDescriptorPoolUnique(
+      vk::DescriptorPoolCreateInfo{.maxSets = N, .poolSizeCount = 1, .pPoolSizes = &kDescriptorPoolSize});
+}
+
+template <std::uint32_t N>
+std::vector<vk::DescriptorSet> AllocateDescriptorSets(const vk::Device& device,
+                                                      const vk::DescriptorPool& descriptor_pool,
+                                                      const vk::DescriptorSetLayout& descriptor_set_layout) {
+  std::array<vk::DescriptorSetLayout, N> descriptor_set_layouts;
+  std::ranges::fill(descriptor_set_layouts, descriptor_set_layout);
+
+  return device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo{.descriptorPool = descriptor_pool,
+                                                                     .descriptorSetCount = N,
+                                                                     .pSetLayouts = descriptor_set_layouts.data()});
+}
+
+std::vector<gfx::Buffer> CreateUniformBuffers(const gfx::Device& device,
+                                              const std::vector<vk::DescriptorSet>& descriptor_sets) {
+  return descriptor_sets  //
+         | std::views::transform([&device](const auto& descriptor_set) {
+             gfx::Buffer buffer{device,
+                                sizeof(CameraTransforms),
+                                vk::BufferUsageFlagBits::eUniformBuffer,
+                                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent};
+
+             const vk::DescriptorBufferInfo buffer_info{.buffer = *buffer, .offset = 0, .range = vk::WholeSize};
+             device->updateDescriptorSets(vk::WriteDescriptorSet{.dstSet = descriptor_set,
+                                                                 .dstBinding = 0,
+                                                                 .dstArrayElement = 0,
+                                                                 .descriptorCount = 1,
+                                                                 .descriptorType = vk::DescriptorType::eUniformBuffer,
+                                                                 .pBufferInfo = &buffer_info},
+                                          nullptr);
+
+             return buffer;
+           })
+         | std::ranges::to<std::vector>();
+}
+
+vk::UniquePipelineLayout CreateGraphicsPipelineLayout(const vk::Device& device,
+                                                      const vk::DescriptorSetLayout& descriptor_set_layout) {
   static constexpr vk::PushConstantRange kPushConstantRange{.stageFlags = vk::ShaderStageFlagBits::eVertex,
                                                             .offset = 0,
-                                                            .size = sizeof(VertexTransforms)};
+                                                            .size = sizeof(gfx::Mesh::PushConstants)};
 
-  return device.createPipelineLayoutUnique(
-      vk::PipelineLayoutCreateInfo{.pushConstantRangeCount = 1, .pPushConstantRanges = &kPushConstantRange});
+  return device.createPipelineLayoutUnique(vk::PipelineLayoutCreateInfo{.setLayoutCount = 1,
+                                                                        .pSetLayouts = &descriptor_set_layout,
+                                                                        .pushConstantRangeCount = 1,
+                                                                        .pPushConstantRanges = &kPushConstantRange});
 }
 
 vk::UniquePipeline CreateGraphicsPipeline(const vk::Device& device,
@@ -157,12 +216,12 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device& device,
                                           .offset = offsetof(gfx::Mesh::Vertex, position)},
       vk::VertexInputAttributeDescription{.location = 1,
                                           .binding = 0,
-                                          .format = vk::Format::eR32G32Sfloat,
-                                          .offset = offsetof(gfx::Mesh::Vertex, texture_coordinates)},
+                                          .format = vk::Format::eR32G32B32Sfloat,
+                                          .offset = offsetof(gfx::Mesh::Vertex, normal)},
       vk::VertexInputAttributeDescription{.location = 2,
                                           .binding = 0,
-                                          .format = vk::Format::eR32G32B32Sfloat,
-                                          .offset = offsetof(gfx::Mesh::Vertex, normal)}};
+                                          .format = vk::Format::eR32G32Sfloat,
+                                          .offset = offsetof(gfx::Mesh::Vertex, texture_coordinates)}};
 
   static constexpr vk::PipelineVertexInputStateCreateInfo kVertexInputStateCreateInfo{
       .vertexBindingDescriptionCount = 1,
@@ -282,7 +341,7 @@ gfx::Engine::Engine(const Window& window)
                         vk::ImageAspectFlagBits::eColor,
                         vk::MemoryPropertyFlagBits::eDeviceLocal},
       depth_attachment_{device_,
-                        vk::Format::eD32Sfloat,  // TODO(matthew-rister): check device support
+                        vk::Format::eD32Sfloat,  // TODO(#54): check device support
                         swapchain_.image_extent(),
                         msaa_sample_count_,
                         vk::ImageUsageFlagBits::eDepthStencilAttachment,
@@ -295,7 +354,11 @@ gfx::Engine::Engine(const Window& window)
                                        *render_pass_,
                                        color_attachment_.image_view(),
                                        depth_attachment_.image_view())},
-      graphics_pipeline_layout_{CreateGraphicsPipelineLayout(*device_)},
+      descriptor_set_layout_{CreateDescriptorSetLayout(*device_)},
+      descriptor_pool_{CreateDescriptorPool<kMaxRenderFrames>(*device_)},
+      descriptor_sets_{AllocateDescriptorSets<kMaxRenderFrames>(*device_, *descriptor_pool_, *descriptor_set_layout_)},
+      uniform_buffers_{CreateUniformBuffers(device_, descriptor_sets_)},
+      graphics_pipeline_layout_{CreateGraphicsPipelineLayout(*device_, *descriptor_set_layout_)},
       graphics_pipeline_{
           CreateGraphicsPipeline(*device_, swapchain_, msaa_sample_count_, *graphics_pipeline_layout_, *render_pass_)},
       command_pool_{CreateCommandPool(device_)},
@@ -304,7 +367,7 @@ gfx::Engine::Engine(const Window& window)
       present_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)},
       draw_fences_{CreateFences<kMaxRenderFrames>(*device_)} {}
 
-void gfx::Engine::Render(const Camera& camera, const Mesh& mesh) {
+void gfx::Engine::Render(const Camera& camera, const Model& model) {
   if (++current_frame_index_ == kMaxRenderFrames) {
     current_frame_index_ = 0;
   }
@@ -323,9 +386,20 @@ void gfx::Engine::Render(const Camera& camera, const Mesh& mesh) {
   std::tie(result, image_index) = device_->acquireNextImageKHR(*swapchain_, kMaxTimeout, acquire_next_image_semaphore);
   vk::resultCheck(result, "Failed to acquire the next presentable image");
 
+  auto& uniform_buffer = uniform_buffers_[current_frame_index_];
+  uniform_buffer.Copy<CameraTransforms>(CameraTransforms{.view_transform = camera.view_transform(),
+                                                         .projection_transform = camera.projection_transform()});
+
   const auto& command_buffer = *command_buffers_[current_frame_index_];
   command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
   command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphics_pipeline_);
+
+  const auto& descriptor_set = descriptor_sets_[current_frame_index_];
+  command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                    *graphics_pipeline_layout_,
+                                    0,
+                                    descriptor_set,
+                                    nullptr);
 
   static constexpr std::array kClearColor{0.05098039f, 0.06666667f, 0.08627451f, 1.0f};
   static constexpr std::array kClearValues{vk::ClearValue{.color = vk::ClearColorValue{kClearColor}},
@@ -340,14 +414,7 @@ void gfx::Engine::Render(const Camera& camera, const Mesh& mesh) {
           .pClearValues = kClearValues.data()},
       vk::SubpassContents::eInline);
 
-  command_buffer.pushConstants<VertexTransforms>(
-      *graphics_pipeline_layout_,
-      vk::ShaderStageFlagBits::eVertex,
-      0,
-      VertexTransforms{.model_view_transform = camera.view_transform() * mesh.transform(),
-                       .projection_transform = camera.projection_transform()});
-
-  mesh.Render(command_buffer);
+  model.Render(command_buffer, *graphics_pipeline_layout_);
 
   command_buffer.endRenderPass();
   command_buffer.end();
