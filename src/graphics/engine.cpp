@@ -18,8 +18,8 @@
 namespace {
 
 struct CameraTransforms {
-  glm::mat4 view_transform;
-  glm::mat4 projection_transform;
+  glm::mat4 view_transform{1.0f};
+  glm::mat4 projection_transform{1.0f};
 };
 
 vk::SampleCountFlagBits GetMsaaSampleCount(const vk::PhysicalDeviceLimits& physical_device_limits) {

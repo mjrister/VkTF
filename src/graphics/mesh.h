@@ -14,13 +14,13 @@ namespace gfx {
 class Mesh {
 public:
   struct Vertex {
-    glm::vec3 position;
-    glm::vec3 normal;
-    glm::vec2 texture_coordinates;
+    glm::vec3 position{0.0f};
+    glm::vec3 normal{0.0f};
+    glm::vec2 texture_coordinates{0.0f};
   };
 
   struct PushConstants {
-    glm::mat4 model_transform;
+    glm::mat4 model_transform{1.0f};
   };
 
   Mesh(const Device& device, const std::vector<Vertex>& vertices, const std::vector<std::uint32_t>& indices)

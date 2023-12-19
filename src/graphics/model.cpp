@@ -108,7 +108,7 @@ gfx::Model::Model(const Device& device, const std::filesystem::path& filepath) {
   std::uint32_t import_flags = aiProcessPreset_TargetRealtime_Fast;
 
 #ifndef NDEBUG
-  import_flags |= aiProcess_ValidateDataStructure;
+  import_flags |= aiProcess_ValidateDataStructure;  // NOLINT(hicpp-signed-bitwise)
   Assimp::DefaultLogger::create(ASSIMP_DEFAULT_LOG_NAME, Assimp::Logger::DEBUGGING);
 #endif
 

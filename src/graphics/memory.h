@@ -31,7 +31,7 @@ public:
 private:
   vk::Device device_;
   vk::UniqueDeviceMemory memory_;
-  void* mapped_memory_{};
+  void* mapped_memory_ = nullptr;
 };
 
 }  // namespace gfx

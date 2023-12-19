@@ -10,10 +10,10 @@ namespace gfx {
 class Camera {
 public:
   struct ViewFrustum {
-    float field_of_view_y;
-    float aspect_ratio;
-    float z_near;
-    float z_far;
+    float field_of_view_y = 0.0f;
+    float aspect_ratio = 0.0f;
+    float z_near = 0.0f;
+    float z_far = 0.0f;
   };
 
   Camera(const glm::vec3& eye, const glm::vec3& center, const glm::vec3& up, const ViewFrustum& view_frustum)
