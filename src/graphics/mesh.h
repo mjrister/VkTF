@@ -1,12 +1,11 @@
 #ifndef SRC_GRAPHICS_MESH_H_
 #define SRC_GRAPHICS_MESH_H_
 
-#include <vector>
-
 #include <glm/vec3.hpp>
 #include <vulkan/vulkan.hpp>
 
 #include "graphics/buffer.h"
+#include "graphics/data_view.h"
 #include "graphics/device.h"
 
 namespace gfx {
@@ -23,7 +22,7 @@ public:
     glm::mat4 model_transform{1.0f};
   };
 
-  Mesh(const Device& device, const std::vector<Vertex>& vertices, const std::vector<std::uint32_t>& indices)
+  Mesh(const Device& device, const DataView<const Vertex> vertices, const DataView<const std::uint32_t> indices)
       : vertex_buffer_{CreateDeviceLocalBuffer<Vertex>(device, vk::BufferUsageFlagBits::eVertexBuffer, vertices)},
         index_buffer_{CreateDeviceLocalBuffer<std::uint32_t>(device, vk::BufferUsageFlagBits::eIndexBuffer, indices)},
         index_count_{static_cast<std::uint32_t>(indices.size())} {}
