@@ -16,8 +16,8 @@ namespace gfx {
 class Window {
 public:
   struct Extent {
-    int width = 0;
-    int height = 0;
+    int width{};
+    int height{};
   };
 
   Window(const char* title, const Extent& extent);

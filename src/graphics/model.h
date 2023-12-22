@@ -26,9 +26,9 @@ public:
 
   void Render(const vk::CommandBuffer& command_buffer, const vk::PipelineLayout& pipeline_layout) const;
 
-  void Translate(const glm::vec3& translation) const {
+  void Translate(const float dx, const float dy, const float dz) const {
     auto& transform = root_node_->transform;
-    transform = glm::translate(transform, translation);
+    transform = glm::translate(transform, glm::vec3{dx, dy, dz});
   }
 
   void Rotate(const glm::vec3& axis, const float angle) const {
@@ -36,9 +36,9 @@ public:
     transform = glm::rotate(transform, angle, axis);
   }
 
-  void Scale(const glm::vec3& scale) const {
+  void Scale(const float sx, const float sy, const float sz) const {
     auto& transform = root_node_->transform;
-    transform = glm::scale(transform, scale);
+    transform = glm::scale(transform, glm::vec3{sx, sy, sz});
   }
 
 private:

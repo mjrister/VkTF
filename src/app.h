@@ -1,7 +1,7 @@
 #ifndef SRC_APP_H_
 #define SRC_APP_H_
 
-#include "graphics/camera.h"
+#include "graphics/arc_camera.h"
 #include "graphics/engine.h"
 #include "graphics/model.h"
 #include "graphics/window.h"
@@ -15,11 +15,12 @@ public:
   void Run();
 
 private:
-  void HandleKeyEvent(const int key, const int action) const;
+  void HandleKeyEvent(int key, int action) const;
+  void HandleCursorEvent(float x, float y);
 
   Window window_;
   Engine engine_;
-  Camera camera_;
+  ArcCamera camera_;
   Model model_;
 };
 

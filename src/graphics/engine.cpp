@@ -1,7 +1,6 @@
 #include "graphics/engine.h"
 
 #include <algorithm>
-#include <cassert>
 #include <filesystem>
 #include <limits>
 #include <ranges>
@@ -9,7 +8,7 @@
 
 #include <glm/mat4x4.hpp>
 
-#include "graphics/camera.h"
+#include "graphics/arc_camera.h"
 #include "graphics/mesh.h"
 #include "graphics/model.h"
 #include "graphics/shader_module.h"
@@ -28,13 +27,14 @@ vk::SampleCountFlagBits GetMsaaSampleCount(const vk::PhysicalDeviceLimits& physi
   const auto color_depth_sample_count_flags = color_sample_count_flags & depth_sample_count_flags;
 
   using enum vk::SampleCountFlagBits;
-  for (const auto sample_count_flag_bit : {e8, e4, e2, e1}) {
+  for (const auto sample_count_flag_bit : {e8, e4, e2}) {
     if (sample_count_flag_bit & color_depth_sample_count_flags) {
       return sample_count_flag_bit;
     }
   }
 
-  std::unreachable();
+  assert(color_depth_sample_count_flags & e1);
+  return e1;
 }
 
 vk::UniqueRenderPass CreateRenderPass(const vk::Device& device,
@@ -367,7 +367,7 @@ gfx::Engine::Engine(const Window& window)
       present_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)},
       draw_fences_{CreateFences<kMaxRenderFrames>(*device_)} {}
 
-void gfx::Engine::Render(const Camera& camera, const Model& model) {
+void gfx::Engine::Render(const ArcCamera& camera, const Model& model) {
   if (++current_frame_index_ == kMaxRenderFrames) {
     current_frame_index_ = 0;
   }
