@@ -15,10 +15,10 @@ gfx::ArcCamera CreateCamera(const float aspect_ratio) {
   static constexpr glm::vec3 kPosition{0.0f, 0.0f, 1024.0f};
   return gfx::ArcCamera{kTarget,
                         kPosition,
-                        gfx::ViewFrustum{.field_of_view_y = glm::radians(45.0f),
-                                         .aspect_ratio = aspect_ratio,
-                                         .z_near = 0.1f,
-                                         .z_far = 10'000.0f}};
+                        gfx::ArcCamera::ViewFrustum{.field_of_view_y = glm::radians(45.0f),
+                                                    .aspect_ratio = aspect_ratio,
+                                                    .z_near = 0.1f,
+                                                    .z_far = 10'000.0f}};
 }
 
 }  // namespace
@@ -58,7 +58,7 @@ void gfx::App::HandleCursorEvent(const float x, const float y) {
       camera_.Rotate(rotation.x, rotation.y);
     }
     prev_cursor_position = cursor_position;
-  } else {
+  } else if (prev_cursor_position.has_value()) {
     prev_cursor_position = std::nullopt;
   }
 }

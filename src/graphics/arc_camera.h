@@ -4,23 +4,19 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 
+#include "math/spherical_coordinates.h"
+
 namespace gfx {
-
-struct ViewFrustum {
-  float field_of_view_y{};
-  float aspect_ratio{};
-  float z_near{};
-  float z_far{};
-};
-
-struct SphericalCoordinates {
-  float radius{};
-  float theta{};
-  float phi{};
-};
 
 class ArcCamera {
 public:
+  struct ViewFrustum {
+    float field_of_view_y{};
+    float aspect_ratio{};
+    float z_near{};
+    float z_far{};
+  };
+
   ArcCamera(const glm::vec3& target, const glm::vec3& position, const ViewFrustum& view_frustum);
 
   [[nodiscard]] const glm::mat4& view_transform() const noexcept { return view_transform_; }
