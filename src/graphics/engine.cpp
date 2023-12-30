@@ -153,7 +153,7 @@ std::vector<vk::DescriptorSet> AllocateDescriptorSets(const vk::Device& device,
 std::vector<gfx::Buffer> CreateUniformBuffers(const gfx::Device& device,
                                               const std::vector<vk::DescriptorSet>& descriptor_sets) {
   return descriptor_sets  //
-         | std::views::transform([&device](const auto& descriptor_set) {
+         | std::views::transform([&](const auto& descriptor_set) {
              gfx::Buffer buffer{device,
                                 sizeof(CameraTransforms),
                                 vk::BufferUsageFlagBits::eUniformBuffer,
@@ -311,7 +311,7 @@ std::vector<vk::UniqueCommandBuffer> AllocateCommandBuffers(const vk::Device& de
 template <std::size_t N>
 std::array<vk::UniqueSemaphore, N> CreateSemaphores(const vk::Device& device) {
   std::array<vk::UniqueSemaphore, N> semaphores;
-  std::ranges::generate(semaphores, [&device] {  //
+  std::ranges::generate(semaphores, [&] {  //
     return device.createSemaphoreUnique(vk::SemaphoreCreateInfo{});
   });
   return semaphores;
@@ -320,7 +320,7 @@ std::array<vk::UniqueSemaphore, N> CreateSemaphores(const vk::Device& device) {
 template <std::size_t N>
 std::array<vk::UniqueFence, N> CreateFences(const vk::Device& device) {
   std::array<vk::UniqueFence, N> fences;
-  std::ranges::generate(fences, [&device] {
+  std::ranges::generate(fences, [&] {
     return device.createFenceUnique(vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled});
   });
   return fences;

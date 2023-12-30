@@ -11,7 +11,7 @@ namespace {
 
 glm::mat4 GetViewTransform(const glm::vec3& target, const gfx::SphericalCoordinates& spherical_position) {
   static constexpr glm::vec3 kUp{0.0f, 1.0f, 0.0f};
-  const auto cartesian_position = target + ToCartesianCoordinates(spherical_position);
+  const auto cartesian_position = target + gfx::ToCartesianCoordinates(spherical_position);
   return glm::lookAt(cartesian_position, target, kUp);
 }
 

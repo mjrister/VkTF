@@ -15,12 +15,12 @@ struct SphericalCoordinates {
   float phi{};
 };
 
-[[nodiscard]] inline SphericalCoordinates ToSphericalCoordinates(const glm::vec3& cartesian_position) {
-  const auto radius = glm::length(cartesian_position);
+[[nodiscard]] inline SphericalCoordinates ToSphericalCoordinates(const glm::vec3& cartesian_coordinates) {
+  const auto radius = glm::length(cartesian_coordinates);
   assert(radius > 0.0f);
   return SphericalCoordinates{.radius = radius,
-                              .theta = std::atan2f(cartesian_position.x, cartesian_position.z),
-                              .phi = std::asinf(-cartesian_position.y / radius)};
+                              .theta = std::atan2f(cartesian_coordinates.x, cartesian_coordinates.z),
+                              .phi = std::asinf(-cartesian_coordinates.y / radius)};
 }
 
 [[nodiscard]] inline glm::vec3 ToCartesianCoordinates(const SphericalCoordinates& spherical_coordinates) {

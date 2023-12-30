@@ -52,7 +52,7 @@ std::optional<QueueFamilyIndices> FindQueueFamilyIndices(const vk::PhysicalDevic
 gfx::RankedPhysicalDevice GetRankedPhysicalDevice(const vk::PhysicalDevice& physical_device,
                                                   const vk::SurfaceKHR& surface) {
   return FindQueueFamilyIndices(physical_device, surface)
-      .transform([&physical_device](const auto& queue_family_indices) {
+      .transform([&](const auto& queue_family_indices) {
         const auto physical_device_properties = physical_device.getProperties();
         return gfx::RankedPhysicalDevice{
             .physical_device = physical_device,
@@ -65,9 +65,8 @@ gfx::RankedPhysicalDevice GetRankedPhysicalDevice(const vk::PhysicalDevice& phys
 
 gfx::RankedPhysicalDevice SelectPhysicalDevice(const vk::Instance& instance, const vk::SurfaceKHR& surface) {
   const auto ranked_physical_devices =
-      instance.enumeratePhysicalDevices() | std::views::transform([&surface](auto&& physical_device) {
-        return GetRankedPhysicalDevice(physical_device, surface);
-      })
+      instance.enumeratePhysicalDevices()
+      | std::views::transform([&](auto&& physical_device) { return GetRankedPhysicalDevice(physical_device, surface); })
       | std::views::filter([](auto&& ranked_physical_device) {
           return ranked_physical_device.rank != gfx::RankedPhysicalDevice::kInvalidRank;
         })

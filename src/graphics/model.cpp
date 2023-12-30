@@ -36,8 +36,8 @@ std::vector<gfx::Mesh::Vertex> GetVertices(const aiMesh& mesh) {
   const std::span normals{mesh.mNormals, mesh.HasNormals() ? mesh.mNumVertices : 0};
   const std::span texture_coordinates{mesh.mTextureCoords[0], mesh.HasTextureCoords(0) ? mesh.mNumVertices : 0};
 
-  return std::ranges::views::iota(0u, mesh.mNumVertices)
-         | std::ranges::views::transform([positions, normals, texture_coordinates](const auto index) {
+  return std::views::iota(0u, mesh.mNumVertices)
+         | std::views::transform([positions, normals, texture_coordinates](const auto index) {
              return gfx::Mesh::Vertex{.position = GetVec<3>(positions, index),
                                       .normal = GetVec<3>(normals, index),
                                       .texture_coordinates = GetVec<2>(texture_coordinates, index)};
@@ -46,11 +46,11 @@ std::vector<gfx::Mesh::Vertex> GetVertices(const aiMesh& mesh) {
 }
 
 std::vector<std::uint32_t> GetIndices(const aiMesh& mesh) {
-  return std::span{mesh.mFaces, mesh.HasFaces() ? mesh.mNumFaces : 0}
-         | std::ranges::views::transform([](const auto& face) {
+  return std::span{mesh.mFaces, mesh.HasFaces() ? mesh.mNumFaces : 0}  //
+         | std::views::transform([](const auto& face) {
              return std::span{face.mIndices, face.mNumIndices};
            })
-         | std::ranges::views::join  //
+         | std::views::join  //
          | std::ranges::to<std::vector>();
 }
 
@@ -70,17 +70,17 @@ glm::mat4 GetTransform(const aiNode& node) {
 }
 
 std::unique_ptr<gfx::Model::Node> ImportNode(const gfx::Device& device, const aiScene& scene, const aiNode& node) {
-  auto node_meshes = std::span{node.mMeshes, node.mNumMeshes}
-                     | std::ranges::views::transform(
-                         [&device, scene_meshes = std::span{scene.mMeshes, scene.mNumMeshes}](const auto index) {
-                           const auto& mesh = *scene_meshes[index];
-                           return gfx::Mesh{device, GetVertices(mesh), GetIndices(mesh)};
-                         })
-                     | std::ranges::to<std::vector>();
+  auto node_meshes =
+      std::span{node.mMeshes, node.mNumMeshes}
+      | std::views::transform([&, scene_meshes = std::span{scene.mMeshes, scene.mNumMeshes}](const auto index) {
+          const auto& mesh = *scene_meshes[index];
+          return gfx::Mesh{device, GetVertices(mesh), GetIndices(mesh)};
+        })
+      | std::ranges::to<std::vector>();
 
   auto node_children =
       std::span{node.mChildren, node.mNumChildren}
-      | std::ranges::views::transform([&](const auto* child_node) { return ImportNode(device, scene, *child_node); })
+      | std::views::transform([&](const auto* child_node) { return ImportNode(device, scene, *child_node); })
       | std::ranges::to<std::vector>();
 
   return std::make_unique<gfx::Model::Node>(std::move(node_meshes), std::move(node_children), GetTransform(node));
