@@ -8,6 +8,7 @@
     "glm",
     "glslang",
     "gtest",
+    "stb",
     "vulkan-headers"
   ]
 }

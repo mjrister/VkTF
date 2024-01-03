@@ -1,13 +1,13 @@
 #version 460
 
-layout(push_constant) uniform PushConstants {
-  mat4 model_transform;
-} push_constants;
-
-layout(set = 0, binding = 0) uniform CameraTransforms {
+layout(binding = 0, set = 0) uniform CameraTransforms {
   mat4 view_transform;
   mat4 projection_transform;
 } camera_transforms;
+
+layout(push_constant) uniform PushConstants {
+  mat4 model_transform;
+} push_constants;
 
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;

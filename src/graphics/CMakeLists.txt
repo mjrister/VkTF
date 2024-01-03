@@ -4,10 +4,12 @@ add_library(graphics STATIC arc_camera.cpp
                             glslang_compiler.cpp
                             image.cpp
                             instance.cpp
+                            material.cpp
                             memory.cpp
                             model.cpp
                             shader_module.cpp
                             swapchain.cpp
+                            texture2d.cpp
                             window.cpp)
 
 find_package(VulkanHeaders CONFIG REQUIRED)
@@ -32,6 +34,7 @@ target_compile_definitions(graphics PUBLIC GLFW_INCLUDE_VULKAN
                                            GLM_FORCE_DEPTH_ZERO_TO_ONE
                                            GLM_FORCE_SIZE_T_LENGTH
                                            GLM_FORCE_XYZW_ONLY
+                                           STB_IMAGE_IMPLEMENTATION
                                            VULKAN_HPP_NO_CONSTRUCTORS
                                            VULKAN_HPP_NO_SPACESHIP_OPERATOR
                                            VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1)

@@ -12,17 +12,23 @@ struct RankedPhysicalDevice;
 
 class PhysicalDevice {
 public:
-  PhysicalDevice(const vk::PhysicalDevice& physical_device, const vk::PhysicalDeviceLimits& physical_device_limits)
-      : physical_device_{physical_device}, physical_device_limits_{physical_device_limits} {}
+  PhysicalDevice(const vk::PhysicalDevice& physical_device,
+                 const vk::PhysicalDeviceLimits& physical_device_limits,
+                 const vk::PhysicalDeviceFeatures& physical_device_features)
+      : physical_device_{physical_device},
+        physical_device_limits_{physical_device_limits},
+        physical_device_features_{physical_device_features} {}
 
   [[nodiscard]] const vk::PhysicalDevice& operator*() const noexcept { return physical_device_; }
   [[nodiscard]] const vk::PhysicalDevice* operator->() const noexcept { return &physical_device_; }
 
   [[nodiscard]] const vk::PhysicalDeviceLimits& limits() const noexcept { return physical_device_limits_; }
+  [[nodiscard]] const vk::PhysicalDeviceFeatures& features() const noexcept { return physical_device_features_; }
 
 private:
   vk::PhysicalDevice physical_device_;
   vk::PhysicalDeviceLimits physical_device_limits_;
+  vk::PhysicalDeviceFeatures physical_device_features_;
 };
 
 class Device {

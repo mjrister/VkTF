@@ -19,6 +19,7 @@ struct gfx::RankedPhysicalDevice {
   QueueFamilies queue_families;
   vk::PhysicalDevice physical_device;
   vk::PhysicalDeviceLimits physical_device_limits;
+  vk::PhysicalDeviceFeatures physical_device_features;
 };
 
 namespace {
@@ -54,7 +55,8 @@ std::optional<gfx::RankedPhysicalDevice> RankPhysicalDevice(const vk::PhysicalDe
         .rank = physical_device_properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu,
         .queue_families = queue_families,
         .physical_device = physical_device,
-        .physical_device_limits = physical_device_properties.limits};
+        .physical_device_limits = physical_device_properties.limits,
+        .physical_device_features = physical_device.getFeatures()};
   });
 }
 
@@ -71,7 +73,7 @@ gfx::RankedPhysicalDevice SelectPhysicalDevice(const vk::Instance& instance, con
                                           [](const auto& lhs, const auto& rhs) { return lhs->rank < rhs->rank; });
 }
 
-vk::UniqueDevice CreateDevice(const vk::PhysicalDevice& physical_device, const QueueFamilies& queue_families) {
+vk::UniqueDevice CreateDevice(const gfx::PhysicalDevice& physical_device, const QueueFamilies& queue_families) {
   static constexpr auto kHighestNormalizedQueuePriority = 1.0f;
 
   const auto device_queue_create_info =
@@ -83,13 +85,15 @@ vk::UniqueDevice CreateDevice(const vk::PhysicalDevice& physical_device, const Q
         })
       | std::ranges::to<std::vector>();
 
-  constexpr std::array kDeviceExtensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+  static constexpr std::array kDeviceExtensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+  const vk::PhysicalDeviceFeatures enabled_features{.samplerAnisotropy = physical_device.features().samplerAnisotropy};
 
-  auto device = physical_device.createDeviceUnique(
+  auto device = physical_device->createDeviceUnique(
       vk::DeviceCreateInfo{.queueCreateInfoCount = static_cast<std::uint32_t>(device_queue_create_info.size()),
                            .pQueueCreateInfos = device_queue_create_info.data(),
                            .enabledExtensionCount = static_cast<std::uint32_t>(kDeviceExtensions.size()),
-                           .ppEnabledExtensionNames = kDeviceExtensions.data()});
+                           .ppEnabledExtensionNames = kDeviceExtensions.data(),
+                           .pEnabledFeatures = &enabled_features});
 
 #if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1
   VULKAN_HPP_DEFAULT_DISPATCHER.init(*device);
@@ -110,8 +114,10 @@ gfx::Device::Device(const vk::Instance& instance, const vk::SurfaceKHR& surface)
     : Device{SelectPhysicalDevice(instance, surface)} {}
 
 gfx::Device::Device(const RankedPhysicalDevice& ranked_physical_device)
-    : physical_device_{ranked_physical_device.physical_device, ranked_physical_device.physical_device_limits},
-      device_{CreateDevice(*physical_device_, ranked_physical_device.queue_families)},
+    : physical_device_{ranked_physical_device.physical_device,
+                       ranked_physical_device.physical_device_limits,
+                       ranked_physical_device.physical_device_features},
+      device_{CreateDevice(physical_device_, ranked_physical_device.queue_families)},
       graphics_queue_{*device_, ranked_physical_device.queue_families.graphics_family, 0},
       present_queue_{*device_, ranked_physical_device.queue_families.present_family, 0},
       one_time_submit_command_pool_{CreateOneTimeSubmitCommandPool(*device_, graphics_queue_)} {}

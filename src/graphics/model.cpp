@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <stdexcept>
@@ -16,6 +17,7 @@
 #include <glm/glm.hpp>
 
 #include "graphics/device.h"
+#include "graphics/texture2d.h"
 
 namespace {
 
@@ -69,35 +71,67 @@ glm::mat4 GetTransform(const aiNode& node) {
   // clang-format on
 }
 
-std::unique_ptr<gfx::Model::Node> ImportNode(const gfx::Device& device, const aiScene& scene, const aiNode& node) {
+std::unique_ptr<gfx::Model::Node> ImportNode(const gfx::Device& device,
+                                             const aiScene& scene,
+                                             const aiNode& node,
+                                             const gfx::Materials& materials) {
   auto node_meshes =
       std::span{node.mMeshes, node.mNumMeshes}
       | std::views::transform([&, scene_meshes = std::span{scene.mMeshes, scene.mNumMeshes}](const auto index) {
           const auto& mesh = *scene_meshes[index];
-          return gfx::Mesh{device, GetVertices(mesh), GetIndices(mesh)};
+          const auto& material = materials[mesh.mMaterialIndex];
+          return gfx::Mesh{device, GetVertices(mesh), GetIndices(mesh), material.descriptor_set()};
         })
       | std::ranges::to<std::vector>();
 
   auto node_children =
       std::span{node.mChildren, node.mNumChildren}
-      | std::views::transform([&](const auto* child_node) { return ImportNode(device, scene, *child_node); })
+      | std::views::transform([&](const auto* child_node) { return ImportNode(device, scene, *child_node, materials); })
       | std::ranges::to<std::vector>();
 
   return std::make_unique<gfx::Model::Node>(std::move(node_meshes), std::move(node_children), GetTransform(node));
+}
+
+std::optional<gfx::Texture2d> CreateTexture(const gfx::Device& device,
+                                            const aiMaterial& material,
+                                            const aiTextureType texture_type,
+                                            const std::filesystem::path& parent_path) {
+  if (material.GetTextureCount(texture_type) > 0) {
+    aiString texture_path;
+    material.GetTexture(texture_type, 0, &texture_path);
+    return gfx::Texture2d{device, parent_path / texture_path.C_Str()};
+  }
+  return std::nullopt;
+}
+
+gfx::Materials CreateMaterials(const gfx::Device& device,
+                               const aiScene& scene,
+                               const std::filesystem::path& parent_path) {
+  gfx::Materials materials{*device, scene.mNumMaterials};
+  for (auto index = 0; const auto* material : std::span{scene.mMaterials, scene.mNumMaterials}) {
+    if (auto diffuse_map = CreateTexture(device, *material, aiTextureType_DIFFUSE, parent_path)) {
+      materials[index++].UpdateDescriptorSet(*device, std::move(*diffuse_map));
+    }
+  }
+  return materials;
 }
 
 void RenderNode(const gfx::Model::Node& node,
                 const vk::CommandBuffer& command_buffer,
                 const vk::PipelineLayout& pipeline_layout,
                 const glm::mat4& parent_transform = glm::mat4{1.0f}) {
-  const auto transform = parent_transform * node.transform;
+  const auto node_transform = parent_transform * node.transform;
+  command_buffer.pushConstants<gfx::Model::PushConstants>(pipeline_layout,
+                                                          vk::ShaderStageFlagBits::eVertex,
+                                                          0,
+                                                          gfx::Model::PushConstants{.node_transform = node_transform});
 
   for (const auto& mesh : node.meshes) {
-    mesh.Render(command_buffer, pipeline_layout, transform);
+    mesh.Render(command_buffer, pipeline_layout);
   }
 
   for (const auto& child_node : node.children) {
-    RenderNode(*child_node, command_buffer, pipeline_layout, transform);
+    RenderNode(*child_node, command_buffer, pipeline_layout, node_transform);
   }
 }
 
@@ -105,7 +139,7 @@ void RenderNode(const gfx::Model::Node& node,
 
 gfx::Model::Model(const Device& device, const std::filesystem::path& filepath) {
   Assimp::Importer importer;
-  std::uint32_t import_flags = aiProcessPreset_TargetRealtime_Fast;
+  std::uint32_t import_flags = aiProcessPreset_TargetRealtime_Fast | aiProcess_FlipUVs;
 
 #ifndef NDEBUG
   import_flags |= aiProcess_ValidateDataStructure;  // NOLINT(hicpp-signed-bitwise)
@@ -115,7 +149,8 @@ gfx::Model::Model(const Device& device, const std::filesystem::path& filepath) {
   const auto* scene = importer.ReadFile(filepath.string(), import_flags);
   if (scene == nullptr) throw std::runtime_error{importer.GetErrorString()};
 
-  root_node_ = ImportNode(device, *scene, *scene->mRootNode);
+  materials_ = CreateMaterials(device, *scene, filepath.parent_path());
+  root_node_ = ImportNode(device, *scene, *scene->mRootNode, materials_);
 }
 
 void gfx::Model::Render(const vk::CommandBuffer& command_buffer, const vk::PipelineLayout& pipeline_layout) const {

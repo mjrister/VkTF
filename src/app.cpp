@@ -27,7 +27,7 @@ gfx::App::App()
     : window_{"VkRender", Window::Extent{.width = kWindowWidth, .height = kWindowHeight}},
       engine_{window_},
       camera_{CreateCamera(window_.GetAspectRatio())},
-      model_{engine_.device(), "assets/models/survival_backpack.glb"} {
+      model_{engine_.device(), "assets/models/survival_guitar_backpack/scene.gltf"} {
   window_.OnKeyEvent([this](const auto key, const auto action) { HandleKeyEvent(key, action); });
   window_.OnCursorEvent([this](const auto x, const auto y) { HandleCursorEvent(x, y); });
 }

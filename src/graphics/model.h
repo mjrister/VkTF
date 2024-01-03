@@ -9,6 +9,7 @@
 #include <glm/mat4x4.hpp>
 #include <vulkan/vulkan.hpp>
 
+#include "graphics/material.h"
 #include "graphics/mesh.h"
 
 namespace gfx {
@@ -20,6 +21,10 @@ public:
     std::vector<Mesh> meshes;
     std::vector<std::unique_ptr<Node>> children;
     glm::mat4 transform{1.0f};
+  };
+
+  struct PushConstants {
+    glm::mat4 node_transform{1.0f};
   };
 
   Model(const Device& device, const std::filesystem::path& filepath);
@@ -43,6 +48,7 @@ public:
 
 private:
   std::unique_ptr<Node> root_node_;
+  Materials materials_;
 };
 
 }  // namespace gfx
