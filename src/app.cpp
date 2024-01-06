@@ -12,7 +12,7 @@ constexpr auto kWindowHeight = 1080;
 
 gfx::ArcCamera CreateCamera(const float aspect_ratio) {
   static constexpr glm::vec3 kTarget{0.0f};
-  static constexpr glm::vec3 kPosition{0.0f, 0.0f, 1024.0f};
+  static constexpr glm::vec3 kPosition{0.0f, 0.0f, 4.0f};
   return gfx::ArcCamera{kTarget,
                         kPosition,
                         gfx::ArcCamera::ViewFrustum{.field_of_view_y = glm::radians(45.0f),
@@ -27,7 +27,7 @@ gfx::App::App()
     : window_{"VkRender", Window::Extent{.width = kWindowWidth, .height = kWindowHeight}},
       engine_{window_},
       camera_{CreateCamera(window_.GetAspectRatio())},
-      model_{engine_.device(), "assets/models/survival_guitar_backpack/scene.gltf"} {
+      model_{engine_.device(), "assets/models/damaged_helmet/DamagedHelmet.gltf"} {
   window_.OnKeyEvent([this](const auto key, const auto action) { HandleKeyEvent(key, action); });
   window_.OnCursorEvent([this](const auto x, const auto y) { HandleCursorEvent(x, y); });
 }
