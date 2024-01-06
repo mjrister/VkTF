@@ -1,6 +1,7 @@
 #include "graphics/arc_camera.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 
 #include <glm/glm.hpp>
@@ -28,7 +29,9 @@ gfx::ArcCamera::ArcCamera(const glm::vec3& target, const glm::vec3& position, co
     : target_{target},
       position_{ToSphericalCoordinates(position - target)},
       view_transform_{GetViewTransform(target_, position_)},
-      projection_transform_{GetProjectionTransform(view_frustum)} {}
+      projection_transform_{GetProjectionTransform(view_frustum)} {
+  assert(position_.radius > 0.0f);
+}
 
 void gfx::ArcCamera::Translate(const float dx, const float dy, const float dz) {
   target_ += glm::vec3{dx, dy, dz} * glm::mat3{view_transform_};

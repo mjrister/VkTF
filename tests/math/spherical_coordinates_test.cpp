@@ -13,6 +13,14 @@ constexpr auto kHalfPi = glm::half_pi<float>();
 constexpr auto kPi = glm::pi<float>();
 constexpr auto kRadius = 2.0f;
 
+TEST(SphericalCoordinatesTest, ConvertCartesianCoordinatesOnOriginToSphericalCoordinates) {
+  static constexpr glm::vec3 kCartesianCoordinates{0.0f};
+  const auto spherical_coordinates = gfx::ToSphericalCoordinates(kCartesianCoordinates);
+  EXPECT_EQ(spherical_coordinates.radius, 0.0f);
+  EXPECT_EQ(spherical_coordinates.theta, 0.0f);
+  EXPECT_EQ(spherical_coordinates.phi, 0.0f);
+}
+
 TEST(SphericalCoordinatesTest, ConvertCartesianCoordinatesOnThePositiveZAxisToSphericalCoordinates) {
   static constexpr glm::vec3 kCartesianPosition{0.0f, 0.0f, kRadius};
   const auto spherical_position = gfx::ToSphericalCoordinates(kCartesianPosition);
