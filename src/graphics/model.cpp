@@ -21,13 +21,16 @@
 
 namespace {
 
-template <glm::length_t N>
+template <glm::length_t N, typename T>
   requires(N > 0 && N <= 3)
-glm::vec<N, float> GetVec(const std::span<const aiVector3D> data, const std::size_t index) {
-  glm::vec<N, float> v{};
+glm::vec<N, T> GetVec(const std::span<aiVector3t<T>> data, const std::size_t index, const bool normalize = false) {
+  glm::vec<N, T> v{};
   if (index < data.size()) {
     for (std::uint32_t component = 0; component < N; ++component) {
       v[component] = data[index][component];
+    }
+    if (normalize) {
+      v = glm::normalize(v);
     }
   }
   return v;
@@ -37,12 +40,14 @@ std::vector<gfx::Mesh::Vertex> GetVertices(const aiMesh& mesh) {
   const std::span positions{mesh.mVertices, mesh.HasPositions() ? mesh.mNumVertices : 0};
   const std::span normals{mesh.mNormals, mesh.HasNormals() ? mesh.mNumVertices : 0};
   const std::span texture_coordinates{mesh.mTextureCoords[0], mesh.HasTextureCoords(0) ? mesh.mNumVertices : 0};
+  const std::span tangents{mesh.mTangents, mesh.HasTangentsAndBitangents() ? mesh.mNumVertices : 0};
 
   return std::views::iota(0u, mesh.mNumVertices)
-         | std::views::transform([positions, normals, texture_coordinates](const auto index) {
+         | std::views::transform([positions, normals, texture_coordinates, tangents](const auto index) {
              return gfx::Mesh::Vertex{.position = GetVec<3>(positions, index),
-                                      .normal = GetVec<3>(normals, index),
-                                      .texture_coordinates = GetVec<2>(texture_coordinates, index)};
+                                      .texture_coordinates = GetVec<2>(texture_coordinates, index),
+                                      .normal = GetVec<3>(normals, index, true),
+                                      .tangent = GetVec<3>(tangents, index, true)};
            })
          | std::ranges::to<std::vector>();
 }
@@ -93,13 +98,14 @@ std::unique_ptr<gfx::Model::Node> ImportNode(const gfx::Device& device,
 }
 
 std::optional<gfx::Texture2d> CreateTexture(const gfx::Device& device,
+                                            const vk::Format format,
                                             const aiMaterial& material,
                                             const aiTextureType texture_type,
                                             const std::filesystem::path& parent_path) {
   if (material.GetTextureCount(texture_type) > 0) {
     aiString texture_path;
     material.GetTexture(texture_type, 0, &texture_path);
-    return gfx::Texture2d{device, parent_path / texture_path.C_Str()};
+    return gfx::Texture2d{device, format, parent_path / texture_path.C_Str()};
   }
   return std::nullopt;
 }
@@ -109,8 +115,10 @@ gfx::Materials CreateMaterials(const gfx::Device& device,
                                const std::filesystem::path& parent_path) {
   gfx::Materials materials{*device, scene.mNumMaterials};
   for (auto index = 0; const auto* material : std::span{scene.mMaterials, scene.mNumMaterials}) {
-    if (auto diffuse_map = CreateTexture(device, *material, aiTextureType_DIFFUSE, parent_path)) {
-      materials[index++].UpdateDescriptorSet(*device, std::move(*diffuse_map));
+    auto diffuse_map = CreateTexture(device, vk::Format::eR8G8B8A8Srgb, *material, aiTextureType_DIFFUSE, parent_path);
+    auto normal_map = CreateTexture(device, vk::Format::eR8G8B8A8Unorm, *material, aiTextureType_NORMALS, parent_path);
+    if (diffuse_map.has_value() && normal_map.has_value()) {
+      materials[index++].UpdateDescriptorSet(*device, std::move(*diffuse_map), std::move(*normal_map));
     }
   }
   return materials;

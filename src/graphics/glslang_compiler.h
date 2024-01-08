@@ -2,8 +2,10 @@
 #define SRC_GRAPHICS_GLSLANG_COMPILER_H_
 
 #include <cstdint>
+#include <stdexcept>
 #include <vector>
 
+#include <glslang/Include/glslang_c_interface.h>
 #include <glslang/Include/glslang_c_shader_types.h>
 
 namespace gfx {
@@ -21,12 +23,16 @@ public:
   GlslangCompiler(GlslangCompiler&&) noexcept = delete;
   GlslangCompiler& operator=(GlslangCompiler&&) noexcept = delete;
 
-  ~GlslangCompiler() noexcept;
+  ~GlslangCompiler() noexcept { glslang_finalize_process(); }
 
   [[nodiscard]] std::vector<std::uint32_t> Compile(glslang_stage_t stage, const char* glsl_source) const;
 
 private:
-  GlslangCompiler();
+  GlslangCompiler() {
+    if (glslang_initialize_process() == 0) {
+      throw std::runtime_error{"glslang initialization failed"};
+    }
+  }
 };
 
 }  // namespace gfx

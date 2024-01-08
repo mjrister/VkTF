@@ -1,6 +1,7 @@
 #include "graphics/engine.h"
 
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <limits>
 #include <ranges>
@@ -126,7 +127,7 @@ std::vector<vk::UniqueDescriptorSetLayout> CreateDescriptorSetLayout(const vk::D
                                      .stageFlags = vk::ShaderStageFlagBits::eVertex},
       vk::DescriptorSetLayoutBinding{.binding = 1,
                                      .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-                                     .descriptorCount = 1,
+                                     .descriptorCount = 2,
                                      .stageFlags = vk::ShaderStageFlagBits::eFragment}};
 
   return kDescriptorSetLayoutBindings  //
@@ -226,12 +227,16 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device& device,
                                           .offset = offsetof(gfx::Mesh::Vertex, position)},
       vk::VertexInputAttributeDescription{.location = 1,
                                           .binding = 0,
-                                          .format = vk::Format::eR32G32B32Sfloat,
-                                          .offset = offsetof(gfx::Mesh::Vertex, normal)},
+                                          .format = vk::Format::eR32G32Sfloat,
+                                          .offset = offsetof(gfx::Mesh::Vertex, texture_coordinates)},
       vk::VertexInputAttributeDescription{.location = 2,
                                           .binding = 0,
-                                          .format = vk::Format::eR32G32Sfloat,
-                                          .offset = offsetof(gfx::Mesh::Vertex, texture_coordinates)}};
+                                          .format = vk::Format::eR32G32B32Sfloat,
+                                          .offset = offsetof(gfx::Mesh::Vertex, normal)},
+      vk::VertexInputAttributeDescription{.location = 3,
+                                          .binding = 0,
+                                          .format = vk::Format::eR32G32B32Sfloat,
+                                          .offset = offsetof(gfx::Mesh::Vertex, tangent)}};
 
   static constexpr vk::PipelineVertexInputStateCreateInfo kVertexInputStateCreateInfo{
       .vertexBindingDescriptionCount = 1,

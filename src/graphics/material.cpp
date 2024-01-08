@@ -10,7 +10,7 @@ vk::UniqueDescriptorSetLayout CreateDescriptorSetLayout(const vk::Device& device
   static constexpr vk::DescriptorSetLayoutBinding kDescriptorSetLayoutBinding{
       .binding = 1,
       .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-      .descriptorCount = 1,
+      .descriptorCount = 2,
       .stageFlags = vk::ShaderStageFlagBits::eFragment};
 
   return device.createDescriptorSetLayoutUnique(
@@ -19,7 +19,7 @@ vk::UniqueDescriptorSetLayout CreateDescriptorSetLayout(const vk::Device& device
 
 vk::UniqueDescriptorPool CreateDescriptorPool(const vk::Device& device, const std::size_t size) {
   static constexpr vk::DescriptorPoolSize kDescriptorPoolSize{.type = vk::DescriptorType::eCombinedImageSampler,
-                                                              .descriptorCount = 1};
+                                                              .descriptorCount = 2};
 
   return device.createDescriptorPoolUnique(vk::DescriptorPoolCreateInfo{.maxSets = static_cast<std::uint32_t>(size),
                                                                         .poolSizeCount = 1,
@@ -49,20 +49,26 @@ std::vector<gfx::Material> CreateMaterials(const vk::Device& device,
 
 }  // namespace
 
-void gfx::Material::UpdateDescriptorSet(const vk::Device& device, Texture2d&& diffuse_map) {
-  const vk::DescriptorImageInfo descriptor_image_info{.sampler = diffuse_map.sampler(),
-                                                      .imageView = diffuse_map.image_view(),
-                                                      .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal};
+void gfx::Material::UpdateDescriptorSet(const vk::Device& device, Texture2d&& diffuse_map, Texture2d&& normal_map) {
+  const std::array descriptor_image_info{
+      vk::DescriptorImageInfo{.sampler = diffuse_map.sampler(),
+                              .imageView = diffuse_map.image_view(),
+                              .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal},
+      vk::DescriptorImageInfo{.sampler = normal_map.sampler(),
+                              .imageView = normal_map.image_view(),
+                              .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal}};
 
-  device.updateDescriptorSets(vk::WriteDescriptorSet{.dstSet = descriptor_set_,
-                                                     .dstBinding = 1,
-                                                     .dstArrayElement = 0,
-                                                     .descriptorCount = 1,
-                                                     .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-                                                     .pImageInfo = &descriptor_image_info},
-                              nullptr);
+  device.updateDescriptorSets(
+      vk::WriteDescriptorSet{.dstSet = descriptor_set_,
+                             .dstBinding = 1,
+                             .dstArrayElement = 0,
+                             .descriptorCount = static_cast<std::uint32_t>(descriptor_image_info.size()),
+                             .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                             .pImageInfo = descriptor_image_info.data()},
+      nullptr);
 
   diffuse_map_ = std::move(diffuse_map);
+  normal_map_ = std::move(normal_map);
 }
 
 gfx::Materials::Materials(const vk::Device& device, const std::size_t size)

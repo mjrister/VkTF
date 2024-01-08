@@ -17,11 +17,12 @@ public:
 
   [[nodiscard]] const vk::DescriptorSet& descriptor_set() const noexcept { return descriptor_set_; }
 
-  void UpdateDescriptorSet(const vk::Device& device, Texture2d&& diffuse_map);
+  void UpdateDescriptorSet(const vk::Device& device, Texture2d&& diffuse_map, Texture2d&& normal_map);
 
 private:
   vk::DescriptorSet descriptor_set_;
   std::optional<Texture2d> diffuse_map_;
+  std::optional<Texture2d> normal_map_;
 };
 
 class Materials {

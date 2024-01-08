@@ -3,8 +3,6 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 
-#include "graphics/model.h"
-
 namespace {
 
 constexpr auto kWindowWidth = 1920;

@@ -11,11 +11,11 @@
 
 namespace {
 
-gfx::Image LoadImage(const gfx::Device& device, const std::string& filepath) {
+gfx::Image LoadImage(const gfx::Device& device, const vk::Format format, const std::string& filepath) {
   static constexpr auto kRequiredChannels = 4;
   int width{}, height{}, channels{};
 
-  const std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> data{
+  const std::unique_ptr<std::uint8_t, decltype(&stbi_image_free)> data{
       stbi_load(filepath.c_str(), &width, &height, &channels, kRequiredChannels),
       &stbi_image_free};
 
@@ -26,12 +26,12 @@ gfx::Image LoadImage(const gfx::Device& device, const std::string& filepath) {
 
   return gfx::CreateDeviceLocalImage(
       device,
-      vk::Format::eR8G8B8A8Srgb,
+      format,
       vk::Extent2D{.width = static_cast<std::uint32_t>(width), .height = static_cast<std::uint32_t>(height)},
       vk::SampleCountFlagBits::e1,
       vk::ImageUsageFlagBits::eSampled,
       vk::ImageAspectFlagBits::eColor,
-      gfx::DataView<const stbi_uc>{data.get(), width * height * kRequiredChannels * sizeof(stbi_uc)});
+      gfx::DataView<const std::uint8_t>{data.get(), static_cast<std::size_t>(width) * height * kRequiredChannels});
 }
 
 vk::UniqueSampler CreateSampler(const gfx::Device& device) {
@@ -47,5 +47,5 @@ vk::UniqueSampler CreateSampler(const gfx::Device& device) {
 
 }  // namespace
 
-gfx::Texture2d::Texture2d(const Device& device, const std::filesystem::path& filepath)
-    : image_{LoadImage(device, filepath.string())}, sampler_{CreateSampler(device)} {}
+gfx::Texture2d::Texture2d(const Device& device, const vk::Format format, const std::filesystem::path& filepath)
+    : image_{LoadImage(device, format, filepath.string())}, sampler_{CreateSampler(device)} {}

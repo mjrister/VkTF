@@ -14,9 +14,8 @@ struct gfx::RankedPhysicalDevice {
   struct QueueFamilies {
     QueueFamily graphics_family;
     QueueFamily present_family;
-  };
+  } queue_families;
   std::uint32_t rank{};
-  QueueFamilies queue_families;
   vk::PhysicalDevice physical_device;
   vk::PhysicalDeviceLimits physical_device_limits;
   vk::PhysicalDeviceFeatures physical_device_features;
@@ -52,8 +51,8 @@ std::optional<gfx::RankedPhysicalDevice> RankPhysicalDevice(const vk::PhysicalDe
   return FindQueueFamilies(physical_device, surface).transform([&](const auto& queue_families) {
     const auto physical_device_properties = physical_device.getProperties();
     return gfx::RankedPhysicalDevice{
-        .rank = physical_device_properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu,
         .queue_families = queue_families,
+        .rank = physical_device_properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu,
         .physical_device = physical_device,
         .physical_device_limits = physical_device_properties.limits,
         .physical_device_features = physical_device.getFeatures()};
