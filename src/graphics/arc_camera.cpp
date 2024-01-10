@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <limits>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
@@ -33,15 +34,16 @@ gfx::ArcCamera::ArcCamera(const glm::vec3& target, const glm::vec3& position, co
   assert(position_.radius > 0.0f);
 }
 
-void gfx::ArcCamera::Translate(const float dx, const float dy, const float dz) {
-  target_ += glm::vec3{dx, dy, dz} * glm::mat3{view_transform_};
-  view_transform_ = GetViewTransform(target_, position_);
-}
-
 void gfx::ArcCamera::Rotate(const float theta, const float phi) {
   static constexpr auto kThetaMax = glm::two_pi<float>();
   static constexpr auto kPhiMax = glm::radians(89.0f);
   position_.theta = std::fmodf(position_.theta + theta, kThetaMax);
   position_.phi = std::clamp(position_.phi + phi, -kPhiMax, kPhiMax);
+  view_transform_ = GetViewTransform(target_, position_);
+}
+
+void gfx::ArcCamera::Zoom(const float rate) {
+  static constexpr auto kEpsilon = std::numeric_limits<float>::epsilon();
+  position_.radius = std::max((1.0f - rate) * position_.radius, kEpsilon);
   view_transform_ = GetViewTransform(target_, position_);
 }
