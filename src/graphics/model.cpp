@@ -1,6 +1,5 @@
 #include "graphics/model.h"
 
-#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <optional>
@@ -150,7 +149,7 @@ gfx::Model::Model(const Device& device, const std::filesystem::path& filepath) {
   std::uint32_t import_flags = aiProcessPreset_TargetRealtime_Fast | aiProcess_FlipUVs;
 
 #ifndef NDEBUG
-  import_flags |= aiProcess_ValidateDataStructure;  // NOLINT(hicpp-signed-bitwise)
+  import_flags |= aiProcess_ValidateDataStructure;
   Assimp::DefaultLogger::create(ASSIMP_DEFAULT_LOG_NAME, Assimp::Logger::DEBUGGING);
 #endif
 

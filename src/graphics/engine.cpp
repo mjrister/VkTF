@@ -29,7 +29,7 @@ vk::SampleCountFlagBits GetMsaaSampleCount(const vk::PhysicalDeviceLimits& physi
 
   using enum vk::SampleCountFlagBits;
   for (const auto sample_count_flag_bit : {e8, e4, e2}) {
-    if (sample_count_flag_bit & color_depth_sample_count_flags) {
+    if (color_depth_sample_count_flags & sample_count_flag_bit) {
       return sample_count_flag_bit;
     }
   }
@@ -391,18 +391,15 @@ void gfx::Engine::Render(const ArcCamera& camera, const Model& model) {
   if (++current_frame_index_ == kMaxRenderFrames) {
     current_frame_index_ = 0;
   }
-  // NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index)
-  const auto& draw_fence = *draw_fences_[current_frame_index_];
-  const auto& acquire_next_image_semaphore = *acquire_next_image_semaphores_[current_frame_index_];
-  const auto& present_image_semaphore = *present_image_semaphores_[current_frame_index_];
-  // NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index)
 
   static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
+  const auto& draw_fence = *draw_fences_[current_frame_index_];
   auto result = device_->waitForFences(draw_fence, vk::True, kMaxTimeout);
   vk::resultCheck(result, "Draw fence failed to enter a signaled state");
   device_->resetFences(draw_fence);
 
   std::uint32_t image_index{};
+  const auto& acquire_next_image_semaphore = *acquire_next_image_semaphores_[current_frame_index_];
   std::tie(result, image_index) = device_->acquireNextImageKHR(*swapchain_, kMaxTimeout, acquire_next_image_semaphore);
   vk::resultCheck(result, "Failed to acquire the next presentable image");
 
@@ -440,6 +437,7 @@ void gfx::Engine::Render(const ArcCamera& camera, const Model& model) {
   command_buffer.end();
 
   static constexpr vk::PipelineStageFlags kPipelineWaitStage = vk::PipelineStageFlagBits::eTopOfPipe;
+  const auto& present_image_semaphore = *present_image_semaphores_[current_frame_index_];
   device_.graphics_queue()->submit(vk::SubmitInfo{.waitSemaphoreCount = 1,
                                                   .pWaitSemaphores = &acquire_next_image_semaphore,
                                                   .pWaitDstStageMask = &kPipelineWaitStage,

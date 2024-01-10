@@ -1,4 +1,4 @@
-#include "app.h"  // NOLINT(build/include_subdir)
+#include "app.h"
 
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>

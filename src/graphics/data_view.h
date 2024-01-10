@@ -12,11 +12,9 @@ concept DataRange = std::ranges::contiguous_range<R> && std::ranges::sized_range
 template <typename T>
 class DataView {
 public:
-  // NOLINTBEGIN(hicpp-explicit-conversions)
   constexpr DataView(T& data) noexcept : data_{&data}, size_{1} {}
   constexpr DataView(T* data, const std::size_t size) noexcept : data_{data}, size_{size} {}
   constexpr DataView(DataRange<T> auto&& range) noexcept : data_{range.data()}, size_{range.size()} {}
-  // NOLINTEND(hicpp-explicit-conversions)
 
   [[nodiscard]] constexpr T* data() const noexcept { return data_; }
   [[nodiscard]] constexpr std::size_t size() const noexcept { return size_; }

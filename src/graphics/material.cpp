@@ -1,6 +1,5 @@
 #include "graphics/material.h"
 
-#include <algorithm>
 #include <cstdint>
 #include <ranges>
 

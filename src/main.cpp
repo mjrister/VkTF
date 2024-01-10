@@ -2,20 +2,20 @@
 #include <exception>
 #include <iostream>
 
-#include "app.h"  // NOLINT(build/include_subdir)
+#include "app.h"
 
 int main() {
   try {
     gfx::App app;
     app.Run();
   } catch (const std::system_error& e) {
-    std::cerr << '[' << e.code() << "] " << e.what() << std::endl;
+    std::cerr << '[' << e.code() << "] " << e.what() << '\n';
     return EXIT_FAILURE;
   } catch (const std::exception& e) {
-    std::cerr << e.what() << std::endl;
+    std::cerr << e.what() << '\n';
     return EXIT_FAILURE;
   } catch (...) {
-    std::cerr << "An unknown error occurred" << std::endl;
+    std::cerr << "An unknown error occurred" << '\n';
     return EXIT_FAILURE;
   }
   return EXIT_SUCCESS;
