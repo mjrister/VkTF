@@ -312,7 +312,7 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device& device,
 vk::UniqueCommandPool CreateCommandPool(const gfx::Device& device) {
   return device->createCommandPoolUnique(
       vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-                                .queueFamilyIndex = device.graphics_queue().queue_family().index()});
+                                .queueFamilyIndex = device.physical_device().queue_family_indices().graphics_index});
 }
 
 template <std::size_t N>
@@ -326,9 +326,7 @@ std::vector<vk::UniqueCommandBuffer> AllocateCommandBuffers(const vk::Device& de
 template <std::size_t N>
 std::array<vk::UniqueSemaphore, N> CreateSemaphores(const vk::Device& device) {
   std::array<vk::UniqueSemaphore, N> semaphores;
-  std::ranges::generate(semaphores, [&] {  //
-    return device.createSemaphoreUnique(vk::SemaphoreCreateInfo{});
-  });
+  std::ranges::generate(semaphores, [&] { return device.createSemaphoreUnique(vk::SemaphoreCreateInfo{}); });
   return semaphores;
 }
 
@@ -438,19 +436,19 @@ void gfx::Engine::Render(const ArcCamera& camera, const Model& model) {
 
   static constexpr vk::PipelineStageFlags kPipelineWaitStage = vk::PipelineStageFlagBits::eTopOfPipe;
   const auto& present_image_semaphore = *present_image_semaphores_[current_frame_index_];
-  device_.graphics_queue()->submit(vk::SubmitInfo{.waitSemaphoreCount = 1,
-                                                  .pWaitSemaphores = &acquire_next_image_semaphore,
-                                                  .pWaitDstStageMask = &kPipelineWaitStage,
-                                                  .commandBufferCount = 1,
-                                                  .pCommandBuffers = &command_buffer,
-                                                  .signalSemaphoreCount = 1,
-                                                  .pSignalSemaphores = &present_image_semaphore},
-                                   draw_fence);
+  device_.graphics_queue().submit(vk::SubmitInfo{.waitSemaphoreCount = 1,
+                                                 .pWaitSemaphores = &acquire_next_image_semaphore,
+                                                 .pWaitDstStageMask = &kPipelineWaitStage,
+                                                 .commandBufferCount = 1,
+                                                 .pCommandBuffers = &command_buffer,
+                                                 .signalSemaphoreCount = 1,
+                                                 .pSignalSemaphores = &present_image_semaphore},
+                                  draw_fence);
 
-  result = device_.present_queue()->presentKHR(vk::PresentInfoKHR{.waitSemaphoreCount = 1,
-                                                                  .pWaitSemaphores = &present_image_semaphore,
-                                                                  .swapchainCount = 1,
-                                                                  .pSwapchains = &(*swapchain_),
-                                                                  .pImageIndices = &image_index});
+  result = device_.present_queue().presentKHR(vk::PresentInfoKHR{.waitSemaphoreCount = 1,
+                                                                 .pWaitSemaphores = &present_image_semaphore,
+                                                                 .swapchainCount = 1,
+                                                                 .pSwapchains = &(*swapchain_),
+                                                                 .pImageIndices = &image_index});
   vk::resultCheck(result, "Failed to queue an image for presentation");
 }
