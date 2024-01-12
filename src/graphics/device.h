@@ -19,22 +19,25 @@ public:
                  const vk::PhysicalDeviceLimits& physical_device_limits,
                  const QueueFamilyIndices& queue_family_indices)
       : physical_device_{physical_device},
-        physical_device_limits_{physical_device_limits},
-        physical_device_features_{physical_device.getFeatures()},
+        limits_{physical_device_limits},
+        features_{physical_device.getFeatures()},
+        mem_properties_{physical_device.getMemoryProperties()},
         queue_family_indices_{queue_family_indices} {}
 
   [[nodiscard]] const vk::PhysicalDevice& operator*() const noexcept { return physical_device_; }
   [[nodiscard]] const vk::PhysicalDevice* operator->() const noexcept { return &physical_device_; }
 
-  [[nodiscard]] const vk::PhysicalDeviceLimits& limits() const noexcept { return physical_device_limits_; }
-  [[nodiscard]] const vk::PhysicalDeviceFeatures& features() const noexcept { return physical_device_features_; }
+  [[nodiscard]] const vk::PhysicalDeviceLimits& limits() const noexcept { return limits_; }
+  [[nodiscard]] const vk::PhysicalDeviceFeatures& features() const noexcept { return features_; }
+  [[nodiscard]] const vk::PhysicalDeviceMemoryProperties& memory_properties() const noexcept { return mem_properties_; }
 
   [[nodiscard]] const QueueFamilyIndices& queue_family_indices() const noexcept { return queue_family_indices_; }
 
 private:
   vk::PhysicalDevice physical_device_;
-  vk::PhysicalDeviceLimits physical_device_limits_;
-  vk::PhysicalDeviceFeatures physical_device_features_;
+  vk::PhysicalDeviceLimits limits_;
+  vk::PhysicalDeviceFeatures features_;
+  vk::PhysicalDeviceMemoryProperties mem_properties_;
   QueueFamilyIndices queue_family_indices_;
 };
 
