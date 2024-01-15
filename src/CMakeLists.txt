@@ -1,6 +1,6 @@
 add_executable(app app.cpp main.cpp)
 
-target_link_libraries(app PRIVATE asan graphics warnings)
+target_link_libraries(app PRIVATE asan fast_math graphics warnings)
 
 add_subdirectory(graphics)
 add_subdirectory(math)

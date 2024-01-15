@@ -25,7 +25,7 @@ target_link_libraries(graphics PUBLIC Vulkan::Headers
                                       glslang::glslang
                                       glslang::glslang-default-resource-limits
                                       glslang::SPIRV
-                               PRIVATE asan warnings
+                               PRIVATE asan fast_math warnings
                                INTERFACE math)
 
 target_compile_definitions(graphics PUBLIC GLFW_INCLUDE_VULKAN
