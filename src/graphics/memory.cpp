@@ -10,40 +10,34 @@
 
 namespace {
 
-std::uint32_t FindMemoryTypeIndex(const gfx::PhysicalDevice& physical_device,
+std::uint32_t FindMemoryTypeIndex(const vk::PhysicalDeviceMemoryProperties& physical_device_memory_properties,
                                   const vk::MemoryRequirements& memory_requirements,
-                                  const vk::MemoryPropertyFlags& memory_property_flags) {
-  const auto& physical_device_memory_properties = physical_device.memory_properties();
-  const auto& physical_device_memory_types = physical_device_memory_properties.memoryTypes;
-
-  const auto iterator =
-      std::ranges::find_if(physical_device_memory_types, [&, index = 0u](const auto& memory_type) mutable {
-        const auto has_memory_type_bit = memory_requirements.memoryTypeBits & (1u << index++);
-        const auto has_memory_flags = (memory_property_flags & memory_type.propertyFlags) == memory_property_flags;
-        return has_memory_type_bit && has_memory_flags;
-      });
-
-  if (iterator == std::ranges::cend(physical_device_memory_types)) {
-    throw std::runtime_error{"Unsupported physical device memory"};
+                                  const vk::MemoryPropertyFlags memory_property_flags) {
+  for (std::uint32_t index = 0; const auto memory_type : physical_device_memory_properties.memoryTypes) {
+    if (memory_requirements.memoryTypeBits & (1u << index)
+        && (memory_property_flags & memory_type.propertyFlags) == memory_property_flags) {
+      return index;
+    }
+    ++index;
   }
-
-  const auto memory_type_index = std::ranges::distance(std::ranges::cbegin(physical_device_memory_types), iterator);
-  return static_cast<std::uint32_t>(memory_type_index);
+  throw std::runtime_error{"Unsupported memory type"};
 }
 
 vk::UniqueDeviceMemory AllocateMemory(const gfx::Device& device,
                                       const vk::MemoryRequirements& memory_requirements,
-                                      const vk::MemoryPropertyFlags& memory_property_flags) {
-  return device->allocateMemoryUnique(vk::MemoryAllocateInfo{
-      .allocationSize = memory_requirements.size,
-      .memoryTypeIndex = FindMemoryTypeIndex(device.physical_device(), memory_requirements, memory_property_flags)});
+                                      const vk::MemoryPropertyFlags memory_property_flags) {
+  return device->allocateMemoryUnique(
+      vk::MemoryAllocateInfo{.allocationSize = memory_requirements.size,
+                             .memoryTypeIndex = FindMemoryTypeIndex(device.physical_device().memory_properties(),
+                                                                    memory_requirements,
+                                                                    memory_property_flags)});
 }
 
 }  // namespace
 
 gfx::Memory::Memory(const Device& device,
                     const vk::MemoryRequirements& memory_requirements,
-                    const vk::MemoryPropertyFlags& memory_property_flags)
+                    const vk::MemoryPropertyFlags memory_property_flags)
     : device_{*device}, memory_{AllocateMemory(device, memory_requirements, memory_property_flags)} {}
 
 gfx::Memory& gfx::Memory::operator=(Memory&& memory) noexcept {

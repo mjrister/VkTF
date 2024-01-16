@@ -41,7 +41,7 @@ private:
 
 using UniqueGlfwWindow = std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)>;
 
-UniqueGlfwWindow CreateGlfwWindow(const char* const title, const gfx::Window::Extent& extent) {
+UniqueGlfwWindow CreateGlfwWindow(const char* const title, const gfx::Window::Extent extent) {
   [[maybe_unused]] const auto& glfw_context = GlfwContext::Get();
   auto* window = glfwCreateWindow(extent.width, extent.height, title, nullptr, nullptr);
   if (window == nullptr) throw std::runtime_error{"GLFW window creation failed"};
@@ -50,7 +50,7 @@ UniqueGlfwWindow CreateGlfwWindow(const char* const title, const gfx::Window::Ex
 
 }  // namespace
 
-gfx::Window::Window(const char* const title, const Extent& extent) : window_{CreateGlfwWindow(title, extent)} {
+gfx::Window::Window(const char* const title, const Extent extent) : window_{CreateGlfwWindow(title, extent)} {
   glfwSetWindowUserPointer(window_.get(), this);
 
   glfwSetKeyCallback(
@@ -97,10 +97,10 @@ std::span<const char* const> gfx::Window::GetInstanceExtensions() {
   std::uint32_t required_extension_count{};
   const auto* const* required_extensions = glfwGetRequiredInstanceExtensions(&required_extension_count);
   if (required_extensions == nullptr) throw std::runtime_error{"No window surface instance extensions"};
-  return std::span{required_extensions, required_extension_count};
+  return std::span{required_extensions, required_extension_count};  // pointer lifetime managed by GLFW
 }
 
-vk::UniqueSurfaceKHR gfx::Window::CreateSurface(const vk::Instance& instance) const {
+vk::UniqueSurfaceKHR gfx::Window::CreateSurface(const vk::Instance instance) const {
   VkSurfaceKHR surface{};
   const auto result = static_cast<vk::Result>(glfwCreateWindowSurface(instance, window_.get(), nullptr, &surface));
   vk::resultCheck(result, "Window surface creation failed");

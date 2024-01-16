@@ -13,20 +13,19 @@
 
 namespace {
 
-vk::SurfaceFormatKHR GetSwapchainSurfaceFormat(const vk::PhysicalDevice& physical_device,
-                                               const vk::SurfaceKHR& surface) {
+vk::SurfaceFormatKHR GetSwapchainSurfaceFormat(const vk::PhysicalDevice physical_device, const vk::SurfaceKHR surface) {
   const auto surface_formats = physical_device.getSurfaceFormatsKHR(surface);
   if (constexpr vk::SurfaceFormatKHR kTargetSurfaceFormat{vk::Format::eB8G8R8A8Srgb, vk::ColorSpaceKHR::eSrgbNonlinear};
       std::ranges::contains(surface_formats, kTargetSurfaceFormat)) {
     return kTargetSurfaceFormat;
   }
   assert(!surface_formats.empty());
-  const auto& surface_format = surface_formats.front();
+  const auto surface_format = surface_formats.front();
   assert(surface_format.format != vk::Format::eUndefined);
   return surface_format;
 }
 
-vk::PresentModeKHR GetSwapchainPresentMode(const vk::PhysicalDevice& physical_device, const vk::SurfaceKHR& surface) {
+vk::PresentModeKHR GetSwapchainPresentMode(const vk::PhysicalDevice physical_device, const vk::SurfaceKHR surface) {
   const auto present_modes = physical_device.getSurfacePresentModesKHR(surface);
   if (constexpr auto kTargetPresentMode = vk::PresentModeKHR::eFifoRelaxed;
       std::ranges::contains(present_modes, kTargetPresentMode)) {
@@ -59,11 +58,11 @@ vk::Extent2D GetSwapchainImageExtent(const gfx::Window& window,
                       .height = std::clamp(static_cast<std::uint32_t>(framebuffer_height), min_height, max_height)};
 }
 
-std::vector<vk::UniqueImageView> CreateSwapchainImageViews(const vk::Device& device,
-                                                           const vk::SwapchainKHR& swapchain,
+std::vector<vk::UniqueImageView> CreateSwapchainImageViews(const vk::Device device,
+                                                           const vk::SwapchainKHR swapchain,
                                                            const vk::Format image_format) {
   return device.getSwapchainImagesKHR(swapchain)  //
-         | std::views::transform([&, image_format](auto&& image) {
+         | std::views::transform([device, image_format](const auto image) {
              return device.createImageViewUnique(vk::ImageViewCreateInfo{
                  .image = image,
                  .viewType = vk::ImageViewType::e2D,
@@ -77,7 +76,7 @@ std::vector<vk::UniqueImageView> CreateSwapchainImageViews(const vk::Device& dev
 
 std::tuple<vk::UniqueSwapchainKHR, vk::Format, vk::Extent2D> CreateSwapchain(const gfx::Device& device,
                                                                              const gfx::Window& window,
-                                                                             const vk::SurfaceKHR& surface) {
+                                                                             const vk::SurfaceKHR surface) {
   const auto& physical_device = device.physical_device();
   const auto surface_capabilities = physical_device->getSurfaceCapabilitiesKHR(surface);
   const auto [image_format, image_color_space] = GetSwapchainSurfaceFormat(*physical_device, surface);
@@ -110,7 +109,7 @@ std::tuple<vk::UniqueSwapchainKHR, vk::Format, vk::Extent2D> CreateSwapchain(con
 
 }  // namespace
 
-gfx::Swapchain::Swapchain(const Device& device, const Window& window, const vk::SurfaceKHR& surface) {
+gfx::Swapchain::Swapchain(const Device& device, const Window& window, const vk::SurfaceKHR surface) {
   std::tie(swapchain_, image_format_, image_extent_) = CreateSwapchain(device, window, surface);
   image_views_ = CreateSwapchainImageViews(*device, *swapchain_, image_format_);
 }

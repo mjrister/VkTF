@@ -38,7 +38,7 @@ vk::SampleCountFlagBits GetMsaaSampleCount(const vk::PhysicalDeviceLimits& physi
   return e1;
 }
 
-vk::UniqueRenderPass CreateRenderPass(const vk::Device& device,
+vk::UniqueRenderPass CreateRenderPass(const vk::Device device,
                                       const vk::SampleCountFlagBits msaa_sample_count,
                                       const vk::Format color_attachment_format,
                                       const vk::Format depth_attachment_format) {
@@ -100,13 +100,13 @@ vk::UniqueRenderPass CreateRenderPass(const vk::Device& device,
                                .pSubpasses = &kSubpassDescription});
 }
 
-std::vector<vk::UniqueFramebuffer> CreateFramebuffers(const vk::Device& device,
+std::vector<vk::UniqueFramebuffer> CreateFramebuffers(const vk::Device device,
                                                       const gfx::Swapchain& swapchain,
-                                                      const vk::RenderPass& render_pass,
-                                                      const vk::ImageView& color_attachment,
-                                                      const vk::ImageView& depth_attachment) {
+                                                      const vk::RenderPass render_pass,
+                                                      const vk::ImageView color_attachment,
+                                                      const vk::ImageView depth_attachment) {
   return swapchain.image_views()
-         | std::views::transform([&, &extent = swapchain.image_extent()](const auto& color_resolve_attachment) {
+         | std::views::transform([=, extent = swapchain.image_extent()](const auto color_resolve_attachment) {
              const std::array image_attachments{color_attachment, color_resolve_attachment, depth_attachment};
              return device.createFramebufferUnique(
                  vk::FramebufferCreateInfo{.renderPass = render_pass,
@@ -119,7 +119,7 @@ std::vector<vk::UniqueFramebuffer> CreateFramebuffers(const vk::Device& device,
          | std::ranges::to<std::vector>();
 }
 
-std::vector<vk::UniqueDescriptorSetLayout> CreateDescriptorSetLayout(const vk::Device& device) {
+std::vector<vk::UniqueDescriptorSetLayout> CreateDescriptorSetLayout(const vk::Device device) {
   static constexpr std::array kDescriptorSetLayoutBindings{
       vk::DescriptorSetLayoutBinding{.binding = 0,
                                      .descriptorType = vk::DescriptorType::eUniformBuffer,
@@ -131,7 +131,7 @@ std::vector<vk::UniqueDescriptorSetLayout> CreateDescriptorSetLayout(const vk::D
                                      .stageFlags = vk::ShaderStageFlagBits::eFragment}};
 
   return kDescriptorSetLayoutBindings  //
-         | std::views::transform([&](const auto& descriptor_set_layout_bindings) {
+         | std::views::transform([device](const auto descriptor_set_layout_bindings) {
              return device.createDescriptorSetLayoutUnique(
                  vk::DescriptorSetLayoutCreateInfo{.bindingCount = 1, .pBindings = &descriptor_set_layout_bindings});
            })
@@ -139,7 +139,7 @@ std::vector<vk::UniqueDescriptorSetLayout> CreateDescriptorSetLayout(const vk::D
 }
 
 template <std::uint32_t N>
-vk::UniqueDescriptorPool CreateDescriptorPool(const vk::Device& device) {
+vk::UniqueDescriptorPool CreateDescriptorPool(const vk::Device device) {
   static constexpr vk::DescriptorPoolSize kDescriptorPoolSize{.type = vk::DescriptorType::eUniformBuffer,
                                                               .descriptorCount = 1};
 
@@ -148,9 +148,9 @@ vk::UniqueDescriptorPool CreateDescriptorPool(const vk::Device& device) {
 }
 
 template <std::uint32_t N>
-std::vector<vk::DescriptorSet> AllocateDescriptorSets(const vk::Device& device,
-                                                      const vk::DescriptorPool& descriptor_pool,
-                                                      const vk::DescriptorSetLayout& descriptor_set_layout) {
+std::vector<vk::DescriptorSet> AllocateDescriptorSets(const vk::Device device,
+                                                      const vk::DescriptorPool descriptor_pool,
+                                                      const vk::DescriptorSetLayout descriptor_set_layout) {
   std::array<vk::DescriptorSetLayout, N> descriptor_set_layouts;
   std::ranges::fill(descriptor_set_layouts, descriptor_set_layout);
 
@@ -162,7 +162,7 @@ std::vector<vk::DescriptorSet> AllocateDescriptorSets(const vk::Device& device,
 std::vector<gfx::Buffer> CreateUniformBuffers(const gfx::Device& device,
                                               const std::vector<vk::DescriptorSet>& descriptor_sets) {
   return descriptor_sets  //
-         | std::views::transform([&](const auto& descriptor_set) {
+         | std::views::transform([&device](const auto descriptor_set) {
              gfx::Buffer buffer{device,
                                 sizeof(CameraTransforms),
                                 vk::BufferUsageFlagBits::eUniformBuffer,
@@ -183,7 +183,7 @@ std::vector<gfx::Buffer> CreateUniformBuffers(const gfx::Device& device,
 }
 
 vk::UniquePipelineLayout CreateGraphicsPipelineLayout(
-    const vk::Device& device,
+    const vk::Device device,
     const std::vector<vk::DescriptorSetLayout>& descriptor_set_layouts) {
   static constexpr vk::PushConstantRange kPushConstantRange{.stageFlags = vk::ShaderStageFlagBits::eVertex,
                                                             .offset = 0,
@@ -196,11 +196,11 @@ vk::UniquePipelineLayout CreateGraphicsPipelineLayout(
                                    .pPushConstantRanges = &kPushConstantRange});
 }
 
-vk::UniquePipeline CreateGraphicsPipeline(const vk::Device& device,
-                                          const gfx::Swapchain& swapchain,
+vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
+                                          const vk::Extent2D swapchain_image_extent,
                                           const vk::SampleCountFlagBits msaa_sample_count,
-                                          const vk::PipelineLayout& pipeline_layout,
-                                          const vk::RenderPass& render_pass) {
+                                          const vk::PipelineLayout pipeline_layout,
+                                          const vk::RenderPass render_pass) {
   const std::filesystem::path vertex_shader_filepath{"assets/shaders/mesh.vert"};
   const gfx::ShaderModule vertex_shader_module{device, vk::ShaderStageFlagBits::eVertex, vertex_shader_filepath};
 
@@ -247,7 +247,6 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device& device,
   static constexpr vk::PipelineInputAssemblyStateCreateInfo kInputAssemblyStateCreateInfo{
       .topology = vk::PrimitiveTopology::eTriangleList};
 
-  const auto& swapchain_image_extent = swapchain.image_extent();
   const vk::Viewport viewport{.x = 0.0f,
                               .y = 0.0f,
                               .width = static_cast<float>(swapchain_image_extent.width),
@@ -316,24 +315,24 @@ vk::UniqueCommandPool CreateCommandPool(const gfx::Device& device) {
 }
 
 template <std::size_t N>
-std::vector<vk::UniqueCommandBuffer> AllocateCommandBuffers(const vk::Device& device,
-                                                            const vk::CommandPool& command_pool) {
+std::vector<vk::UniqueCommandBuffer> AllocateCommandBuffers(const vk::Device device,
+                                                            const vk::CommandPool command_pool) {
   return device.allocateCommandBuffersUnique(vk::CommandBufferAllocateInfo{.commandPool = command_pool,
                                                                            .level = vk::CommandBufferLevel::ePrimary,
                                                                            .commandBufferCount = N});
 }
 
 template <std::size_t N>
-std::array<vk::UniqueSemaphore, N> CreateSemaphores(const vk::Device& device) {
+std::array<vk::UniqueSemaphore, N> CreateSemaphores(const vk::Device device) {
   std::array<vk::UniqueSemaphore, N> semaphores;
-  std::ranges::generate(semaphores, [&] { return device.createSemaphoreUnique(vk::SemaphoreCreateInfo{}); });
+  std::ranges::generate(semaphores, [device] { return device.createSemaphoreUnique(vk::SemaphoreCreateInfo{}); });
   return semaphores;
 }
 
 template <std::size_t N>
-std::array<vk::UniqueFence, N> CreateFences(const vk::Device& device) {
+std::array<vk::UniqueFence, N> CreateFences(const vk::Device device) {
   std::array<vk::UniqueFence, N> fences;
-  std::ranges::generate(fences, [&] {
+  std::ranges::generate(fences, [device] {
     return device.createFenceUnique(vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled});
   });
   return fences;
@@ -377,8 +376,11 @@ gfx::Engine::Engine(const Window& window)
           descriptor_set_layouts_  //
               | std::views::transform([](const auto& descriptor_set_layout) { return *descriptor_set_layout; })
               | std::ranges::to<std::vector>())},
-      graphics_pipeline_{
-          CreateGraphicsPipeline(*device_, swapchain_, msaa_sample_count_, *graphics_pipeline_layout_, *render_pass_)},
+      graphics_pipeline_{CreateGraphicsPipeline(*device_,
+                                                swapchain_.image_extent(),
+                                                msaa_sample_count_,
+                                                *graphics_pipeline_layout_,
+                                                *render_pass_)},
       command_pool_{CreateCommandPool(device_)},
       command_buffers_{AllocateCommandBuffers<kMaxRenderFrames>(*device_, *command_pool_)},
       acquire_next_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)},
@@ -391,13 +393,13 @@ void gfx::Engine::Render(const ArcCamera& camera, const Model& model) {
   }
 
   static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
-  const auto& draw_fence = *draw_fences_[current_frame_index_];
+  const auto draw_fence = *draw_fences_[current_frame_index_];
   auto result = device_->waitForFences(draw_fence, vk::True, kMaxTimeout);
   vk::resultCheck(result, "Draw fence failed to enter a signaled state");
   device_->resetFences(draw_fence);
 
   std::uint32_t image_index{};
-  const auto& acquire_next_image_semaphore = *acquire_next_image_semaphores_[current_frame_index_];
+  const auto acquire_next_image_semaphore = *acquire_next_image_semaphores_[current_frame_index_];
   std::tie(result, image_index) = device_->acquireNextImageKHR(*swapchain_, kMaxTimeout, acquire_next_image_semaphore);
   vk::resultCheck(result, "Failed to acquire the next presentable image");
 
@@ -405,11 +407,11 @@ void gfx::Engine::Render(const ArcCamera& camera, const Model& model) {
   uniform_buffer.Copy<CameraTransforms>(CameraTransforms{.view_transform = camera.view_transform(),
                                                          .projection_transform = camera.projection_transform()});
 
-  const auto& command_buffer = *command_buffers_[current_frame_index_];
+  const auto command_buffer = *command_buffers_[current_frame_index_];
   command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
   command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphics_pipeline_);
 
-  const auto& descriptor_set = descriptor_sets_[current_frame_index_];
+  const auto descriptor_set = descriptor_sets_[current_frame_index_];
   command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                     *graphics_pipeline_layout_,
                                     0,
@@ -435,7 +437,7 @@ void gfx::Engine::Render(const ArcCamera& camera, const Model& model) {
   command_buffer.end();
 
   static constexpr vk::PipelineStageFlags kPipelineWaitStage = vk::PipelineStageFlagBits::eTopOfPipe;
-  const auto& present_image_semaphore = *present_image_semaphores_[current_frame_index_];
+  const auto present_image_semaphore = *present_image_semaphores_[current_frame_index_];
   device_.graphics_queue().submit(vk::SubmitInfo{.waitSemaphoreCount = 1,
                                                  .pWaitSemaphores = &acquire_next_image_semaphore,
                                                  .pWaitDstStageMask = &kPipelineWaitStage,
@@ -445,10 +447,11 @@ void gfx::Engine::Render(const ArcCamera& camera, const Model& model) {
                                                  .pSignalSemaphores = &present_image_semaphore},
                                   draw_fence);
 
+  const auto swapchain = *swapchain_;
   result = device_.present_queue().presentKHR(vk::PresentInfoKHR{.waitSemaphoreCount = 1,
                                                                  .pWaitSemaphores = &present_image_semaphore,
                                                                  .swapchainCount = 1,
-                                                                 .pSwapchains = &(*swapchain_),
+                                                                 .pSwapchains = &swapchain,
                                                                  .pImageIndices = &image_index});
   vk::resultCheck(result, "Failed to queue an image for presentation");
 }

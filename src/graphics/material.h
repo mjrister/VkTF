@@ -13,11 +13,11 @@ namespace gfx {
 
 class Material {
 public:
-  explicit Material(const vk::DescriptorSet& descriptor_set) noexcept : descriptor_set_{descriptor_set} {}
+  explicit Material(const vk::DescriptorSet descriptor_set) noexcept : descriptor_set_{descriptor_set} {}
 
-  [[nodiscard]] const vk::DescriptorSet& descriptor_set() const noexcept { return descriptor_set_; }
+  [[nodiscard]] vk::DescriptorSet descriptor_set() const noexcept { return descriptor_set_; }
 
-  void UpdateDescriptorSet(const vk::Device& device, Texture2d&& diffuse_map, Texture2d&& normal_map);
+  void UpdateDescriptorSet(vk::Device device, Texture2d&& diffuse_map, Texture2d&& normal_map);
 
 private:
   vk::DescriptorSet descriptor_set_;
@@ -28,7 +28,7 @@ private:
 class Materials {
 public:
   Materials() noexcept = default;
-  Materials(const vk::Device& device, std::size_t size);
+  Materials(vk::Device device, std::size_t size);
 
   [[nodiscard]] auto&& operator[](this auto&& self, const std::size_t index) noexcept {
     assert(index < self.materials_.size());

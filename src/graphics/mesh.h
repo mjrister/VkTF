@@ -23,13 +23,13 @@ public:
   Mesh(const Device& device,
        const DataView<const Vertex> vertices,
        const DataView<const std::uint32_t> indices,
-       const vk::DescriptorSet& descriptor_set)
+       const vk::DescriptorSet descriptor_set)
       : vertex_buffer_{CreateDeviceLocalBuffer<Vertex>(device, vk::BufferUsageFlagBits::eVertexBuffer, vertices)},
         index_buffer_{CreateDeviceLocalBuffer<std::uint32_t>(device, vk::BufferUsageFlagBits::eIndexBuffer, indices)},
         index_count_{static_cast<std::uint32_t>(indices.size())},
         descriptor_set_{descriptor_set} {}
 
-  void Render(const vk::CommandBuffer& command_buffer, const vk::PipelineLayout& pipeline_layout) const {
+  void Render(const vk::CommandBuffer command_buffer, const vk::PipelineLayout pipeline_layout) const {
     command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout, 1, descriptor_set_, nullptr);
     command_buffer.bindVertexBuffers(0, *vertex_buffer_, static_cast<vk::DeviceSize>(0));
     command_buffer.bindIndexBuffer(*index_buffer_, 0, vk::IndexType::eUint32);

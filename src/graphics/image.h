@@ -13,17 +13,17 @@ class Device;
 class Image {
 public:
   Image(const Device& device,
-        const vk::Format format,
-        const vk::Extent2D& extent,
-        const vk::SampleCountFlagBits sample_count,
-        const vk::ImageUsageFlags& image_usage_flags,
-        const vk::ImageAspectFlags& image_aspect_flags,
-        const vk::MemoryPropertyFlags& memory_property_flags);
+        vk::Format format,
+        vk::Extent2D extent,
+        vk::SampleCountFlagBits sample_count,
+        vk::ImageUsageFlags image_usage_flags,
+        vk::ImageAspectFlags image_aspect_flags,
+        vk::MemoryPropertyFlags memory_property_flags);
 
-  [[nodiscard]] const vk::ImageView& image_view() const noexcept { return *image_view_; }
+  [[nodiscard]] vk::ImageView image_view() const noexcept { return *image_view_; }
   [[nodiscard]] vk::Format format() const noexcept { return format_; }
 
-  void Copy(const Device& device, const vk::Buffer& src_buffer) const;
+  void Copy(const Device& device, vk::Buffer src_buffer) const;
 
 private:
   vk::UniqueImage image_;
@@ -37,10 +37,10 @@ private:
 template <typename T>
 [[nodiscard]] Image CreateDeviceLocalImage(const Device& device,
                                            const vk::Format format,
-                                           const vk::Extent2D& extent,
-                                           const vk::SampleCountFlagBits& sample_count,
-                                           const vk::ImageUsageFlags& usage_flags,
-                                           const vk::ImageAspectFlags& aspect_flags,
+                                           const vk::Extent2D extent,
+                                           const vk::SampleCountFlagBits sample_count,
+                                           const vk::ImageUsageFlags usage_flags,
+                                           const vk::ImageAspectFlags aspect_flags,
                                            const DataView<const T> data) {
   Buffer host_visible_buffer{device,
                              data.size_bytes(),

@@ -29,7 +29,7 @@ public:
 
   Model(const Device& device, const std::filesystem::path& filepath);
 
-  void Render(const vk::CommandBuffer& command_buffer, const vk::PipelineLayout& pipeline_layout) const;
+  void Render(vk::CommandBuffer command_buffer, vk::PipelineLayout pipeline_layout) const;
 
   void Translate(const float dx, const float dy, const float dz) const {
     auto& transform = root_node_->transform;

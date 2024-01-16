@@ -124,8 +124,8 @@ gfx::Materials CreateMaterials(const gfx::Device& device,
 }
 
 void RenderNode(const gfx::Model::Node& node,
-                const vk::CommandBuffer& command_buffer,
-                const vk::PipelineLayout& pipeline_layout,
+                const vk::CommandBuffer command_buffer,
+                const vk::PipelineLayout pipeline_layout,
                 const glm::mat4& parent_transform = glm::mat4{1.0f}) {
   const auto node_transform = parent_transform * node.transform;
   command_buffer.pushConstants<gfx::Model::PushConstants>(pipeline_layout,
@@ -160,6 +160,6 @@ gfx::Model::Model(const Device& device, const std::filesystem::path& filepath) {
   root_node_ = ImportNode(device, *scene, *scene->mRootNode, materials_);
 }
 
-void gfx::Model::Render(const vk::CommandBuffer& command_buffer, const vk::PipelineLayout& pipeline_layout) const {
+void gfx::Model::Render(const vk::CommandBuffer command_buffer, const vk::PipelineLayout pipeline_layout) const {
   RenderNode(*root_node_, command_buffer, pipeline_layout);
 }
