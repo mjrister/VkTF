@@ -4,7 +4,6 @@
 #include <vulkan/vulkan.hpp>
 
 #include "graphics/buffer.h"
-#include "graphics/data_view.h"
 #include "graphics/memory.h"
 
 namespace gfx {
@@ -41,9 +40,9 @@ template <typename T>
                                            const vk::SampleCountFlagBits sample_count,
                                            const vk::ImageUsageFlags usage_flags,
                                            const vk::ImageAspectFlags aspect_flags,
-                                           const DataView<const T> data) {
+                                           const vk::ArrayProxy<const T> data) {
   Buffer host_visible_buffer{device,
-                             data.size_bytes(),
+                             sizeof(T) * data.size(),
                              vk::BufferUsageFlagBits::eTransferSrc,
                              vk::MemoryPropertyFlagBits::eHostVisible};
   host_visible_buffer.Copy(data);

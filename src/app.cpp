@@ -4,7 +4,6 @@
 #include <glm/glm.hpp>
 
 namespace {
-
 constexpr auto kWindowWidth = 1920;
 constexpr auto kWindowHeight = 1080;
 

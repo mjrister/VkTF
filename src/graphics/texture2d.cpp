@@ -6,7 +6,6 @@
 
 #include <stb_image.h>
 
-#include "graphics/data_view.h"
 #include "graphics/device.h"
 
 namespace {
@@ -31,7 +30,7 @@ gfx::Image LoadImage(const gfx::Device& device, const vk::Format format, const s
       vk::SampleCountFlagBits::e1,
       vk::ImageUsageFlagBits::eSampled,
       vk::ImageAspectFlagBits::eColor,
-      gfx::DataView<const std::uint8_t>{data.get(), static_cast<std::size_t>(width) * height * kRequiredChannels});
+      vk::ArrayProxy<const std::uint8_t>{static_cast<std::uint32_t>(width) * height * kRequiredChannels, data.get()});
 }
 
 vk::UniqueSampler CreateSampler(const gfx::Device& device) {
