@@ -93,11 +93,21 @@ vk::UniqueRenderPass CreateRenderPass(const vk::Device device,
                                                               .pResolveAttachments = &kColorResolveAttachmentReference,
                                                               .pDepthStencilAttachment = &kDepthAttachmentReference};
 
+  static constexpr vk::SubpassDependency kSubpassDependency{
+      .srcSubpass = vk::SubpassExternal,
+      .dstSubpass = 0,
+      .srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput,
+      .dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput,
+      .srcAccessMask = vk::AccessFlagBits::eNone,
+      .dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite};
+
   return device.createRenderPassUnique(
       vk::RenderPassCreateInfo{.attachmentCount = static_cast<std::uint32_t>(attachment_descriptions.size()),
                                .pAttachments = attachment_descriptions.data(),
                                .subpassCount = 1,
-                               .pSubpasses = &kSubpassDescription});
+                               .pSubpasses = &kSubpassDescription,
+                               .dependencyCount = 1,
+                               .pDependencies = &kSubpassDependency});
 }
 
 std::vector<vk::UniqueFramebuffer> CreateFramebuffers(const vk::Device device,
@@ -436,7 +446,7 @@ void gfx::Engine::Render(const ArcCamera& camera, const Model& model) {
   command_buffer.endRenderPass();
   command_buffer.end();
 
-  static constexpr vk::PipelineStageFlags kPipelineWaitStage = vk::PipelineStageFlagBits::eTopOfPipe;
+  static constexpr vk::PipelineStageFlags kPipelineWaitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
   const auto present_image_semaphore = *present_image_semaphores_[current_frame_index_];
   device_.graphics_queue().submit(vk::SubmitInfo{.waitSemaphoreCount = 1,
                                                  .pWaitSemaphores = &acquire_next_image_semaphore,
