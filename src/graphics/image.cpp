@@ -75,7 +75,7 @@ gfx::Image::Image(const Device& device,
 }
 
 void gfx::Image::Copy(const Device& device, const vk::Buffer src_buffer) const {
-  device.SubmitOneTimeCommandBuffer([src_buffer, this](const auto command_buffer) {
+  device.SubmitOneTimeCommandBuffer([this, src_buffer](const auto command_buffer) {
     const vk::ImageSubresourceRange image_subresource_range{.aspectMask = aspect_flags_,
                                                             .levelCount = 1,
                                                             .layerCount = 1};

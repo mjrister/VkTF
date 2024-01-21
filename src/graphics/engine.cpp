@@ -61,11 +61,11 @@ vk::UniqueRenderPass CreateRenderPass(const vk::Device device,
       .initialLayout = vk::ImageLayout::eUndefined,
       .finalLayout = vk::ImageLayout::ePresentSrcKHR};
 
-  const vk::AttachmentDescription depth_resolve_attachment_description{
+  const vk::AttachmentDescription depth_attachment_description{
       .format = depth_attachment_format,
       .samples = msaa_sample_count,
       .loadOp = vk::AttachmentLoadOp::eClear,
-      .storeOp = vk::AttachmentStoreOp::eStore,
+      .storeOp = vk::AttachmentStoreOp::eDontCare,
       .stencilLoadOp = vk::AttachmentLoadOp::eDontCare,
       .stencilStoreOp = vk::AttachmentStoreOp::eDontCare,
       .initialLayout = vk::ImageLayout::eUndefined,
@@ -73,7 +73,7 @@ vk::UniqueRenderPass CreateRenderPass(const vk::Device device,
 
   const std::array attachment_descriptions{color_attachment_description,
                                            color_resolve_attachment_description,
-                                           depth_resolve_attachment_description};
+                                           depth_attachment_description};
 
   static constexpr vk::AttachmentReference kColorAttachmentReference{
       .attachment = 0,
@@ -359,14 +359,14 @@ gfx::Engine::Engine(const Window& window)
                         swapchain_.image_format(),
                         swapchain_.image_extent(),
                         msaa_sample_count_,
-                        vk::ImageUsageFlagBits::eColorAttachment,
+                        vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransientAttachment,
                         vk::ImageAspectFlagBits::eColor,
                         vk::MemoryPropertyFlagBits::eDeviceLocal},
       depth_attachment_{device_,
                         vk::Format::eD24UnormS8Uint,  // TODO(#54): check device support
                         swapchain_.image_extent(),
                         msaa_sample_count_,
-                        vk::ImageUsageFlagBits::eDepthStencilAttachment,
+                        vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eTransientAttachment,
                         vk::ImageAspectFlagBits::eDepth,
                         vk::MemoryPropertyFlagBits::eDeviceLocal},
       render_pass_{
