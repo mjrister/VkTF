@@ -15,15 +15,15 @@ namespace gfx {
 
 class Window {
 public:
-  struct Extent {
+  struct Size {
     int width{};
     int height{};
   };
 
-  Window(const char* title, Extent extent);
+  Window(const char* title, Size size);
 
-  [[nodiscard]] Extent GetExtent() const noexcept;
-  [[nodiscard]] Extent GetFramebufferExtent() const noexcept;
+  [[nodiscard]] Size GetSize() const noexcept;
+  [[nodiscard]] Size GetFramebufferSize() const noexcept;
   [[nodiscard]] float GetAspectRatio() const noexcept;
 
   void OnKeyEvent(std::function<void(int, int)> fn) { key_event_handler_ = std::move(fn); }

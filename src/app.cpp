@@ -21,7 +21,7 @@ gfx::Camera CreateCamera(const float aspect_ratio) {
 }  // namespace
 
 gfx::App::App()
-    : window_{"VkRender", Window::Extent{.width = kWindowWidth, .height = kWindowHeight}},
+    : window_{"VkRender", Window::Size{.width = kWindowWidth, .height = kWindowHeight}},
       engine_{window_},
       camera_{CreateCamera(window_.GetAspectRatio())},
       model_{engine_.device(), "assets/models/sponza/Sponza.gltf"} {
