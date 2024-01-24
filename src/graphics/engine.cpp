@@ -9,7 +9,7 @@
 
 #include <glm/mat4x4.hpp>
 
-#include "graphics/arc_camera.h"
+#include "graphics/camera.h"
 #include "graphics/mesh.h"
 #include "graphics/model.h"
 #include "graphics/shader_module.h"
@@ -137,7 +137,7 @@ std::vector<vk::UniqueDescriptorSetLayout> CreateDescriptorSetLayout(const vk::D
                                      .stageFlags = vk::ShaderStageFlagBits::eVertex},
       vk::DescriptorSetLayoutBinding{.binding = 1,
                                      .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-                                     .descriptorCount = 2,
+                                     .descriptorCount = 1,
                                      .stageFlags = vk::ShaderStageFlagBits::eFragment}};
 
   return kDescriptorSetLayoutBindings  //
@@ -242,11 +242,7 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
       vk::VertexInputAttributeDescription{.location = 2,
                                           .binding = 0,
                                           .format = vk::Format::eR32G32B32Sfloat,
-                                          .offset = offsetof(gfx::Mesh::Vertex, normal)},
-      vk::VertexInputAttributeDescription{.location = 3,
-                                          .binding = 0,
-                                          .format = vk::Format::eR32G32B32Sfloat,
-                                          .offset = offsetof(gfx::Mesh::Vertex, tangent)}};
+                                          .offset = offsetof(gfx::Mesh::Vertex, normal)}};
 
   static constexpr vk::PipelineVertexInputStateCreateInfo kVertexInputStateCreateInfo{
       .vertexBindingDescriptionCount = 1,
@@ -397,7 +393,7 @@ gfx::Engine::Engine(const Window& window)
       present_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)},
       draw_fences_{CreateFences<kMaxRenderFrames>(*device_)} {}
 
-void gfx::Engine::Render(const ArcCamera& camera, const Model& model) {
+void gfx::Engine::Render(const Camera& camera, const Model& model) {
   if (++current_frame_index_ == kMaxRenderFrames) {
     current_frame_index_ = 0;
   }
@@ -414,8 +410,8 @@ void gfx::Engine::Render(const ArcCamera& camera, const Model& model) {
   vk::resultCheck(result, "Failed to acquire the next presentable image");
 
   auto& uniform_buffer = uniform_buffers_[current_frame_index_];
-  uniform_buffer.Copy<CameraTransforms>(CameraTransforms{.view_transform = camera.view_transform(),
-                                                         .projection_transform = camera.projection_transform()});
+  uniform_buffer.Copy<CameraTransforms>(CameraTransforms{.view_transform = camera.GetViewTransform(),
+                                                         .projection_transform = camera.GetProjectionTransform()});
 
   const auto command_buffer = *command_buffers_[current_frame_index_];
   command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});

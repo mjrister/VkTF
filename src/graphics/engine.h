@@ -14,7 +14,7 @@
 #include "graphics/swapchain.h"
 
 namespace gfx {
-class ArcCamera;
+class Camera;
 class Model;
 class Window;
 
@@ -24,7 +24,7 @@ public:
 
   [[nodiscard]] const Device& device() const noexcept { return device_; }
 
-  void Render(const ArcCamera& camera, const Model& model);
+  void Render(const Camera& camera, const Model& model);
 
 private:
   static constexpr std::size_t kMaxRenderFrames = 2;

@@ -1,7 +1,7 @@
 #ifndef SRC_APP_H_
 #define SRC_APP_H_
 
-#include "graphics/arc_camera.h"
+#include "graphics/camera.h"
 #include "graphics/engine.h"
 #include "graphics/model.h"
 #include "graphics/window.h"
@@ -21,7 +21,7 @@ private:
 
   Window window_;
   Engine engine_;
-  ArcCamera camera_;
+  Camera camera_;
   Model model_;
 };
 

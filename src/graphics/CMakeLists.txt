@@ -1,4 +1,4 @@
-add_library(graphics STATIC arc_camera.cpp
+add_library(graphics STATIC camera.cpp
                             device.cpp
                             engine.cpp
                             glslang_compiler.cpp

@@ -1,11 +1,11 @@
 #version 460
 
-layout (binding = 1, set = 1) uniform sampler2D textures[2];
+layout (binding = 1, set = 1) uniform sampler2D base_color_sampler;
 
 layout(location = 0) in Vertex {
   vec3 position;
   vec2 texture_coordinates;
-  mat3 normal_transform;
+  vec3 normal;
 } vertex;
 
 layout(location = 0) out vec4 fragment_color;
@@ -20,18 +20,17 @@ struct PointLight {
  {{ 0.0,  4.0, -5.0}, {1.0, 1.0, 1.0}},
 };
 
-const float kReflectance = 128.0;
 const vec3 kAmbientColor = vec3(0.001953125);
-
-vec3 GetNormal() {
-  const vec3 normal = 2.0 * texture(textures[1], vertex.texture_coordinates).xyz - 1.0;
-  return normalize(vertex.normal_transform * normal);
-}
+const float kReflectance = 128.0;
+const float kAlphaCutoff = 0.5; // TODO(matthew-rister): avoid hardcoding mask value specified in glTF model
 
 void main() {
-  const vec3 normal = GetNormal();
+  const vec4 base_color = texture(base_color_sampler, vertex.texture_coordinates);
+  if (base_color.a < kAlphaCutoff) discard;
+
+  const vec3 normal = normalize(vertex.normal);
   const vec3 view_direction = normalize(-vertex.position);
-  fragment_color = vec4(kAmbientColor, 1.0f);
+  vec3 light_color = kAmbientColor;
 
   for (int i = 0; i < kPointLights.length(); ++i) {
     const PointLight point_light = kPointLights[i];
@@ -45,8 +44,8 @@ void main() {
     const float diffuse_intensity = max(dot(light_direction, normal), 0.0);
     const float specular_intensity = pow(max(dot(reflect_direction, view_direction), 0.0), kReflectance);
 
-    fragment_color += vec4((diffuse_intensity + specular_intensity) * attenuation * point_light.color, 0.0);
+    light_color += (diffuse_intensity + specular_intensity) * attenuation * point_light.color;
   }
 
-  fragment_color *= texture(textures[0], vertex.texture_coordinates);
+  fragment_color = base_color * vec4(light_color, 1.0);
 }

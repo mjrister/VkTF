@@ -18,7 +18,6 @@ public:
     glm::vec3 position{0.0f};
     glm::vec2 texture_coordinates{0.0f};
     glm::vec3 normal{0.0f};
-    glm::vec3 tangent{0.0f};
   };
 
   Mesh(const Device& device,
