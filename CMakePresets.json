@@ -22,6 +22,9 @@
       },
       "toolset": {
         "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true
       }
     },
     {
