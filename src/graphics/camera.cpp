@@ -16,7 +16,7 @@ gfx::Camera::Camera(const glm::vec3& position, const glm::vec3& direction, const
 
 glm::mat4 gfx::Camera::GetViewTransform() const {
   static constexpr glm::vec3 kUp{0.0f, 1.0f, 0.0f};
-  const auto direction = -gfx::ToCartesianCoordinates(orientation_);
+  const auto direction = -ToCartesianCoordinates(orientation_);
   const auto target = position_ + direction;
   return glm::lookAt(position_, target, kUp);
 }

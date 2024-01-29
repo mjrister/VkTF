@@ -122,8 +122,8 @@ std::span<const char* const> gfx::Window::GetInstanceExtensions() {
 
 vk::UniqueSurfaceKHR gfx::Window::CreateSurface(const vk::Instance instance) const {
   VkSurfaceKHR surface{};
-  const auto result = static_cast<vk::Result>(glfwCreateWindowSurface(instance, window_.get(), nullptr, &surface));
-  vk::resultCheck(result, "Window surface creation failed");
+  const auto result = glfwCreateWindowSurface(instance, window_.get(), nullptr, &surface);
+  vk::resultCheck(static_cast<vk::Result>(result), "Window surface creation failed");
   const vk::ObjectDestroy<vk::Instance, VULKAN_HPP_DEFAULT_DISPATCHER_TYPE> deleter{instance};
   return vk::UniqueSurfaceKHR{vk::SurfaceKHR{surface}, deleter};
 }

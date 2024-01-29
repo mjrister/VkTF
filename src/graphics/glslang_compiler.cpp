@@ -5,9 +5,11 @@
 #include <iostream>
 #include <memory>
 #include <print>
+#include <stdexcept>
 #include <string_view>
 #include <utility>
 
+#include <glslang/Include/glslang_c_interface.h>
 #include <glslang/Public/resource_limits_c.h>
 
 namespace {
@@ -167,3 +169,11 @@ std::vector<std::uint32_t> gfx::GlslangCompiler::Compile(const glslang_stage_t s
   const auto program = CreateProgram(stage, shader.get());
   return GenerateSpirv(program.get(), stage);
 }
+
+gfx::GlslangCompiler::GlslangCompiler() {
+  if (glslang_initialize_process() == 0) {
+    throw std::runtime_error{"glslang initialization failed"};
+  }
+}
+
+gfx::GlslangCompiler::~GlslangCompiler() noexcept { glslang_finalize_process(); }
