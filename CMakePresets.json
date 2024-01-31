@@ -103,7 +103,7 @@
       ],
       "cacheVariables": {
         "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/vcpkg-triplets",
-        "VCPKG_TARGET_TRIPLET": "windows-x64-asan"
+        "VCPKG_TARGET_TRIPLET": "x64-windows-asan"
       }
     },
     {
