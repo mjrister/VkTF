@@ -9,7 +9,6 @@
 #include <glm/mat4x4.hpp>
 #include <vulkan/vulkan.hpp>
 
-#include "graphics/material.h"
 #include "graphics/mesh.h"
 
 namespace gfx {
@@ -48,7 +47,6 @@ public:
 
 private:
   std::unique_ptr<Node> root_node_;
-  Materials materials_;
 };
 
 }  // namespace gfx

@@ -4,12 +4,10 @@ add_library(graphics STATIC camera.cpp
                             glslang_compiler.cpp
                             image.cpp
                             instance.cpp
-                            material.cpp
                             memory.cpp
                             model.cpp
                             shader_module.cpp
                             swapchain.cpp
-                            texture2d.cpp
                             window.cpp)
 
 find_package(VulkanHeaders CONFIG REQUIRED)

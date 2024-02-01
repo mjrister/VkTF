@@ -129,23 +129,14 @@ std::vector<vk::UniqueFramebuffer> CreateFramebuffers(const vk::Device device,
          | std::ranges::to<std::vector>();
 }
 
-std::vector<vk::UniqueDescriptorSetLayout> CreateDescriptorSetLayout(const vk::Device device) {
-  static constexpr std::array kDescriptorSetLayoutBindings{
-      vk::DescriptorSetLayoutBinding{.binding = 0,
-                                     .descriptorType = vk::DescriptorType::eUniformBuffer,
-                                     .descriptorCount = 1,
-                                     .stageFlags = vk::ShaderStageFlagBits::eVertex},
-      vk::DescriptorSetLayoutBinding{.binding = 1,
-                                     .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-                                     .descriptorCount = 1,
-                                     .stageFlags = vk::ShaderStageFlagBits::eFragment}};
+vk::UniqueDescriptorSetLayout CreateDescriptorSetLayout(const vk::Device device) {
+  static constexpr vk::DescriptorSetLayoutBinding kDescriptorSetLayoutBinding{
+      .descriptorType = vk::DescriptorType::eUniformBuffer,
+      .descriptorCount = 1,
+      .stageFlags = vk::ShaderStageFlagBits::eVertex};
 
-  return kDescriptorSetLayoutBindings  //
-         | std::views::transform([device](const auto descriptor_set_layout_bindings) {
-             return device.createDescriptorSetLayoutUnique(
-                 vk::DescriptorSetLayoutCreateInfo{.bindingCount = 1, .pBindings = &descriptor_set_layout_bindings});
-           })
-         | std::ranges::to<std::vector>();
+  return device.createDescriptorSetLayoutUnique(
+      vk::DescriptorSetLayoutCreateInfo{.bindingCount = 1, .pBindings = &kDescriptorSetLayoutBinding});
 }
 
 template <std::uint32_t N>
@@ -192,18 +183,16 @@ std::vector<gfx::Buffer> CreateUniformBuffers(const gfx::Device& device,
          | std::ranges::to<std::vector>();
 }
 
-vk::UniquePipelineLayout CreateGraphicsPipelineLayout(
-    const vk::Device device,
-    const std::vector<vk::DescriptorSetLayout>& descriptor_set_layouts) {
+vk::UniquePipelineLayout CreateGraphicsPipelineLayout(const vk::Device device,
+                                                      const vk::DescriptorSetLayout& descriptor_set_layouts) {
   static constexpr vk::PushConstantRange kPushConstantRange{.stageFlags = vk::ShaderStageFlagBits::eVertex,
                                                             .offset = 0,
                                                             .size = sizeof(gfx::Model::PushConstants)};
 
-  return device.createPipelineLayoutUnique(
-      vk::PipelineLayoutCreateInfo{.setLayoutCount = static_cast<std::uint32_t>(descriptor_set_layouts.size()),
-                                   .pSetLayouts = descriptor_set_layouts.data(),
-                                   .pushConstantRangeCount = 1,
-                                   .pPushConstantRanges = &kPushConstantRange});
+  return device.createPipelineLayoutUnique(vk::PipelineLayoutCreateInfo{.setLayoutCount = 1,
+                                                                        .pSetLayouts = &descriptor_set_layouts,
+                                                                        .pushConstantRangeCount = 1,
+                                                                        .pPushConstantRanges = &kPushConstantRange});
 }
 
 vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
@@ -374,14 +363,9 @@ gfx::Engine::Engine(const Window& window)
                                        depth_attachment_.image_view())},
       descriptor_set_layouts_{CreateDescriptorSetLayout(*device_)},
       descriptor_pool_{CreateDescriptorPool<kMaxRenderFrames>(*device_)},
-      descriptor_sets_{
-          AllocateDescriptorSets<kMaxRenderFrames>(*device_, *descriptor_pool_, *descriptor_set_layouts_[0])},
+      descriptor_sets_{AllocateDescriptorSets<kMaxRenderFrames>(*device_, *descriptor_pool_, *descriptor_set_layouts_)},
       uniform_buffers_{CreateUniformBuffers(device_, descriptor_sets_)},
-      graphics_pipeline_layout_{CreateGraphicsPipelineLayout(
-          *device_,
-          descriptor_set_layouts_  //
-              | std::views::transform([](const auto& descriptor_set_layout) { return *descriptor_set_layout; })
-              | std::ranges::to<std::vector>())},
+      graphics_pipeline_layout_{CreateGraphicsPipelineLayout(*device_, *descriptor_set_layouts_)},
       graphics_pipeline_{CreateGraphicsPipeline(*device_,
                                                 swapchain_.image_extent(),
                                                 msaa_sample_count_,

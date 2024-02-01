@@ -38,7 +38,7 @@ private:
   Image depth_attachment_;
   vk::UniqueRenderPass render_pass_;
   std::vector<vk::UniqueFramebuffer> framebuffers_;
-  std::vector<vk::UniqueDescriptorSetLayout> descriptor_set_layouts_;
+  vk::UniqueDescriptorSetLayout descriptor_set_layouts_;
   vk::UniqueDescriptorPool descriptor_pool_;
   std::vector<vk::DescriptorSet> descriptor_sets_;
   std::vector<Buffer> uniform_buffers_;
