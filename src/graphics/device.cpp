@@ -10,8 +10,8 @@
 namespace {
 
 struct RankedPhysicalDevice {
-  int rank{};
   gfx::PhysicalDevice physical_device;
+  int rank{};
 };
 
 using QueueFamilyIndices = gfx::PhysicalDevice::QueueFamilyIndices;
@@ -39,9 +39,9 @@ std::optional<RankedPhysicalDevice> RankPhysicalDevice(const vk::PhysicalDevice 
   return FindQueueFamilyIndices(physical_device, surface).transform([physical_device](const auto queue_family_indices) {
     const auto physical_device_properties = physical_device.getProperties();
     return RankedPhysicalDevice{
-        .rank = physical_device_properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu,
         .physical_device =
-            gfx::PhysicalDevice{physical_device, physical_device_properties.limits, queue_family_indices}};
+            gfx::PhysicalDevice{physical_device, physical_device_properties.limits, queue_family_indices},
+        .rank = physical_device_properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu};
   });
 }
 

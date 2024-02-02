@@ -9,9 +9,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 gfx::Camera::Camera(const glm::vec3& position, const glm::vec3& direction, const ViewFrustum& view_frustum)
-    : position_{position}, view_frustum_{view_frustum} {
-  assert(glm::length(direction) > 0.0f);
-  orientation_ = ToSphericalCoordinates(glm::normalize(-direction));
+    : position_{position}, orientation_{ToSphericalCoordinates(-direction)}, view_frustum_{view_frustum} {
+  assert(orientation_.radius > 0.0f);
 }
 
 glm::mat4 gfx::Camera::GetViewTransform() const {

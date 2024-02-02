@@ -23,8 +23,7 @@ target_link_libraries(graphics PUBLIC Vulkan::Headers
                                       glslang::glslang
                                       glslang::glslang-default-resource-limits
                                       glslang::SPIRV
-                               PRIVATE asan fast_math warnings
-                               INTERFACE math)
+                               PRIVATE asan fast_math warnings)
 
 target_compile_definitions(graphics PUBLIC GLFW_INCLUDE_VULKAN
                                            GLM_ENABLE_EXPERIMENTAL
@@ -37,4 +36,4 @@ target_compile_definitions(graphics PUBLIC GLFW_INCLUDE_VULKAN
                                            VULKAN_HPP_NO_SPACESHIP_OPERATOR
                                            VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1)
 
-target_include_directories(graphics PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(graphics PUBLIC include)

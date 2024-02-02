@@ -1,9 +1,8 @@
-add_executable(tests math/spherical_coordinates_test.cpp)
+add_executable(tests graphics/math/spherical_coordinates_test.cpp)
 
 find_package(GTest CONFIG REQUIRED)
 
-target_link_libraries(tests PRIVATE GTest::gtest_main asan fast_math graphics warnings
-                            INTERFACE math)
+target_link_libraries(tests PRIVATE GTest::gtest_main asan fast_math graphics warnings)
 
 include(GoogleTest)
 gtest_discover_tests(tests)
