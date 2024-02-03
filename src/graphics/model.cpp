@@ -1,5 +1,6 @@
 #include "graphics/model.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <optional>
@@ -28,8 +29,9 @@ glm::vec<N, T> GetVec(const std::span<aiVector3t<T>> data, const std::size_t ind
       v[component] = data[index][component];
     }
     if (normalize) {
-      assert(glm::length(v) > 0.0f);
-      v = glm::normalize(v);
+      const auto length = glm::length(v);
+      assert(length > 0.0f);
+      v = v / length;
     }
   }
   return v;

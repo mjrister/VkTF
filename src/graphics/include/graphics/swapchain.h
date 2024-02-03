@@ -1,6 +1,7 @@
 #ifndef SRC_GRAPHICS_INCLUDE_GRAPHICS_SWAPCHAIN_H_
 #define SRC_GRAPHICS_INCLUDE_GRAPHICS_SWAPCHAIN_H_
 
+#include <algorithm>
 #include <ranges>
 #include <vector>
 

@@ -320,7 +320,9 @@ std::vector<vk::UniqueCommandBuffer> AllocateCommandBuffers(const vk::Device dev
 template <std::size_t N>
 std::array<vk::UniqueSemaphore, N> CreateSemaphores(const vk::Device device) {
   std::array<vk::UniqueSemaphore, N> semaphores;
-  std::ranges::generate(semaphores, [device] { return device.createSemaphoreUnique(vk::SemaphoreCreateInfo{}); });
+  std::ranges::generate(semaphores, [device] {  //
+    return device.createSemaphoreUnique(vk::SemaphoreCreateInfo{});
+  });
   return semaphores;
 }
 
