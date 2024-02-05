@@ -34,7 +34,7 @@ public:
   }
 
   void Copy(const Device& device, const Buffer& src_buffer) {
-    device.SubmitOneTimeCommandBuffer([&src_buffer, &dst_buffer = *this](const auto command_buffer) {
+    device.SubmitOneTimeTransferCommandBuffer([&src_buffer, &dst_buffer = *this](const auto command_buffer) {
       command_buffer.copyBuffer(*src_buffer, *dst_buffer, vk::BufferCopy{.size = src_buffer.size_});
     });
   }

@@ -26,11 +26,11 @@ std::uint32_t FindMemoryTypeIndex(const vk::PhysicalDeviceMemoryProperties& phys
 vk::UniqueDeviceMemory AllocateMemory(const gfx::Device& device,
                                       const vk::MemoryRequirements& memory_requirements,
                                       const vk::MemoryPropertyFlags memory_property_flags) {
+  const auto memory_type_index =
+      FindMemoryTypeIndex(device.physical_device().memory_properties(), memory_requirements, memory_property_flags);
+
   return device->allocateMemoryUnique(
-      vk::MemoryAllocateInfo{.allocationSize = memory_requirements.size,
-                             .memoryTypeIndex = FindMemoryTypeIndex(device.physical_device().memory_properties(),
-                                                                    memory_requirements,
-                                                                    memory_property_flags)});
+      vk::MemoryAllocateInfo{.allocationSize = memory_requirements.size, .memoryTypeIndex = memory_type_index});
 }
 
 }  // namespace

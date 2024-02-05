@@ -6,6 +6,7 @@ add_library(graphics STATIC camera.cpp
                             instance.cpp
                             memory.cpp
                             model.cpp
+                            physical_device.cpp
                             shader_module.cpp
                             swapchain.cpp
                             window.cpp)

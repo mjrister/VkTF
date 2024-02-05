@@ -91,7 +91,7 @@ std::tuple<vk::UniqueSwapchainKHR, vk::Format, vk::Extent2D> CreateSwapchain(con
                                                    .presentMode = GetSwapchainPresentMode(*physical_device, surface),
                                                    .clipped = vk::True};
 
-  if (const auto [graphics_index, present_index] = physical_device.queue_family_indices();
+  if (const auto [graphics_index, present_index, _] = physical_device.queue_family_indices();
       graphics_index != present_index) {
     const std::array queue_family_indices{graphics_index, present_index};
     swapchain_create_info.imageSharingMode = vk::SharingMode::eConcurrent;

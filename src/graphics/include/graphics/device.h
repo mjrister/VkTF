@@ -2,44 +2,12 @@
 #define SRC_GRAPHICS_INCLUDE_GRAPHICS_DEVICE_H_
 
 #include <concepts>
-#include <cstdint>
 
 #include <vulkan/vulkan.hpp>
 
+#include "graphics/physical_device.h"
+
 namespace gfx {
-
-class PhysicalDevice {
-public:
-  struct QueueFamilyIndices {
-    std::uint32_t graphics_index;
-    std::uint32_t present_index;
-  };
-
-  PhysicalDevice(const vk::PhysicalDevice physical_device,
-                 const vk::PhysicalDeviceLimits& physical_device_limits,
-                 const QueueFamilyIndices queue_family_indices)
-      : physical_device_{physical_device},
-        limits_{physical_device_limits},
-        features_{physical_device.getFeatures()},
-        mem_properties_{physical_device.getMemoryProperties()},
-        queue_family_indices_{queue_family_indices} {}
-
-  [[nodiscard]] vk::PhysicalDevice operator*() const noexcept { return physical_device_; }
-  [[nodiscard]] const vk::PhysicalDevice* operator->() const noexcept { return &physical_device_; }
-
-  [[nodiscard]] const vk::PhysicalDeviceLimits& limits() const noexcept { return limits_; }
-  [[nodiscard]] const vk::PhysicalDeviceFeatures& features() const noexcept { return features_; }
-  [[nodiscard]] const vk::PhysicalDeviceMemoryProperties& memory_properties() const noexcept { return mem_properties_; }
-
-  [[nodiscard]] const QueueFamilyIndices& queue_family_indices() const noexcept { return queue_family_indices_; }
-
-private:
-  vk::PhysicalDevice physical_device_;
-  vk::PhysicalDeviceLimits limits_;
-  vk::PhysicalDeviceFeatures features_;
-  vk::PhysicalDeviceMemoryProperties mem_properties_;
-  QueueFamilyIndices queue_family_indices_;
-};
 
 class Device {
 public:
@@ -52,27 +20,28 @@ public:
 
   [[nodiscard]] vk::Queue graphics_queue() const noexcept { return graphics_queue_; }
   [[nodiscard]] vk::Queue present_queue() const noexcept { return present_queue_; }
+  [[nodiscard]] vk::Queue transfer_queue() const noexcept { return transfer_queue_; }
 
-  void SubmitOneTimeCommandBuffer(std::invocable<const vk::CommandBuffer> auto&& command_sequence) const {
-    const auto command_buffers = device_->allocateCommandBuffersUnique(
-        vk::CommandBufferAllocateInfo{.commandPool = *one_time_submit_command_pool_,
-                                      .level = vk::CommandBufferLevel::ePrimary,
-                                      .commandBufferCount = 1});
+  void SubmitOneTimeTransferCommandBuffer(std::invocable<const vk::CommandBuffer> auto&& command_sequence) const {
+    const auto command_buffers =
+        device_->allocateCommandBuffersUnique(vk::CommandBufferAllocateInfo{.commandPool = *transfer_command_pool_,
+                                                                            .level = vk::CommandBufferLevel::ePrimary,
+                                                                            .commandBufferCount = 1});
     const auto command_buffer = *command_buffers.front();
 
     command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
     command_sequence(command_buffer);
     command_buffer.end();
 
-    graphics_queue_.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &command_buffer});
-    graphics_queue_.waitIdle();
+    transfer_queue_.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &command_buffer});
+    transfer_queue_.waitIdle();
   }
 
 private:
   PhysicalDevice physical_device_;
   vk::UniqueDevice device_;
-  vk::Queue graphics_queue_, present_queue_;
-  vk::UniqueCommandPool one_time_submit_command_pool_;
+  vk::Queue graphics_queue_, present_queue_, transfer_queue_;
+  vk::UniqueCommandPool transfer_command_pool_;
 };
 
 }  // namespace gfx
