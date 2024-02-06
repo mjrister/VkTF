@@ -24,7 +24,7 @@ gfx::Game::Game()
     : window_{"VkRender", Window::Size{.width = kWindowWidth, .height = kWindowHeight}},
       engine_{window_},
       camera_{CreateCamera(window_.GetAspectRatio())},
-      model_{engine_.device(), "assets/models/sponza/Sponza.gltf"} {
+      model_{engine_.device(), "assets/models/sponza/Main.1_Sponza/NewSponza_Main_glTF_002.gltf"} {
   window_.OnKeyEvent([this](const auto key, const auto action) { HandleKeyEvent(key, action); });
   window_.OnCursorEvent([this](const auto x, const auto y) { HandleCursorEvent(x, y); });
   window_.OnScrollEvent([this](const auto y) { HandleScrollEvent(y); });
