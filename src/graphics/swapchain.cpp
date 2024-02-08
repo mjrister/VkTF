@@ -44,15 +44,15 @@ std::uint32_t GetSwapchainImageCount(const vk::SurfaceCapabilitiesKHR& surface_c
   return std::min(min_image_count + 1, max_image_count);
 }
 
-vk::Extent2D GetSwapchainImageExtent(const gfx::Window& window,
-                                     const vk::SurfaceCapabilitiesKHR& surface_capabilities) {
+vk::Extent2D GetSwapchainImageExtent(const vk::SurfaceCapabilitiesKHR& surface_capabilities,
+                                     const gfx::Window::Size framebuffer_size) {
   if (constexpr auto kUndefinedExtent = std::numeric_limits<std::uint32_t>::max();
       surface_capabilities.currentExtent != vk::Extent2D{.width = kUndefinedExtent, .height = kUndefinedExtent}) {
     return surface_capabilities.currentExtent;
   }
   const auto [min_width, min_height] = surface_capabilities.minImageExtent;
   const auto [max_width, max_height] = surface_capabilities.maxImageExtent;
-  const auto [framebuffer_width, framebuffer_height] = window.GetFramebufferSize();
+  const auto [framebuffer_width, framebuffer_height] = framebuffer_size;
   return vk::Extent2D{.width = std::clamp(static_cast<std::uint32_t>(framebuffer_width), min_width, max_width),
                       .height = std::clamp(static_cast<std::uint32_t>(framebuffer_height), min_height, max_height)};
 }
@@ -79,7 +79,7 @@ std::tuple<vk::UniqueSwapchainKHR, vk::Format, vk::Extent2D> CreateSwapchain(con
   const auto& physical_device = device.physical_device();
   const auto surface_capabilities = physical_device->getSurfaceCapabilitiesKHR(surface);
   const auto [image_format, image_color_space] = GetSwapchainSurfaceFormat(*physical_device, surface);
-  const auto image_extent = GetSwapchainImageExtent(window, surface_capabilities);
+  const auto image_extent = GetSwapchainImageExtent(surface_capabilities, window.GetFramebufferSize());
 
   vk::SwapchainCreateInfoKHR swapchain_create_info{.surface = surface,
                                                    .minImageCount = GetSwapchainImageCount(surface_capabilities),

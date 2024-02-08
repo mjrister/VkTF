@@ -3,68 +3,52 @@
 
 #include <cassert>
 #include <cstring>
+#include <utility>
 
+#include <vk_mem_alloc.h>
 #include <vulkan/vulkan.hpp>
 
-#include "graphics/device.h"
-#include "graphics/memory.h"
-
 namespace gfx {
+class Device;
 
 class Buffer {
 public:
-  Buffer(const Device& device,
-         const vk::DeviceSize size,
-         const vk::BufferUsageFlags buffer_usage_flags,
-         const vk::MemoryPropertyFlags memory_property_flags)
-      : buffer_{device->createBufferUnique(vk::BufferCreateInfo{.size = size, .usage = buffer_usage_flags})},
-        memory_{device, device->getBufferMemoryRequirements(*buffer_), memory_property_flags},
-        size_{size} {
-    device->bindBufferMemory(*buffer_, *memory_, 0);
-  }
+  Buffer(vk::DeviceSize size,
+         vk::BufferUsageFlags buffer_usage_flags,
+         VmaAllocator allocator,
+         VmaAllocationCreateFlags allocation_create_flags = {});
 
-  [[nodiscard]] vk::Buffer operator*() const noexcept { return *buffer_; }
+  Buffer(const Buffer&) = delete;
+  Buffer(Buffer&& buffer) noexcept { *this = std::move(buffer); }
+
+  Buffer& operator=(const Buffer&) = delete;
+  Buffer& operator=(Buffer&& buffer) noexcept;
+
+  ~Buffer();
+
+  [[nodiscard]] vk::Buffer operator*() const noexcept { return buffer_; }
 
   template <typename T>
   void Copy(const vk::ArrayProxy<const T> data) {
-    auto* mapped_memory = memory_.Map();
-    const auto size_bytes = sizeof(T) * data.size();
-    assert(size_bytes <= size_);
-    memcpy(mapped_memory, data.data(), size_bytes);
+    assert(sizeof(T) * data.size() <= size_);
+    auto* mapped_memory = MapMemory();
+    memcpy(mapped_memory, data.data(), size_);
+    const auto result = vmaFlushAllocation(allocator_, allocation_, 0, vk::WholeSize);
+    vk::resultCheck(static_cast<vk::Result>(result), "Flush allocation failed");
   }
 
-  void Copy(const Device& device, const Buffer& src_buffer) {
-    device.SubmitOneTimeTransferCommandBuffer([&src_buffer, &dst_buffer = *this](const auto command_buffer) {
-      command_buffer.copyBuffer(*src_buffer, *dst_buffer, vk::BufferCopy{.size = src_buffer.size_});
-    });
-  }
+  void Copy(const Device& device, const Buffer& buffer);
 
 private:
-  vk::UniqueBuffer buffer_;
-  Memory memory_;
-  vk::DeviceSize size_;
+  void* MapMemory();
+  void UnmapMemory();
+
+  VmaAllocator allocator_{};
+  VmaAllocation allocation_{};
+  vk::Buffer buffer_{};
+  vk::DeviceSize size_{};
+  void* mapped_memory_{};
 };
-
-template <typename T>
-[[nodiscard]] Buffer CreateDeviceLocalBuffer(const Device& device,
-                                             const vk::BufferUsageFlags buffer_usage_flags,
-                                             const vk::ArrayProxy<const T> data) {
-  const auto size_bytes = sizeof(T) * data.size();
-
-  Buffer host_visible_buffer{device,
-                             size_bytes,
-                             vk::BufferUsageFlagBits::eTransferSrc,
-                             vk::MemoryPropertyFlagBits::eHostVisible};
-  host_visible_buffer.Copy(data);
-
-  Buffer device_local_buffer{device,
-                             size_bytes,
-                             buffer_usage_flags | vk::BufferUsageFlagBits::eTransferDst,
-                             vk::MemoryPropertyFlagBits::eDeviceLocal};
-  device_local_buffer.Copy(device, host_visible_buffer);
-
-  return device_local_buffer;
-}
 
 }  // namespace gfx
 

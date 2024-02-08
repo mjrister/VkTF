@@ -93,6 +93,5 @@ gfx::PhysicalDevice::PhysicalDevice(const vk::Instance instance, const vk::Surfa
   const auto [physical_device, limits, queue_family_indices, _] = SelectPhysicalDevice(instance, surface);
   physical_device_ = physical_device;
   limits_ = limits;
-  mem_properties_ = physical_device.getMemoryProperties();
   queue_family_indices_ = queue_family_indices;
 }

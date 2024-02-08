@@ -2,6 +2,17 @@
 #include <exception>
 #include <iostream>
 
+#define STB_IMAGE_IMPLEMENTATION
+#define VMA_IMPLEMENTATION
+
+#include <stb_image.h>
+#include <vk_mem_alloc.h>
+#include <vulkan/vulkan.hpp>
+
+#if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1
+VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
+#endif
+
 #include "game/game.h"
 
 int main() {

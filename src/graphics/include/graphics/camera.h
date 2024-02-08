@@ -26,9 +26,9 @@ public:
   void Rotate(float theta, float phi);
 
 private:
-  glm::vec3 position_;
-  SphericalCoordinates orientation_;
-  ViewFrustum view_frustum_;
+  glm::vec3 position_{0.0f};
+  SphericalCoordinates orientation_{};
+  ViewFrustum view_frustum_{};
 };
 
 }  // namespace gfx

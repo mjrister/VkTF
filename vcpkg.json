@@ -8,6 +8,7 @@
     "glm",
     "glslang",
     "gtest",
-    "vulkan-headers"
+    "vulkan-headers",
+    "vulkan-memory-allocator"
   ]
 }

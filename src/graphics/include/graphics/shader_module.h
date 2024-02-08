@@ -14,7 +14,7 @@ public:
   [[nodiscard]] vk::ShaderModule operator*() const noexcept { return *shader_module_; }
 
 private:
-  vk::UniqueShaderModule shader_module_;
+  vk::UniqueShaderModule shader_module_{};
 };
 
 }  // namespace gfx

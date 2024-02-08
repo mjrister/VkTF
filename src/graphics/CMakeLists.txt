@@ -1,10 +1,12 @@
-add_library(graphics STATIC camera.cpp
+add_library(graphics STATIC allocator.cpp
+                            buffer.cpp
+                            camera.cpp
                             device.cpp
                             engine.cpp
                             glslang_compiler.cpp
                             image.cpp
                             instance.cpp
-                            memory.cpp
+                            mesh.cpp
                             model.cpp
                             physical_device.cpp
                             shader_module.cpp
@@ -12,12 +14,14 @@ add_library(graphics STATIC camera.cpp
                             window.cpp)
 
 find_package(VulkanHeaders CONFIG REQUIRED)
+find_package(VulkanMemoryAllocator CONFIG REQUIRED)
 find_package(assimp CONFIG REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glslang CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 
-target_link_libraries(graphics PUBLIC Vulkan::Headers
+target_link_libraries(graphics PUBLIC GPUOpen::VulkanMemoryAllocator
+                                      Vulkan::Headers
                                       assimp::assimp
                                       glfw
                                       glm::glm
@@ -32,9 +36,10 @@ target_compile_definitions(graphics PUBLIC GLFW_INCLUDE_VULKAN
                                            GLM_FORCE_DEPTH_ZERO_TO_ONE
                                            GLM_FORCE_SIZE_T_LENGTH
                                            GLM_FORCE_XYZW_ONLY
-                                           STB_IMAGE_IMPLEMENTATION
+                                           VMA_STATIC_VULKAN_FUNCTIONS=0
+                                           VMA_DYNAMIC_VULKAN_FUNCTIONS=0
+                                           VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
                                            VULKAN_HPP_NO_CONSTRUCTORS
-                                           VULKAN_HPP_NO_SPACESHIP_OPERATOR
-                                           VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1)
+                                           VULKAN_HPP_NO_SPACESHIP_OPERATOR)
 
 target_include_directories(graphics PUBLIC include)

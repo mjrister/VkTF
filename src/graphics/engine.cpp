@@ -161,13 +161,15 @@ std::vector<vk::DescriptorSet> AllocateDescriptorSets(const vk::Device device,
 }
 
 std::vector<gfx::Buffer> CreateUniformBuffers(const gfx::Device& device,
+                                              const VmaAllocator allocator,
                                               const std::vector<vk::DescriptorSet>& descriptor_sets) {
   return descriptor_sets  //
-         | std::views::transform([&device](const auto descriptor_set) {
-             gfx::Buffer buffer{device,
-                                sizeof(CameraTransforms),
-                                vk::BufferUsageFlagBits::eUniformBuffer,
-                                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent};
+         | std::views::transform([&device, allocator](const auto descriptor_set) {
+             gfx::Buffer buffer{
+                 sizeof(CameraTransforms),
+                 vk::BufferUsageFlagBits::eUniformBuffer,
+                 allocator,
+                 VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT};
 
              const vk::DescriptorBufferInfo buffer_info{.buffer = *buffer, .offset = 0, .range = vk::WholeSize};
              device->updateDescriptorSets(vk::WriteDescriptorSet{.dstSet = descriptor_set,
@@ -340,22 +342,25 @@ std::array<vk::UniqueFence, N> CreateFences(const vk::Device device) {
 gfx::Engine::Engine(const Window& window)
     : surface_{window.CreateSurface(*instance_)},
       device_{*instance_, *surface_},
+      allocator_{*instance_, *device_.physical_device(), *device_},
       swapchain_{device_, window, *surface_},
       msaa_sample_count_{GetMsaaSampleCount(device_.physical_device().limits())},
-      color_attachment_{device_,
+      color_attachment_{*device_,
                         swapchain_.image_format(),
                         swapchain_.image_extent(),
                         msaa_sample_count_,
                         vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransientAttachment,
                         vk::ImageAspectFlagBits::eColor,
-                        vk::MemoryPropertyFlagBits::eDeviceLocal},
-      depth_attachment_{device_,
+                        *allocator_,
+                        VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT},
+      depth_attachment_{*device_,
                         vk::Format::eD24UnormS8Uint,  // TODO(#54): check device support
                         swapchain_.image_extent(),
                         msaa_sample_count_,
                         vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eTransientAttachment,
                         vk::ImageAspectFlagBits::eDepth,
-                        vk::MemoryPropertyFlagBits::eDeviceLocal},
+                        *allocator_,
+                        VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT},
       render_pass_{
           CreateRenderPass(*device_, msaa_sample_count_, swapchain_.image_format(), depth_attachment_.format())},
       framebuffers_{CreateFramebuffers(*device_,
@@ -366,7 +371,7 @@ gfx::Engine::Engine(const Window& window)
       descriptor_set_layouts_{CreateDescriptorSetLayout(*device_)},
       descriptor_pool_{CreateDescriptorPool<kMaxRenderFrames>(*device_)},
       descriptor_sets_{AllocateDescriptorSets<kMaxRenderFrames>(*device_, *descriptor_pool_, *descriptor_set_layouts_)},
-      uniform_buffers_{CreateUniformBuffers(device_, descriptor_sets_)},
+      uniform_buffers_{CreateUniformBuffers(device_, *allocator_, descriptor_sets_)},
       graphics_pipeline_layout_{CreateGraphicsPipelineLayout(*device_, *descriptor_set_layouts_)},
       graphics_pipeline_{CreateGraphicsPipeline(*device_,
                                                 swapchain_.image_extent(),
@@ -387,13 +392,13 @@ void gfx::Engine::Render(const Camera& camera, const Model& model) {
   static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
   const auto draw_fence = *draw_fences_[current_frame_index_];
   auto result = device_->waitForFences(draw_fence, vk::True, kMaxTimeout);
-  vk::resultCheck(result, "Draw fence failed to enter a signaled state");
+  vk::resultCheck(result, "Wait for fence failed");
   device_->resetFences(draw_fence);
 
   std::uint32_t image_index{};
   const auto acquire_next_image_semaphore = *acquire_next_image_semaphores_[current_frame_index_];
   std::tie(result, image_index) = device_->acquireNextImageKHR(*swapchain_, kMaxTimeout, acquire_next_image_semaphore);
-  vk::resultCheck(result, "Failed to acquire the next presentable image");
+  vk::resultCheck(result, "Acquire next swapchain image failed");
 
   auto& uniform_buffer = uniform_buffers_[current_frame_index_];
   uniform_buffer.Copy<CameraTransforms>(CameraTransforms{.view_transform = camera.GetViewTransform(),
@@ -445,5 +450,5 @@ void gfx::Engine::Render(const Camera& camera, const Model& model) {
                                                                  .swapchainCount = 1,
                                                                  .pSwapchains = &swapchain,
                                                                  .pImageIndices = &image_index});
-  vk::resultCheck(result, "Failed to queue an image for presentation");
+  vk::resultCheck(result, "Present swapchain image failed");
 }

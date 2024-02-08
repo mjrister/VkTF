@@ -45,10 +45,10 @@ public:
 #endif
 
 private:
-  std::unique_ptr<GLFWwindow, std::function<void(GLFWwindow*)>> window_;
-  std::function<void(int, int)> key_event_handler_;
-  std::function<void(float, float)> cursor_event_handler_;
-  std::function<void(float)> scroll_event_handler_;
+  std::unique_ptr<GLFWwindow, void (*)(GLFWwindow*)> window_{nullptr, nullptr};
+  std::function<void(int, int)> key_event_handler_{};
+  std::function<void(float, float)> cursor_event_handler_{};
+  std::function<void(float)> scroll_event_handler_{};
 };
 
 }  // namespace gfx

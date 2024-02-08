@@ -5,10 +5,6 @@
 
 #include "graphics/window.h"
 
-#if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1
-VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
-#endif
-
 gfx::Instance::Instance() {
 #if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1
   static const vk::DynamicLoader kDynamicLoader;
@@ -16,7 +12,7 @@ gfx::Instance::Instance() {
   VULKAN_HPP_DEFAULT_DISPATCHER.init(get_instance_proc_addr);
 #endif
 
-  static constexpr vk::ApplicationInfo kApplicationInfo{.apiVersion = VK_API_VERSION_1_3};
+  static constexpr vk::ApplicationInfo kApplicationInfo{.apiVersion = kApiVersion};
   static constexpr std::initializer_list<const char*> kInstanceLayers{
 #ifndef NDEBUG
       "VK_LAYER_KHRONOS_validation"

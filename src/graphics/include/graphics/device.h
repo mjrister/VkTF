@@ -1,3 +1,4 @@
+
 #ifndef SRC_GRAPHICS_INCLUDE_GRAPHICS_DEVICE_H_
 #define SRC_GRAPHICS_INCLUDE_GRAPHICS_DEVICE_H_
 
@@ -39,9 +40,9 @@ public:
 
 private:
   PhysicalDevice physical_device_;
-  vk::UniqueDevice device_;
-  vk::Queue graphics_queue_, present_queue_, transfer_queue_;
-  vk::UniqueCommandPool transfer_command_pool_;
+  vk::UniqueDevice device_{};
+  vk::Queue graphics_queue_{}, present_queue_{}, transfer_queue_{};
+  vk::UniqueCommandPool transfer_command_pool_{};
 };
 
 }  // namespace gfx

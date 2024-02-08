@@ -75,19 +75,24 @@ glm::mat4 GetTransform(const aiNode& node) {
   // clang-format on
 }
 
-std::unique_ptr<gfx::Model::Node> ImportNode(const gfx::Device& device, const aiScene& scene, const aiNode& node) {
+std::unique_ptr<gfx::Model::Node> ImportNode(const gfx::Device& device,
+                                             const VmaAllocator allocator,
+                                             const aiScene& scene,
+                                             const aiNode& node) {
   auto node_meshes =
       std::span{node.mMeshes, node.mNumMeshes}
-      | std::views::transform([&, scene_meshes = std::span{scene.mMeshes, scene.mNumMeshes}](const auto index) {
-          const auto& mesh = *scene_meshes[index];
-          return gfx::Mesh{device, GetVertices(mesh), GetIndices(mesh)};
-        })
+      | std::views::transform(
+          [&device, allocator, scene_meshes = std::span{scene.mMeshes, scene.mNumMeshes}](const auto index) {
+            const auto& mesh = *scene_meshes[index];
+            return gfx::Mesh{device, allocator, GetVertices(mesh), GetIndices(mesh)};
+          })
       | std::ranges::to<std::vector>();
 
-  auto node_children =
-      std::span{node.mChildren, node.mNumChildren}
-      | std::views::transform([&](const auto* child_node) { return ImportNode(device, scene, *child_node); })
-      | std::ranges::to<std::vector>();
+  auto node_children = std::span{node.mChildren, node.mNumChildren}
+                       | std::views::transform([&device, &scene, allocator](const auto* child_node) {
+                           return ImportNode(device, allocator, scene, *child_node);
+                         })
+                       | std::ranges::to<std::vector>();
 
   return std::make_unique<gfx::Model::Node>(std::move(node_meshes), std::move(node_children), GetTransform(node));
 }
@@ -113,9 +118,9 @@ void RenderNode(const gfx::Model::Node& node,
 
 }  // namespace
 
-gfx::Model::Model(const Device& device, const std::filesystem::path& filepath) {
+gfx::Model::Model(const Device& device, const VmaAllocator allocator, const std::filesystem::path& filepath) {
   Assimp::Importer importer;
-  std::uint32_t import_flags = aiProcessPreset_TargetRealtime_Fast | aiProcess_FlipUVs;
+  std::uint32_t import_flags = aiProcessPreset_TargetRealtime_Fast;
 
 #ifndef NDEBUG
   import_flags |= aiProcess_ValidateDataStructure;
@@ -125,7 +130,7 @@ gfx::Model::Model(const Device& device, const std::filesystem::path& filepath) {
   const auto* scene = importer.ReadFile(filepath.string(), import_flags);
   if (scene == nullptr) throw std::runtime_error{importer.GetErrorString()};
 
-  root_node_ = ImportNode(device, *scene, *scene->mRootNode);
+  root_node_ = ImportNode(device, allocator, *scene, *scene->mRootNode);
 }
 
 void gfx::Model::Render(const vk::CommandBuffer command_buffer, const vk::PipelineLayout pipeline_layout) const {

@@ -6,9 +6,9 @@
 #include <vulkan/vulkan.hpp>
 
 #include "graphics/buffer.h"
-#include "graphics/device.h"
 
 namespace gfx {
+class Device;
 
 class Mesh {
 public:
@@ -19,11 +19,9 @@ public:
   };
 
   Mesh(const Device& device,
-       const vk::ArrayProxy<const Vertex> vertices,
-       const vk::ArrayProxy<const std::uint32_t> indices)
-      : vertex_buffer_{CreateDeviceLocalBuffer<Vertex>(device, vk::BufferUsageFlagBits::eVertexBuffer, vertices)},
-        index_buffer_{CreateDeviceLocalBuffer<std::uint32_t>(device, vk::BufferUsageFlagBits::eIndexBuffer, indices)},
-        index_count_{indices.size()} {}
+       VmaAllocator allocator,
+       vk::ArrayProxy<const Vertex> vertices,
+       vk::ArrayProxy<const std::uint32_t> indices);
 
   void Render(const vk::CommandBuffer command_buffer) const {
     command_buffer.bindVertexBuffers(0, *vertex_buffer_, static_cast<vk::DeviceSize>(0));
@@ -34,7 +32,7 @@ public:
 private:
   Buffer vertex_buffer_;
   Buffer index_buffer_;
-  std::uint32_t index_count_;
+  std::uint32_t index_count_{};
 };
 
 }  // namespace gfx

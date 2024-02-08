@@ -21,15 +21,12 @@ public:
   [[nodiscard]] const vk::PhysicalDevice* operator->() const noexcept { return &physical_device_; }
 
   [[nodiscard]] const vk::PhysicalDeviceLimits& limits() const noexcept { return limits_; }
-  [[nodiscard]] const vk::PhysicalDeviceMemoryProperties& memory_properties() const noexcept { return mem_properties_; }
-
   [[nodiscard]] const QueueFamilyIndices& queue_family_indices() const noexcept { return queue_family_indices_; }
 
 private:
-  vk::PhysicalDevice physical_device_;
-  vk::PhysicalDeviceLimits limits_;
-  vk::PhysicalDeviceMemoryProperties mem_properties_;
-  QueueFamilyIndices queue_family_indices_;
+  vk::PhysicalDevice physical_device_{};
+  vk::PhysicalDeviceLimits limits_{};
+  QueueFamilyIndices queue_family_indices_{};
 };
 
 }  // namespace gfx

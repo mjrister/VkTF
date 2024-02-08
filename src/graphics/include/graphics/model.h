@@ -26,7 +26,7 @@ public:
     glm::mat4 node_transform{1.0f};
   };
 
-  Model(const Device& device, const std::filesystem::path& filepath);
+  Model(const Device& device, VmaAllocator allocator, const std::filesystem::path& filepath);
 
   void Render(vk::CommandBuffer command_buffer, vk::PipelineLayout pipeline_layout) const;
 
@@ -46,7 +46,7 @@ public:
   }
 
 private:
-  std::unique_ptr<Node> root_node_;
+  std::unique_ptr<Node> root_node_{};
 };
 
 }  // namespace gfx

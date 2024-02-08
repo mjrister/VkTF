@@ -7,12 +7,14 @@ namespace gfx {
 
 class Instance {
 public:
+  static constexpr auto kApiVersion = vk::ApiVersion13;
+
   Instance();
 
   [[nodiscard]] vk::Instance operator*() const noexcept { return *instance_; }
 
 private:
-  vk::UniqueInstance instance_;
+  vk::UniqueInstance instance_{};
 };
 
 }  // namespace gfx
