@@ -218,22 +218,22 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
 
   static constexpr vk::VertexInputBindingDescription kVertexInputBindingDescription{
       .binding = 0,
-      .stride = sizeof(gfx::Mesh::Vertex),
+      .stride = sizeof(gfx::Vertex),
       .inputRate = vk::VertexInputRate::eVertex};
 
   static constexpr std::array kVertexAttributeDescriptions{
       vk::VertexInputAttributeDescription{.location = 0,
                                           .binding = 0,
                                           .format = vk::Format::eR32G32B32Sfloat,
-                                          .offset = offsetof(gfx::Mesh::Vertex, position)},
+                                          .offset = offsetof(gfx::Vertex, position)},
       vk::VertexInputAttributeDescription{.location = 1,
                                           .binding = 0,
                                           .format = vk::Format::eR32G32Sfloat,
-                                          .offset = offsetof(gfx::Mesh::Vertex, texture_coordinates)},
+                                          .offset = offsetof(gfx::Vertex, texture_coordinates)},
       vk::VertexInputAttributeDescription{.location = 2,
                                           .binding = 0,
                                           .format = vk::Format::eR32G32B32Sfloat,
-                                          .offset = offsetof(gfx::Mesh::Vertex, normal)}};
+                                          .offset = offsetof(gfx::Vertex, normal)}};
 
   static constexpr vk::PipelineVertexInputStateCreateInfo kVertexInputStateCreateInfo{
       .vertexBindingDescriptionCount = 1,

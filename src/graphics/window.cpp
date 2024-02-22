@@ -41,7 +41,7 @@ private:
 
 using UniqueGlfwWindow = std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)>;
 
-UniqueGlfwWindow CreateGlfwWindow(const char* const title, const gfx::Window::Size size) {
+UniqueGlfwWindow CreateGlfwWindow(const char* const title, int width, int height) {
   [[maybe_unused]] const auto& glfw_context = GlfwContext::Get();
 
   auto* monitor = glfwGetPrimaryMonitor();
@@ -52,10 +52,8 @@ UniqueGlfwWindow CreateGlfwWindow(const char* const title, const gfx::Window::Si
   glfwWindowHint(GLFW_BLUE_BITS, video_mode->blueBits);
   glfwWindowHint(GLFW_REFRESH_RATE, video_mode->refreshRate);
 
-  assert(size.width > 0);
-  assert(size.height > 0);
-  const auto width = std::min(size.width, video_mode->width);
-  const auto height = std::min(size.height, video_mode->height);
+  width = std::min(width, video_mode->width);
+  height = std::min(height, video_mode->height);
 
   auto* window = glfwCreateWindow(width, height, title, nullptr, nullptr);
   if (window == nullptr) throw std::runtime_error{"GLFW window creation failed"};
@@ -69,7 +67,8 @@ UniqueGlfwWindow CreateGlfwWindow(const char* const title, const gfx::Window::Si
 
 }  // namespace
 
-gfx::Window::Window(const char* const title, const Size size) : window_{CreateGlfwWindow(title, size)} {
+gfx::Window::Window(const char* const title, const int width, const int height)
+    : window_{CreateGlfwWindow(title, width, height)} {
   glfwSetWindowUserPointer(window_.get(), this);
 
   glfwSetKeyCallback(
@@ -93,16 +92,16 @@ gfx::Window::Window(const char* const title, const Size size) : window_{CreateGl
   });
 }
 
-gfx::Window::Size gfx::Window::GetSize() const noexcept {
+std::pair<int, int> gfx::Window::GetSize() const noexcept {
   int width{}, height{};
   glfwGetWindowSize(window_.get(), &width, &height);
-  return Size{.width = width, .height = height};
+  return std::pair{width, height};
 }
 
-gfx::Window::Size gfx::Window::GetFramebufferSize() const noexcept {
+std::pair<int, int> gfx::Window::GetFramebufferSize() const noexcept {
   int width{}, height{};
   glfwGetFramebufferSize(window_.get(), &width, &height);
-  return Size{.width = width, .height = height};
+  return std::pair{width, height};
 }
 
 float gfx::Window::GetAspectRatio() const noexcept {

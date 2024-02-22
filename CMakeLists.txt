@@ -4,6 +4,7 @@ project(vkrender VERSION 0.0.1 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 # these interface targets are used for privately sharing common compiler configurations
 add_library(asan INTERFACE)

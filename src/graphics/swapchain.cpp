@@ -45,7 +45,7 @@ std::uint32_t GetSwapchainImageCount(const vk::SurfaceCapabilitiesKHR& surface_c
 }
 
 vk::Extent2D GetSwapchainImageExtent(const vk::SurfaceCapabilitiesKHR& surface_capabilities,
-                                     const gfx::Window::Size framebuffer_size) {
+                                     const std::pair<int, int> framebuffer_size) {
   if (constexpr auto kUndefinedExtent = std::numeric_limits<std::uint32_t>::max();
       surface_capabilities.currentExtent != vk::Extent2D{.width = kUndefinedExtent, .height = kUndefinedExtent}) {
     return surface_capabilities.currentExtent;

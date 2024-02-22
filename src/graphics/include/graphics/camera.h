@@ -8,15 +8,15 @@
 
 namespace gfx {
 
+struct ViewFrustum {
+  float field_of_view_y{};
+  float aspect_ratio{};
+  float z_near{};
+  float z_far{};
+};
+
 class Camera {
 public:
-  struct ViewFrustum {
-    float field_of_view_y{};
-    float aspect_ratio{};
-    float z_near{};
-    float z_far{};
-  };
-
   Camera(const glm::vec3& position, const glm::vec3& direction, const ViewFrustum& view_frustum);
 
   [[nodiscard]] glm::mat4 GetViewTransform() const;

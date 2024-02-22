@@ -10,14 +10,14 @@
 namespace gfx {
 class Device;
 
+struct Vertex {
+  glm::vec3 position{0.0f};
+  glm::vec2 texture_coordinates{0.0f};
+  glm::vec3 normal{0.0f};
+};
+
 class Mesh {
 public:
-  struct Vertex {
-    glm::vec3 position{0.0f};
-    glm::vec2 texture_coordinates{0.0f};
-    glm::vec3 normal{0.0f};
-  };
-
   Mesh(const Device& device,
        VmaAllocator allocator,
        vk::ArrayProxy<const Vertex> vertices,

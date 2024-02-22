@@ -37,16 +37,16 @@ glm::vec<N, T> GetVec(const std::span<aiVector3t<T>> data, const std::size_t ind
   return v;
 }
 
-std::vector<gfx::Mesh::Vertex> GetVertices(const aiMesh& mesh) {
+std::vector<gfx::Vertex> GetVertices(const aiMesh& mesh) {
   const std::span positions{mesh.mVertices, mesh.HasPositions() ? mesh.mNumVertices : 0};
   const std::span normals{mesh.mNormals, mesh.HasNormals() ? mesh.mNumVertices : 0};
   const std::span texture_coordinates{mesh.mTextureCoords[0], mesh.HasTextureCoords(0) ? mesh.mNumVertices : 0};
 
   return std::views::iota(0u, mesh.mNumVertices)
          | std::views::transform([positions, normals, texture_coordinates](const auto index) {
-             return gfx::Mesh::Vertex{.position = GetVec<3>(positions, index),
-                                      .texture_coordinates = GetVec<2>(texture_coordinates, index),
-                                      .normal = GetVec<3>(normals, index, true)};
+             return gfx::Vertex{.position = GetVec<3>(positions, index),
+                                .texture_coordinates = GetVec<2>(texture_coordinates, index),
+                                .normal = GetVec<3>(normals, index, true)};
            })
          | std::ranges::to<std::vector>();
 }

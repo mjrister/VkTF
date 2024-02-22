@@ -9,13 +9,11 @@
 
 namespace {
 
-using QueueFamilyIndices = gfx::PhysicalDevice::QueueFamilyIndices;
-
 struct RankedPhysicalDevice {
   static constexpr auto kInvalidRank = -1;
   vk::PhysicalDevice physical_device;
   vk::PhysicalDeviceLimits physical_device_limits;
-  QueueFamilyIndices queue_family_indices;
+  gfx::QueueFamilyIndices queue_family_indices;
   int rank = kInvalidRank;
 };
 
@@ -30,8 +28,8 @@ std::optional<std::uint32_t> FindQueueFamily(const std::vector<vk::QueueFamilyPr
   return std::nullopt;
 }
 
-std::optional<QueueFamilyIndices> FindQueueFamilyIndices(const vk::PhysicalDevice physical_device,
-                                                         const vk::SurfaceKHR surface) {
+std::optional<gfx::QueueFamilyIndices> FindQueueFamilyIndices(const vk::PhysicalDevice physical_device,
+                                                              const vk::SurfaceKHR surface) {
   const auto all_queue_family_properties = physical_device.getQueueFamilyProperties();
 
   const auto graphics_index = FindQueueFamily(all_queue_family_properties, [](const auto& queue_family_properties) {
@@ -50,10 +48,10 @@ std::optional<QueueFamilyIndices> FindQueueFamilyIndices(const vk::PhysicalDevic
   });
 
   if (graphics_index.has_value() && present_index.has_value()) {
-    return QueueFamilyIndices{.graphics_index = *graphics_index,
-                              .present_index = *present_index,
-                              // graphics queue family always implicitly accept transfer commands
-                              .transfer_index = transfer_index.value_or(*graphics_index)};
+    return gfx::QueueFamilyIndices{.graphics_index = *graphics_index,
+                                   .present_index = *present_index,
+                                   // graphics queue family always implicitly accept transfer commands
+                                   .transfer_index = transfer_index.value_or(*graphics_index)};
   }
 
   return std::nullopt;
