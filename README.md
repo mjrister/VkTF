@@ -4,7 +4,7 @@ A work in progress Vulkan renderer written in C++.
 
 ## Requirements
 
-This project requires CMake 3.27 and a compiler that supports the C++23 language standard. To assist with CMake configuration, building, and testing, [CMake Presets](https://cmake.org/cmake/help/v3.22/manual/cmake-presets.7.html) are used with [ninja](https://ninja-build.org/) as a build generator.
+This project requires CMake 3.28 and a compiler that supports the C++23 language standard. To assist with CMake configuration, building, and testing, [CMake Presets](https://cmake.org/cmake/help/v3.22/manual/cmake-presets.7.html) are used with [ninja](https://ninja-build.org/) as a build generator.
 
 ### Vulkan
 
