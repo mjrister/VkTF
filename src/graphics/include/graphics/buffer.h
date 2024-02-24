@@ -9,14 +9,13 @@
 #include <vulkan/vulkan.hpp>
 
 namespace gfx {
-class Device;
 
 class Buffer {
 public:
   Buffer(vk::DeviceSize size,
          vk::BufferUsageFlags buffer_usage_flags,
          VmaAllocator allocator,
-         VmaAllocationCreateFlags allocation_create_flags = {});
+         const VmaAllocationCreateInfo& allocation_create_info);
 
   Buffer(const Buffer&) = delete;
   Buffer(Buffer&& buffer) noexcept { *this = std::move(buffer); }
@@ -30,6 +29,7 @@ public:
 
   template <typename T>
   void Copy(const vk::ArrayProxy<const T> data) {
+    // TODO(matthew-rister): switch to vmaCopyMemoryToAllocation when version 3.1.0 is released
     assert(sizeof(T) * data.size() <= size_);
     auto* mapped_memory = MapMemory();
     memcpy(mapped_memory, data.data(), size_);
@@ -37,7 +37,11 @@ public:
     vk::resultCheck(static_cast<vk::Result>(result), "Flush allocation failed");
   }
 
-  void Copy(const Device& device, const Buffer& buffer);
+  template <typename T>
+  void CopyOnce(const vk::ArrayProxy<const T> data) {
+    Copy(data);
+    UnmapMemory();
+  }
 
 private:
   void* MapMemory();

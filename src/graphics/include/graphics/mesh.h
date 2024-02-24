@@ -1,6 +1,9 @@
 #ifndef SRC_GRAPHICS_INCLUDE_GRAPHICS_MESH_H_
 #define SRC_GRAPHICS_INCLUDE_GRAPHICS_MESH_H_
 
+#include <cstdint>
+#include <utility>
+
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <vulkan/vulkan.hpp>
@@ -18,10 +21,8 @@ struct Vertex {
 
 class Mesh {
 public:
-  Mesh(const Device& device,
-       VmaAllocator allocator,
-       vk::ArrayProxy<const Vertex> vertices,
-       vk::ArrayProxy<const std::uint32_t> indices);
+  Mesh(Buffer&& vertex_buffer, Buffer&& index_buffer, const std::uint32_t index_count)
+      : vertex_buffer_{std::move(vertex_buffer)}, index_buffer_{std::move(index_buffer)}, index_count_{index_count} {}
 
   void Render(const vk::CommandBuffer command_buffer) const {
     command_buffer.bindVertexBuffers(0, *vertex_buffer_, static_cast<vk::DeviceSize>(0));

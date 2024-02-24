@@ -6,7 +6,6 @@ add_library(graphics STATIC allocator.cpp
                             glslang_compiler.cpp
                             image.cpp
                             instance.cpp
-                            mesh.cpp
                             model.cpp
                             physical_device.cpp
                             shader_module.cpp

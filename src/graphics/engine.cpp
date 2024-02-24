@@ -7,6 +7,7 @@
 #include <ranges>
 #include <utility>
 
+#include <vk_mem_alloc.h>
 #include <glm/mat4x4.hpp>
 
 #include "graphics/camera.h"
@@ -165,11 +166,13 @@ std::vector<gfx::Buffer> CreateUniformBuffers(const gfx::Device& device,
                                               const std::vector<vk::DescriptorSet>& descriptor_sets) {
   return descriptor_sets  //
          | std::views::transform([&device, allocator](const auto descriptor_set) {
-             gfx::Buffer buffer{
-                 sizeof(CameraTransforms),
-                 vk::BufferUsageFlagBits::eUniformBuffer,
-                 allocator,
-                 VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT};
+             static constexpr VmaAllocationCreateInfo kUniformBufferAllocationCreateInfo{
+                 .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+                 .usage = VMA_MEMORY_USAGE_AUTO};
+             gfx::Buffer buffer{sizeof(CameraTransforms),
+                                vk::BufferUsageFlagBits::eUniformBuffer,
+                                allocator,
+                                kUniformBufferAllocationCreateInfo};
 
              const vk::DescriptorBufferInfo buffer_info{.buffer = *buffer, .offset = 0, .range = vk::WholeSize};
              device->updateDescriptorSets(vk::WriteDescriptorSet{.dstSet = descriptor_set,
@@ -352,7 +355,9 @@ gfx::Engine::Engine(const Window& window)
                         vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransientAttachment,
                         vk::ImageAspectFlagBits::eColor,
                         *allocator_,
-                        VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT},
+                        VmaAllocationCreateInfo{.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+                                                .usage = VMA_MEMORY_USAGE_AUTO,
+                                                .priority = 1.0f}},
       depth_attachment_{*device_,
                         vk::Format::eD24UnormS8Uint,  // TODO(#54): check device support
                         swapchain_.image_extent(),
@@ -360,7 +365,9 @@ gfx::Engine::Engine(const Window& window)
                         vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eTransientAttachment,
                         vk::ImageAspectFlagBits::eDepth,
                         *allocator_,
-                        VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT},
+                        VmaAllocationCreateInfo{.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+                                                .usage = VMA_MEMORY_USAGE_AUTO,
+                                                .priority = 1.0f}},
       render_pass_{
           CreateRenderPass(*device_, msaa_sample_count_, swapchain_.image_format(), depth_attachment_.format())},
       framebuffers_{CreateFramebuffers(*device_,
@@ -392,7 +399,7 @@ void gfx::Engine::Render(const Camera& camera, const Model& model) {
   static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
   const auto draw_fence = *draw_fences_[current_frame_index_];
   auto result = device_->waitForFences(draw_fence, vk::True, kMaxTimeout);
-  vk::resultCheck(result, "Wait for fence failed");
+  vk::resultCheck(result, "Fence failed to enter a signaled state");
   device_->resetFences(draw_fence);
 
   std::uint32_t image_index{};

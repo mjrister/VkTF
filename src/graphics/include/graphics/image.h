@@ -17,7 +17,7 @@ public:
         vk::ImageUsageFlags image_usage_flags,
         vk::ImageAspectFlags image_aspect_flags,
         VmaAllocator allocator,
-        VmaAllocationCreateFlags allocation_create_flags = {});
+        const VmaAllocationCreateInfo& allocation_create_info);
 
   Image(const Image&) = delete;
   Image(Image&& image) noexcept { *this = std::move(image); }

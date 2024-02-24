@@ -42,14 +42,13 @@ VmaVulkanFunctions GetVulkanFunctions() {
 VmaAllocator CreateAllocator(const vk::Instance instance,
                              const vk::PhysicalDevice physical_device,
                              const vk::Device device) {
-  VmaAllocatorCreateInfo allocator_create_info{};
-  allocator_create_info.physicalDevice = physical_device;
-  allocator_create_info.device = device;
-  allocator_create_info.instance = instance;
-  allocator_create_info.vulkanApiVersion = gfx::Instance::kApiVersion;
-
   const auto vulkan_functions = GetVulkanFunctions();
-  allocator_create_info.pVulkanFunctions = &vulkan_functions;
+  const VmaAllocatorCreateInfo allocator_create_info{.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_PRIORITY_BIT,
+                                                     .physicalDevice = physical_device,
+                                                     .device = device,
+                                                     .pVulkanFunctions = &vulkan_functions,
+                                                     .instance = instance,
+                                                     .vulkanApiVersion = gfx::Instance::kApiVersion};
 
   VmaAllocator allocator{};
   const auto result = vmaCreateAllocator(&allocator_create_info, &allocator);

@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
-#include <optional>
+#include <limits>
 #include <ranges>
 #include <span>
 #include <stdexcept>
@@ -12,6 +12,7 @@
 
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
+#include <vk_mem_alloc.h>
 #include <assimp/DefaultLogger.hpp>
 #include <assimp/Importer.hpp>
 #include <glm/glm.hpp>
@@ -75,26 +76,105 @@ glm::mat4 GetTransform(const aiNode& node) {
   // clang-format on
 }
 
-std::unique_ptr<gfx::Model::Node> ImportNode(const gfx::Device& device,
-                                             const VmaAllocator allocator,
-                                             const aiScene& scene,
-                                             const aiNode& node) {
-  auto node_meshes =
-      std::span{node.mMeshes, node.mNumMeshes}
-      | std::views::transform(
-          [&device, allocator, scene_meshes = std::span{scene.mMeshes, scene.mNumMeshes}](const auto index) {
-            const auto& mesh = *scene_meshes[index];
-            return gfx::Mesh{device, allocator, GetVertices(mesh), GetIndices(mesh)};
-          })
-      | std::ranges::to<std::vector>();
+template <typename T>
+std::pair<gfx::Buffer, gfx::Buffer> CreateBuffers(const std::vector<T>& data,
+                                                  const vk::BufferUsageFlags buffer_usage_flags,
+                                                  const vk::CommandBuffer command_buffer,
+                                                  const VmaAllocator allocator) {
+  const auto size_bytes = sizeof(T) * data.size();
+
+  static constexpr VmaAllocationCreateInfo kStagingBufferAllocationCreateInfo{
+      .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+      .usage = VMA_MEMORY_USAGE_AUTO};
+  gfx::Buffer staging_buffer{size_bytes,
+                             vk::BufferUsageFlagBits::eTransferSrc,
+                             allocator,
+                             kStagingBufferAllocationCreateInfo};
+  staging_buffer.CopyOnce<const T>(data);
+
+  static constexpr VmaAllocationCreateInfo kBufferAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+  gfx::Buffer buffer{size_bytes,
+                     buffer_usage_flags | vk::BufferUsageFlagBits::eTransferDst,
+                     allocator,
+                     kBufferAllocationCreateInfo};
+  command_buffer.copyBuffer(*staging_buffer, *buffer, vk::BufferCopy{.size = size_bytes});
+
+  return std::pair{std::move(staging_buffer), std::move(buffer)};
+}
+
+std::unique_ptr<gfx::Model::Node> ImportNode(const aiNode& node, std::vector<gfx::Mesh>& scene_meshes) {
+  auto node_meshes = std::span{node.mMeshes, node.mNumMeshes}
+                     | std::views::transform([&scene_meshes](const auto index) {
+                         assert(index < scene_meshes.size());
+                         return std::move(scene_meshes[index]);
+                       })
+                     | std::ranges::to<std::vector>();
 
   auto node_children = std::span{node.mChildren, node.mNumChildren}
-                       | std::views::transform([&device, &scene, allocator](const auto* child_node) {
-                           return ImportNode(device, allocator, scene, *child_node);
+                       | std::views::transform([&scene_meshes](const auto* const child_node) {
+                           return ImportNode(*child_node, scene_meshes);
                          })
                        | std::ranges::to<std::vector>();
 
   return std::make_unique<gfx::Model::Node>(std::move(node_meshes), std::move(node_children), GetTransform(node));
+}
+
+std::unique_ptr<gfx::Model::Node> ImportScene(const aiScene& scene,
+                                              const vk::Device device,
+                                              const vk::Queue queue,
+                                              const std::uint32_t queue_family_index,
+                                              const VmaAllocator allocator) {
+  const auto command_pool =
+      device.createCommandPoolUnique(vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eTransient,
+                                                               .queueFamilyIndex = queue_family_index});
+
+  const auto command_buffers =
+      device.allocateCommandBuffersUnique(vk::CommandBufferAllocateInfo{.commandPool = *command_pool,
+                                                                        .level = vk::CommandBufferLevel::ePrimary,
+                                                                        .commandBufferCount = 1});
+  assert(!command_buffers.empty());
+  const auto command_buffer = *command_buffers.front();
+  command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+
+  std::vector<gfx::Buffer> staging_buffers;
+  staging_buffers.reserve(scene.mNumMeshes * 2);
+
+  auto scene_meshes =
+      std::span{scene.mMeshes, scene.mNumMeshes}  //
+      | std::views::transform([=, &staging_buffers](const auto* const mesh) {
+          assert(mesh != nullptr);
+
+          const auto vertices = GetVertices(*mesh);
+          auto [staging_vertex_buffer, vertex_buffer] =
+              CreateBuffers(vertices, vk::BufferUsageFlagBits::eVertexBuffer, command_buffer, allocator);
+
+          const auto indices = GetIndices(*mesh);
+          auto [staging_index_buffer, index_buffer] =
+              CreateBuffers(indices, vk::BufferUsageFlagBits::eIndexBuffer, command_buffer, allocator);
+
+          // keep staging buffers alive until copy commands have completed
+          staging_buffers.push_back(std::move(staging_vertex_buffer));
+          staging_buffers.push_back(std::move(staging_index_buffer));
+
+          return gfx::Mesh{std::move(vertex_buffer),
+                           std::move(index_buffer),
+                           static_cast<std::uint32_t>(indices.size())};
+        })
+      | std::ranges::to<std::vector>();
+
+  command_buffer.end();
+
+  const auto copy_fence = device.createFenceUnique(vk::FenceCreateInfo{});
+  queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &command_buffer}, *copy_fence);
+
+  // import the rest of the scene while copy commands are processing
+  auto root_node = ImportNode(*scene.mRootNode, scene_meshes);
+
+  static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
+  const auto result = device.waitForFences(*copy_fence, vk::True, kMaxTimeout);
+  vk::resultCheck(result, "Fence failed to enter a signaled state");
+
+  return root_node;
 }
 
 void RenderNode(const gfx::Model::Node& node,
@@ -130,7 +210,9 @@ gfx::Model::Model(const Device& device, const VmaAllocator allocator, const std:
   const auto* scene = importer.ReadFile(filepath.string(), import_flags);
   if (scene == nullptr) throw std::runtime_error{importer.GetErrorString()};
 
-  root_node_ = ImportNode(device, allocator, *scene, *scene->mRootNode);
+  const auto transfer_queue = device.transfer_queue();
+  const auto transfer_index = device.physical_device().queue_family_indices().transfer_index;
+  root_node_ = ImportScene(*scene, *device, transfer_queue, transfer_index, allocator);
 }
 
 void gfx::Model::Render(const vk::CommandBuffer command_buffer, const vk::PipelineLayout pipeline_layout) const {

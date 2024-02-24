@@ -1,20 +1,13 @@
 #include "graphics/buffer.h"
 
-#include "graphics/device.h"
-
 gfx::Buffer::Buffer(const vk::DeviceSize size,
                     const vk::BufferUsageFlags buffer_usage_flags,
                     const VmaAllocator allocator,
-                    const VmaAllocationCreateFlags allocation_create_flags)
+                    const VmaAllocationCreateInfo& allocation_create_info)
     : allocator_{allocator}, size_{size} {
-  VkBufferCreateInfo buffer_create_info{};
-  buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-  buffer_create_info.size = size;
-  buffer_create_info.usage = static_cast<VkBufferUsageFlags>(buffer_usage_flags);
-
-  VmaAllocationCreateInfo allocation_create_info{};
-  allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
-  allocation_create_info.flags = allocation_create_flags;
+  const VkBufferCreateInfo buffer_create_info{.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                                              .size = size,
+                                              .usage = static_cast<VkBufferUsageFlags>(buffer_usage_flags)};
 
   VkBuffer buffer{};
   const auto result =
@@ -41,13 +34,6 @@ gfx::Buffer::~Buffer() {
     UnmapMemory();
     vmaDestroyBuffer(allocator_, buffer_, allocation_);
   }
-}
-
-void gfx::Buffer::Copy(const Device& device, const Buffer& buffer) {
-  device.SubmitOneTimeTransferCommandBuffer([&src_buffer = buffer, &dst_buffer = *this](const auto command_buffer) {
-    assert(src_buffer.size_ <= dst_buffer.size_);
-    command_buffer.copyBuffer(*src_buffer, *dst_buffer, vk::BufferCopy{.size = src_buffer.size_});
-  });
 }
 
 void* gfx::Buffer::MapMemory() {

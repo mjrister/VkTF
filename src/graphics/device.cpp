@@ -9,12 +9,11 @@
 namespace {
 
 vk::UniqueDevice CreateDevice(const gfx::PhysicalDevice& physical_device) {
-  static constexpr auto kHighestNormalizedQueuePriority = 1.0f;
   const auto [graphics_index, present_index, transfer_index] = physical_device.queue_family_indices();
-
   const auto device_queue_create_info =
       std::unordered_set{graphics_index, present_index, transfer_index}
       | std::views::transform([](const auto queue_family_index) {
+          static constexpr auto kHighestNormalizedQueuePriority = 1.0f;
           return vk::DeviceQueueCreateInfo{.queueFamilyIndex = queue_family_index,
                                            .queueCount = 1,
                                            .pQueuePriorities = &kHighestNormalizedQueuePriority};
@@ -43,7 +42,4 @@ gfx::Device::Device(const vk::Instance instance, const vk::SurfaceKHR surface)
       device_{CreateDevice(physical_device_)},
       graphics_queue_{device_->getQueue(physical_device_.queue_family_indices().graphics_index, 0)},
       present_queue_{device_->getQueue(physical_device_.queue_family_indices().present_index, 0)},
-      transfer_queue_{device_->getQueue(physical_device_.queue_family_indices().transfer_index, 0)},
-      transfer_command_pool_{device_->createCommandPoolUnique(
-          vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eTransient,
-                                    .queueFamilyIndex = physical_device_.queue_family_indices().transfer_index})} {}
+      transfer_queue_{device_->getQueue(physical_device_.queue_family_indices().transfer_index, 0)} {}
