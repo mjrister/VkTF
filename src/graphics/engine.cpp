@@ -8,7 +8,6 @@
 #include <ranges>
 #include <utility>
 
-#include <vk_mem_alloc.h>
 #include <glm/mat4x4.hpp>
 
 #include "graphics/camera.h"

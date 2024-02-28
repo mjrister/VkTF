@@ -68,29 +68,7 @@ UniqueGlfwWindow CreateGlfwWindow(const char* const title, int width, int height
 }  // namespace
 
 gfx::Window::Window(const char* const title, const int width, const int height)
-    : window_{CreateGlfwWindow(title, width, height)} {
-  glfwSetWindowUserPointer(window_.get(), this);
-
-  glfwSetKeyCallback(
-      window_.get(),
-      [](GLFWwindow* const window, const int key, const int /*scancode*/, const int action, const int /*modifiers*/) {
-        if (const auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window)); self->key_event_handler_) {
-          self->key_event_handler_(key, action);
-        }
-      });
-
-  glfwSetCursorPosCallback(window_.get(), [](GLFWwindow* const window, const double x, const double y) {
-    if (const auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window)); self->cursor_event_handler_) {
-      self->cursor_event_handler_(static_cast<float>(x), static_cast<float>(y));
-    }
-  });
-
-  glfwSetScrollCallback(window_.get(), [](GLFWwindow* const window, const double /*x_offset*/, const double y_offset) {
-    if (const auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window)); self->scroll_event_handler_) {
-      self->scroll_event_handler_(static_cast<float>(y_offset));
-    }
-  });
-}
+    : window_{CreateGlfwWindow(title, width, height)} {}
 
 std::pair<int, int> gfx::Window::GetSize() const noexcept {
   int width{}, height{};
@@ -107,6 +85,12 @@ std::pair<int, int> gfx::Window::GetFramebufferSize() const noexcept {
 float gfx::Window::GetAspectRatio() const noexcept {
   const auto [width, height] = GetSize();
   return height == 0 ? 0.0f : static_cast<float>(width) / static_cast<float>(height);
+}
+
+std::pair<float, float> gfx::Window::GetCursorPosition() const noexcept {
+  double x{}, y{};
+  glfwGetCursorPos(window_.get(), &x, &y);
+  return std::pair{static_cast<float>(x), static_cast<float>(y)};
 }
 
 #ifdef GLFW_INCLUDE_VULKAN

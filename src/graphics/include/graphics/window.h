@@ -1,7 +1,6 @@
 #ifndef SRC_GRAPHICS_INCLUDE_GRAPHICS_WINDOW_H_
 #define SRC_GRAPHICS_INCLUDE_GRAPHICS_WINDOW_H_
 
-#include <functional>
 #include <memory>
 #include <span>
 #include <utility>
@@ -21,16 +20,15 @@ public:
   [[nodiscard]] std::pair<int, int> GetFramebufferSize() const noexcept;
   [[nodiscard]] float GetAspectRatio() const noexcept;
 
-  void OnKeyEvent(std::function<void(int, int)> fn) { key_event_handler_ = std::move(fn); }
-  void OnCursorEvent(std::function<void(float, float)> fn) { cursor_event_handler_ = std::move(fn); }
-  void OnScrollEvent(std::function<void(float)> fn) { scroll_event_handler_ = std::move(fn); }
+  [[nodiscard]] std::pair<float, float> GetCursorPosition() const noexcept;
 
-  [[nodiscard]] bool IsClosed() const noexcept { return glfwWindowShouldClose(window_.get()) == GLFW_TRUE; }
-  void Close() const noexcept { glfwSetWindowShouldClose(window_.get(), GLFW_TRUE); }
-
+  [[nodiscard]] bool IsKeyPressed(const int key) const noexcept { return glfwGetKey(window_.get(), key) == GLFW_PRESS; }
   [[nodiscard]] bool IsMouseButtonPressed(const int button) const noexcept {
     return glfwGetMouseButton(window_.get(), button) == GLFW_PRESS;
   }
+
+  [[nodiscard]] bool IsClosed() const noexcept { return glfwWindowShouldClose(window_.get()) == GLFW_TRUE; }
+  void Close() const noexcept { glfwSetWindowShouldClose(window_.get(), GLFW_TRUE); }
 
   static void Update() noexcept { glfwPollEvents(); }
 
@@ -41,9 +39,6 @@ public:
 
 private:
   std::unique_ptr<GLFWwindow, void (*)(GLFWwindow*)> window_{nullptr, nullptr};
-  std::function<void(int, int)> key_event_handler_{};
-  std::function<void(float, float)> cursor_event_handler_{};
-  std::function<void(float)> scroll_event_handler_{};
 };
 
 }  // namespace gfx

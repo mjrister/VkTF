@@ -4,6 +4,7 @@
 #include <array>
 #include <vector>
 
+#include <vk_mem_alloc.h>
 #include <vulkan/vulkan.hpp>
 
 #include "graphics/allocator.h"

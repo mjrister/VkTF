@@ -1,7 +1,11 @@
 #include "game/game.h"
 
+#include <optional>
+
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
+
+#include "game/delta_time.h"
 
 namespace {
 constexpr auto kWindowWidth = 1920;
@@ -18,49 +22,29 @@ gfx::Camera CreateCamera(const float aspect_ratio) {
                                       .z_far = 10'000.0f}};
 }
 
-}  // namespace
-
-gfx::Game::Game()
-    : window_{"VkRender", kWindowWidth, kWindowHeight},
-      engine_{window_},
-      camera_{CreateCamera(window_.GetAspectRatio())},
-      model_{engine_.device(), engine_.allocator(), "assets/models/sponza/Main.1_Sponza/NewSponza_Main_glTF_002.gltf"} {
-  window_.OnKeyEvent([this](const auto key, const auto action) { HandleKeyEvent(key, action); });
-  window_.OnCursorEvent([this](const auto x, const auto y) { HandleCursorEvent(x, y); });
-  window_.OnScrollEvent([this](const auto y) { HandleScrollEvent(y); });
-}
-
-void gfx::Game::Run() {
-  while (!window_.IsClosed()) {
-    Window::Update();
-    engine_.Render(camera_, model_);
+void HandleKeyEvents(const gfx::Window& window, gfx::Camera& camera, const gfx::DeltaTime& delta_time) {
+  if (window.IsKeyPressed(GLFW_KEY_ESCAPE)) {
+    window.Close();
+    return;
   }
-  engine_.device()->waitIdle();
+
+  static constexpr auto kTranslationSpeed = 6.0f;
+  if (window.IsKeyPressed(GLFW_KEY_W)) camera.Translate(0.0f, 0.0f, -kTranslationSpeed * delta_time);
+  if (window.IsKeyPressed(GLFW_KEY_A)) camera.Translate(-kTranslationSpeed * delta_time, 0.0f, 0.0f);
+  if (window.IsKeyPressed(GLFW_KEY_S)) camera.Translate(0.0f, 0.0f, kTranslationSpeed * delta_time);
+  if (window.IsKeyPressed(GLFW_KEY_D)) camera.Translate(kTranslationSpeed * delta_time, 0.0f, 0.0f);
 }
 
-void gfx::Game::HandleKeyEvent(const int key, const int action) const {
-  if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-    window_.Close();
-  }
-}
-
-void gfx::Game::HandleCursorEvent(const float x, const float y) {
-  static constexpr auto kCursorSpeed = 0.00390625f;
+void HandleMouseEvents(const gfx::Window& window, gfx::Camera& camera) {
   static std::optional<glm::vec2> previous_cursor_position;
-  const glm::vec2 cursor_position{x, y};
-
-  if (window_.IsMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT)) {
+  if (window.IsMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT)) {
+    const auto [x, y] = window.GetCursorPosition();
+    const glm::vec2 cursor_position{x, y};
     if (previous_cursor_position.has_value()) {
+      static constexpr auto kCursorSpeed = 0.00390625f;
       const auto delta_cursor_position = cursor_position - *previous_cursor_position;
       const auto rotation = kCursorSpeed * -delta_cursor_position;
-      camera_.Rotate(rotation.x, rotation.y);
-    }
-    previous_cursor_position = cursor_position;
-  } else if (window_.IsMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT)) {
-    if (previous_cursor_position.has_value()) {
-      const auto delta_cursor_position = cursor_position - *previous_cursor_position;
-      const auto translation = kCursorSpeed * glm::vec2{delta_cursor_position.x, -delta_cursor_position.y};
-      camera_.Translate(translation.x, translation.y, 0.0f);
+      camera.Rotate(rotation.x, rotation.y);
     }
     previous_cursor_position = cursor_position;
   } else if (previous_cursor_position.has_value()) {
@@ -68,7 +52,22 @@ void gfx::Game::HandleCursorEvent(const float x, const float y) {
   }
 }
 
-void gfx::Game::HandleScrollEvent(const float y) {
-  static constexpr auto kScrollSpeed = 0.0625f;
-  camera_.Translate(0.0f, 0.0f, kScrollSpeed * -y);
+}  // namespace
+
+gfx::Game::Game()
+    : window_{"VkRender", kWindowWidth, kWindowHeight},
+      engine_{window_},
+      camera_{CreateCamera(window_.GetAspectRatio())},
+      model_{engine_.device(), engine_.allocator(), "assets/models/sponza/Main.1_Sponza/NewSponza_Main_glTF_002.gltf"} {
+}
+
+void gfx::Game::Run() {
+  for (DeltaTime delta_time; !window_.IsClosed();) {
+    delta_time.Update();
+    Window::Update();
+    HandleKeyEvents(window_, camera_, delta_time);
+    HandleMouseEvents(window_, camera_);
+    engine_.Render(camera_, model_);
+  }
+  engine_.device()->waitIdle();
 }
