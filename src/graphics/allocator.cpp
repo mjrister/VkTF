@@ -1,7 +1,5 @@
 #include "graphics/allocator.h"
 
-#include <vulkan/vulkan.hpp>
-
 #include "graphics/instance.h"
 
 namespace {

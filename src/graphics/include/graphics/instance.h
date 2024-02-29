@@ -14,7 +14,7 @@ public:
   [[nodiscard]] vk::Instance operator*() const noexcept { return *instance_; }
 
 private:
-  vk::UniqueInstance instance_{};
+  vk::UniqueInstance instance_;
 };
 
 }  // namespace gfx

@@ -23,8 +23,8 @@ public:
 
 private:
   PhysicalDevice physical_device_;
-  vk::UniqueDevice device_{};
-  vk::Queue graphics_queue_{}, present_queue_{}, transfer_queue_{};
+  vk::UniqueDevice device_;
+  vk::Queue graphics_queue_, present_queue_, transfer_queue_;
 };
 
 }  // namespace gfx

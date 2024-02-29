@@ -49,7 +49,7 @@ private:
 
   VmaAllocator allocator_{};
   VmaAllocation allocation_{};
-  vk::Buffer buffer_{};
+  vk::Buffer buffer_;
   vk::DeviceSize size_{};
   void* mapped_memory_{};
 };

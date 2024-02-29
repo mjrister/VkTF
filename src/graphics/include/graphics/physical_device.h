@@ -24,9 +24,9 @@ public:
   [[nodiscard]] const QueueFamilyIndices& queue_family_indices() const noexcept { return queue_family_indices_; }
 
 private:
-  vk::PhysicalDevice physical_device_{};
-  vk::PhysicalDeviceLimits limits_{};
-  QueueFamilyIndices queue_family_indices_{};
+  vk::PhysicalDevice physical_device_;
+  vk::PhysicalDeviceLimits limits_;
+  QueueFamilyIndices queue_family_indices_;
 };
 
 }  // namespace gfx

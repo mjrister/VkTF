@@ -2,10 +2,8 @@
 #include <exception>
 #include <iostream>
 
-#define STB_IMAGE_IMPLEMENTATION
 #define VMA_IMPLEMENTATION
 
-#include <stb_image.h>
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.hpp>
 

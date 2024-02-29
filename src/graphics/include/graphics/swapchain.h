@@ -26,10 +26,10 @@ public:
   }
 
 private:
-  vk::UniqueSwapchainKHR swapchain_{};
-  vk::Format image_format_{};
-  vk::Extent2D image_extent_{};
-  std::vector<vk::UniqueImageView> image_views_{};
+  vk::UniqueSwapchainKHR swapchain_;
+  vk::Format image_format_;
+  vk::Extent2D image_extent_;
+  std::vector<vk::UniqueImageView> image_views_;
 };
 
 }  // namespace gfx

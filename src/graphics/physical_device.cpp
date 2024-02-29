@@ -10,10 +10,10 @@
 namespace {
 
 struct RankedPhysicalDevice {
-  static constexpr auto kInvalidRank = -1;
   vk::PhysicalDevice physical_device;
   vk::PhysicalDeviceLimits physical_device_limits;
   gfx::QueueFamilyIndices queue_family_indices;
+  static constexpr auto kInvalidRank = -1;
   int rank = kInvalidRank;
 };
 

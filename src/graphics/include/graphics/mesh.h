@@ -11,7 +11,6 @@
 #include "graphics/buffer.h"
 
 namespace gfx {
-class Device;
 
 struct Vertex {
   glm::vec3 position{0.0f};
@@ -33,7 +32,7 @@ public:
 private:
   Buffer vertex_buffer_;
   Buffer index_buffer_;
-  std::uint32_t index_count_{};
+  std::uint32_t index_count_;
 };
 
 }  // namespace gfx

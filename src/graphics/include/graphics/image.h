@@ -33,8 +33,8 @@ public:
 private:
   VmaAllocator allocator_{};
   VmaAllocation allocation_{};
-  vk::Image image_{};
-  vk::UniqueImageView image_view_{};
+  vk::Image image_;
+  vk::UniqueImageView image_view_;
   vk::Format format_{};
 };
 

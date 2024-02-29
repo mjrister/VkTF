@@ -31,22 +31,22 @@ public:
   void Render(vk::CommandBuffer command_buffer, vk::PipelineLayout pipeline_layout) const;
 
   void Translate(const float dx, const float dy, const float dz) const {
-    auto& transform = root_node_->transform;
-    transform = glm::translate(transform, glm::vec3{dx, dy, dz});
+    auto& root_transform = root_node_->transform;
+    root_transform = glm::translate(root_transform, glm::vec3{dx, dy, dz});
   }
 
   void Rotate(const glm::vec3& axis, const float angle) const {
-    auto& transform = root_node_->transform;
-    transform = glm::rotate(transform, angle, axis);
+    auto& root_transform = root_node_->transform;
+    root_transform = glm::rotate(root_transform, angle, axis);
   }
 
   void Scale(const float sx, const float sy, const float sz) const {
-    auto& transform = root_node_->transform;
-    transform = glm::scale(transform, glm::vec3{sx, sy, sz});
+    auto& root_transform = root_node_->transform;
+    root_transform = glm::scale(root_transform, glm::vec3{sx, sy, sz});
   }
 
 private:
-  std::unique_ptr<Node> root_node_{};
+  std::unique_ptr<Node> root_node_;
 };
 
 }  // namespace gfx
