@@ -342,7 +342,9 @@ std::array<vk::UniqueFence, N> CreateFences(const vk::Device device) {
 
 }  // namespace
 
-gfx::Engine::Engine(const Window& window)
+namespace gfx {
+
+Engine::Engine(const Window& window)
     : surface_{window.CreateSurface(*instance_)},
       device_{*instance_, *surface_},
       allocator_{*instance_, *device_.physical_device(), *device_},
@@ -391,7 +393,7 @@ gfx::Engine::Engine(const Window& window)
       present_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)},
       draw_fences_{CreateFences<kMaxRenderFrames>(*device_)} {}
 
-void gfx::Engine::Render(const Camera& camera, const Model& model) {
+void Engine::Render(const Camera& camera, const Model& model) {
   if (++current_frame_index_ == kMaxRenderFrames) {
     current_frame_index_ = 0;
   }
@@ -459,3 +461,5 @@ void gfx::Engine::Render(const Camera& camera, const Model& model) {
                                                                  .pImageIndices = &image_index});
   vk::resultCheck(result, "Present swapchain image failed");
 }
+
+}  // namespace gfx

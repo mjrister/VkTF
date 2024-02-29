@@ -54,14 +54,16 @@ void HandleMouseEvents(const gfx::Window& window, gfx::Camera& camera) {
 
 }  // namespace
 
-gfx::Game::Game()
+namespace gfx {
+
+Game::Game()
     : window_{"VkRender", kWindowWidth, kWindowHeight},
       engine_{window_},
       camera_{CreateCamera(window_.GetAspectRatio())},
       model_{engine_.device(), engine_.allocator(), "assets/models/sponza/Main.1_Sponza/NewSponza_Main_glTF_002.gltf"} {
 }
 
-void gfx::Game::Run() {
+void Game::Run() {
   for (DeltaTime delta_time; !window_.IsClosed();) {
     delta_time.Update();
     Window::Update();
@@ -71,3 +73,5 @@ void gfx::Game::Run() {
   }
   engine_.device()->waitIdle();
 }
+
+}  // namespace gfx

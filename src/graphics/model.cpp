@@ -198,7 +198,9 @@ void RenderNode(const gfx::Model::Node& node,
 
 }  // namespace
 
-gfx::Model::Model(const Device& device, const VmaAllocator allocator, const std::filesystem::path& filepath) {
+namespace gfx {
+
+Model::Model(const Device& device, const VmaAllocator allocator, const std::filesystem::path& filepath) {
   Assimp::Importer importer;
   std::uint32_t import_flags = aiProcessPreset_TargetRealtime_Fast;
 
@@ -215,6 +217,8 @@ gfx::Model::Model(const Device& device, const VmaAllocator allocator, const std:
   root_node_ = ImportScene(*scene, *device, transfer_queue, transfer_index, allocator);
 }
 
-void gfx::Model::Render(const vk::CommandBuffer command_buffer, const vk::PipelineLayout pipeline_layout) const {
+void Model::Render(const vk::CommandBuffer command_buffer, const vk::PipelineLayout pipeline_layout) const {
   RenderNode(*root_node_, command_buffer, pipeline_layout);
 }
+
+}  // namespace gfx

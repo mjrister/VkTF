@@ -5,7 +5,9 @@
 
 #include "graphics/window.h"
 
-gfx::Instance::Instance() {
+namespace gfx {
+
+Instance::Instance() {
 #if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1
   static const vk::DynamicLoader kDynamicLoader;
   const auto get_instance_proc_addr = kDynamicLoader.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
@@ -31,3 +33,5 @@ gfx::Instance::Instance() {
   VULKAN_HPP_DEFAULT_DISPATCHER.init(*instance_);
 #endif
 }
+
+}  // namespace gfx

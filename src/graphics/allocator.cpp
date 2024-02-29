@@ -57,14 +57,16 @@ VmaAllocator CreateAllocator(const vk::Instance instance,
 
 }  // namespace
 
-gfx::Allocator::Allocator(const vk::Instance instance,
-                          const vk::PhysicalDevice physical_device,
-                          const vk::Device device)
+namespace gfx {
+
+Allocator::Allocator(const vk::Instance instance, const vk::PhysicalDevice physical_device, const vk::Device device)
     : allocator_{CreateAllocator(instance, physical_device, device)} {}
 
-gfx::Allocator& gfx::Allocator::operator=(Allocator&& allocator) noexcept {
+Allocator& Allocator::operator=(Allocator&& allocator) noexcept {
   if (this != &allocator) {
     allocator_ = std::exchange(allocator.allocator_, {});
   }
   return *this;
 }
+
+}  // namespace gfx

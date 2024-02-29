@@ -1,13 +1,15 @@
 #include "graphics/image.h"
 
-gfx::Image::Image(const vk::Device device,
-                  const vk::Format format,
-                  const vk::Extent2D extent,
-                  const vk::SampleCountFlagBits sample_count,
-                  const vk::ImageUsageFlags image_usage_flags,
-                  const vk::ImageAspectFlags image_aspect_flags,
-                  const VmaAllocator allocator,
-                  const VmaAllocationCreateInfo& allocation_create_info)
+namespace gfx {
+
+Image::Image(const vk::Device device,
+             const vk::Format format,
+             const vk::Extent2D extent,
+             const vk::SampleCountFlagBits sample_count,
+             const vk::ImageUsageFlags image_usage_flags,
+             const vk::ImageAspectFlags image_aspect_flags,
+             const VmaAllocator allocator,
+             const VmaAllocationCreateInfo& allocation_create_info)
     : allocator_{allocator}, format_{format} {
   const VkImageCreateInfo image_create_info{
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -31,7 +33,7 @@ gfx::Image::Image(const vk::Device device,
           vk::ImageSubresourceRange{.aspectMask = image_aspect_flags, .levelCount = 1, .layerCount = 1}});
 }
 
-gfx::Image& gfx::Image::operator=(Image&& image) noexcept {
+Image& Image::operator=(Image&& image) noexcept {
   if (this != &image) {
     allocator_ = std::exchange(image.allocator_, {});
     allocation_ = std::exchange(image.allocation_, {});
@@ -42,8 +44,10 @@ gfx::Image& gfx::Image::operator=(Image&& image) noexcept {
   return *this;
 }
 
-gfx::Image::~Image() {
+Image::~Image() {
   if (allocator_ != nullptr) {
     vmaDestroyImage(allocator_, image_, allocation_);
   }
 }
+
+}  // namespace gfx

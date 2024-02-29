@@ -1,9 +1,11 @@
 #include "graphics/buffer.h"
 
-gfx::Buffer::Buffer(const vk::DeviceSize size,
-                    const vk::BufferUsageFlags buffer_usage_flags,
-                    const VmaAllocator allocator,
-                    const VmaAllocationCreateInfo& allocation_create_info)
+namespace gfx {
+
+Buffer::Buffer(const vk::DeviceSize size,
+               const vk::BufferUsageFlags buffer_usage_flags,
+               const VmaAllocator allocator,
+               const VmaAllocationCreateInfo& allocation_create_info)
     : allocator_{allocator}, size_{size} {
   const VkBufferCreateInfo buffer_create_info{.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
                                               .size = size,
@@ -17,7 +19,7 @@ gfx::Buffer::Buffer(const vk::DeviceSize size,
   buffer_ = vk::Buffer{buffer};
 }
 
-gfx::Buffer& gfx::Buffer::operator=(Buffer&& buffer) noexcept {
+Buffer& Buffer::operator=(Buffer&& buffer) noexcept {
   if (this != &buffer) {
     UnmapMemory();
     allocator_ = std::exchange(buffer.allocator_, {});
@@ -29,14 +31,14 @@ gfx::Buffer& gfx::Buffer::operator=(Buffer&& buffer) noexcept {
   return *this;
 }
 
-gfx::Buffer::~Buffer() {
+Buffer::~Buffer() {
   if (allocator_ != nullptr) {
     UnmapMemory();
     vmaDestroyBuffer(allocator_, buffer_, allocation_);
   }
 }
 
-void* gfx::Buffer::MapMemory() {
+void* Buffer::MapMemory() {
   if (mapped_memory_ == nullptr) {
     const auto result = vmaMapMemory(allocator_, allocation_, &mapped_memory_);
     vk::resultCheck(static_cast<vk::Result>(result), "Map memory failed");
@@ -44,9 +46,11 @@ void* gfx::Buffer::MapMemory() {
   return mapped_memory_;
 }
 
-void gfx::Buffer::UnmapMemory() {
+void Buffer::UnmapMemory() {
   if (mapped_memory_ != nullptr) {
     vmaUnmapMemory(allocator_, allocation_);
     mapped_memory_ = nullptr;
   }
 }
+
+}  // namespace gfx

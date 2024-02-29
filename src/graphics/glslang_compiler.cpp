@@ -161,9 +161,12 @@ std::vector<std::uint32_t> GenerateSpirv(glslang_program_t* const program, const
 
 }  // namespace
 
-std::vector<std::uint32_t> gfx::GlslangCompiler::Compile(const glslang_stage_t stage,
-                                                         const char* const glsl_source) const {
+namespace gfx {
+
+std::vector<std::uint32_t> GlslangCompiler::Compile(const glslang_stage_t stage, const char* const glsl_source) const {
   const auto shader = CreateShader(stage, glsl_source);
   const auto program = CreateProgram(stage, shader.get());
   return GenerateSpirv(program.get(), stage);
 }
+
+}  // namespace gfx
