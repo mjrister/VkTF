@@ -37,7 +37,7 @@ void Camera::Translate(const float dx, const float dy, const float dz) {
 void Camera::Rotate(const float theta, const float phi) {
   static constexpr auto kThetaMax = glm::two_pi<float>();
   static constexpr auto kPhiMax = glm::radians(89.0f);
-  orientation_.theta = std::fmodf(orientation_.theta + theta, kThetaMax);
+  orientation_.theta = std::fmod(orientation_.theta + theta, kThetaMax);
   orientation_.phi = std::clamp(orientation_.phi + phi, -kPhiMax, kPhiMax);
 }
 

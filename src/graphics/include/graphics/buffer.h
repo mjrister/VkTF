@@ -23,13 +23,12 @@ public:
   Buffer& operator=(const Buffer&) = delete;
   Buffer& operator=(Buffer&& buffer) noexcept;
 
-  ~Buffer();
+  ~Buffer() noexcept;
 
   [[nodiscard]] vk::Buffer operator*() const noexcept { return buffer_; }
 
   template <typename T>
   void Copy(const vk::ArrayProxy<const T> data) {
-    // TODO(matthew-rister): switch to vmaCopyMemoryToAllocation when version 3.1.0 is released
     assert(sizeof(T) * data.size() <= size_);
     auto* mapped_memory = MapMemory();
     memcpy(mapped_memory, data.data(), size_);
@@ -45,7 +44,7 @@ public:
 
 private:
   void* MapMemory();
-  void UnmapMemory();
+  void UnmapMemory() noexcept;
 
   VmaAllocator allocator_{};
   VmaAllocation allocation_{};

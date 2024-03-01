@@ -31,7 +31,7 @@ Buffer& Buffer::operator=(Buffer&& buffer) noexcept {
   return *this;
 }
 
-Buffer::~Buffer() {
+Buffer::~Buffer() noexcept {
   if (allocator_ != nullptr) {
     UnmapMemory();
     vmaDestroyBuffer(allocator_, buffer_, allocation_);
@@ -46,7 +46,7 @@ void* Buffer::MapMemory() {
   return mapped_memory_;
 }
 
-void Buffer::UnmapMemory() {
+void Buffer::UnmapMemory() noexcept {
   if (mapped_memory_ != nullptr) {
     vmaUnmapMemory(allocator_, allocation_);
     mapped_memory_ = nullptr;

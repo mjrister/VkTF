@@ -25,7 +25,7 @@ public:
   Image& operator=(const Image&) = delete;
   Image& operator=(Image&& image) noexcept;
 
-  ~Image();
+  ~Image() noexcept;
 
   [[nodiscard]] vk::ImageView image_view() const noexcept { return *image_view_; }
   [[nodiscard]] vk::Format format() const noexcept { return format_; }

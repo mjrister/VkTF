@@ -18,7 +18,7 @@ public:
   Allocator& operator=(const Allocator&) = delete;
   Allocator& operator=(Allocator&& allocator) noexcept;
 
-  ~Allocator() { vmaDestroyAllocator(allocator_); }
+  ~Allocator() noexcept { vmaDestroyAllocator(allocator_); }
 
   [[nodiscard]] VmaAllocator operator*() const noexcept { return allocator_; }
 

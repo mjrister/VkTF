@@ -44,7 +44,7 @@ Image& Image::operator=(Image&& image) noexcept {
   return *this;
 }
 
-Image::~Image() {
+Image::~Image() noexcept {
   if (allocator_ != nullptr) {
     vmaDestroyImage(allocator_, image_, allocation_);
   }

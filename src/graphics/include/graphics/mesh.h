@@ -20,7 +20,7 @@ struct Vertex {
 
 class Mesh {
 public:
-  Mesh(Buffer&& vertex_buffer, Buffer&& index_buffer, const std::uint32_t index_count)
+  Mesh(Buffer&& vertex_buffer, Buffer&& index_buffer, const std::uint32_t index_count) noexcept
       : vertex_buffer_{std::move(vertex_buffer)}, index_buffer_{std::move(index_buffer)}, index_count_{index_count} {}
 
   void Render(const vk::CommandBuffer command_buffer) const {
