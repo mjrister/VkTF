@@ -3,17 +3,11 @@
 #include <iostream>
 
 #define VMA_IMPLEMENTATION
-
 #include <vk_mem_alloc.h>
-#include <vulkan/vulkan.hpp>
-
-#if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1
-VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
-#endif
 
 #include "game/game.h"
 
-int main() {
+int main() {  // NOLINT(bugprone-exception-escape)
   try {
     gfx::Game game;
     game.Run();

@@ -18,9 +18,8 @@ public:
 
   [[nodiscard]] std::pair<int, int> GetSize() const noexcept;
   [[nodiscard]] std::pair<int, int> GetFramebufferSize() const noexcept;
-  [[nodiscard]] float GetAspectRatio() const noexcept;
-
   [[nodiscard]] std::pair<float, float> GetCursorPosition() const noexcept;
+  [[nodiscard]] float GetAspectRatio() const noexcept;
 
   [[nodiscard]] bool IsKeyPressed(const int key) const noexcept { return glfwGetKey(window_.get(), key) == GLFW_PRESS; }
   [[nodiscard]] bool IsMouseButtonPressed(const int button) const noexcept {
@@ -38,7 +37,7 @@ public:
 #endif
 
 private:
-  std::unique_ptr<GLFWwindow, void (*)(GLFWwindow*)> window_{nullptr, nullptr};
+  std::unique_ptr<GLFWwindow, void (*)(GLFWwindow*)> window_;
 };
 
 }  // namespace gfx

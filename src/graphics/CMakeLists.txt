@@ -31,6 +31,7 @@ target_link_libraries(graphics PUBLIC GPUOpen::VulkanMemoryAllocator
 target_compile_definitions(graphics PUBLIC GLFW_INCLUDE_VULKAN
                                            GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
                                            GLM_FORCE_DEPTH_ZERO_TO_ONE
+                                           GLM_FORCE_SIZE_T_LENGTH
                                            GLM_FORCE_XYZW_ONLY
                                            VMA_STATIC_VULKAN_FUNCTIONS=0
                                            VMA_DYNAMIC_VULKAN_FUNCTIONS=0

@@ -14,12 +14,16 @@ constexpr auto kWindowHeight = 1080;
 gfx::Camera CreateCamera(const float aspect_ratio) {
   static constexpr glm::vec3 kPosition{0.0f, 1.0f, 0.0f};
   static constexpr glm::vec3 kDirection{1.0f, 0.0f, 0.0f};
-  return gfx::Camera{kPosition,
-                     kDirection,
-                     gfx::ViewFrustum{.field_of_view_y = glm::radians(45.0f),
-                                      .aspect_ratio = aspect_ratio,
-                                      .z_near = 0.1f,
-                                      .z_far = 10'000.0f}};
+  return gfx::Camera{
+      kPosition,
+      kDirection,
+      // NOLINTBEGIN(*-magic-numbers)
+      gfx::ViewFrustum{.field_of_view_y = glm::radians(45.0f),
+                       .aspect_ratio = aspect_ratio,
+                       .z_near = 0.1f,
+                       .z_far = 10'000.0f}
+      // NOLINTEND(*-magic-numbers)
+  };
 }
 
 void HandleKeyEvents(const gfx::Window& window, gfx::Camera& camera, const gfx::DeltaTime& delta_time) {

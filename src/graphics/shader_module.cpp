@@ -13,7 +13,7 @@
 namespace {
 
 glslang_stage_t GetGlslangStage(const vk::ShaderStageFlagBits shader_stage) {
-  switch (shader_stage) {
+  switch (shader_stage) {  // NOLINT(clang-diagnostic-switch-enum)
     case vk::ShaderStageFlagBits::eVertex:
       return GLSLANG_STAGE_VERTEX;
     case vk::ShaderStageFlagBits::eTessellationControl:

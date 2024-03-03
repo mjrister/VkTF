@@ -20,7 +20,7 @@ private:
   static constexpr std::string_view to_string(const glslang_stage_t stage) noexcept {
     switch (stage) {
       // clang-format off
-#define CASE(kGlslangStage) case kGlslangStage: return #kGlslangStage;
+#define CASE(kGlslangStage) case kGlslangStage: return #kGlslangStage;  // NOLINT(cppcoreguidelines-macro-usage)
       CASE(GLSLANG_STAGE_VERTEX)
       CASE(GLSLANG_STAGE_TESSCONTROL)
       CASE(GLSLANG_STAGE_TESSEVALUATION)
@@ -35,6 +35,7 @@ private:
       CASE(GLSLANG_STAGE_CALLABLE)
       CASE(GLSLANG_STAGE_TASK)
       CASE(GLSLANG_STAGE_MESH)
+      CASE(GLSLANG_STAGE_COUNT)
 #undef CASE
       // clang-format on
       default:
@@ -49,10 +50,12 @@ using UniqueGlslangShader = std::unique_ptr<glslang_shader_t, decltype(&glslang_
 using UniqueGlslangProgram = std::unique_ptr<glslang_program_t, decltype(&glslang_program_delete)>;
 
 constexpr auto kGlslangMessages =
+// NOLINTBEGIN(hicpp-signed-bitwise)
 #ifndef NDEBUG
     GLSLANG_MSG_DEBUG_INFO_BIT |
 #endif
     GLSLANG_MSG_SPV_RULES_BIT | GLSLANG_MSG_VULKAN_RULES_BIT;
+// NOLINTEND(hicpp-signed-bitwise)
 
 std::ostream& operator<<(std::ostream& ostream, glslang_shader_t* const shader) {
   if (const auto* const shader_info_log = glslang_shader_get_info_log(shader);
@@ -163,6 +166,7 @@ std::vector<std::uint32_t> GenerateSpirv(glslang_program_t* const program, const
 
 namespace gfx {
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 std::vector<std::uint32_t> GlslangCompiler::Compile(const glslang_stage_t stage, const char* const glsl_source) const {
   const auto shader = CreateShader(stage, glsl_source);
   const auto program = CreateProgram(stage, shader.get());

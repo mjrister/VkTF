@@ -167,9 +167,11 @@ std::vector<gfx::Buffer> CreateUniformBuffers(const gfx::Device& device,
   return descriptor_sets  //
          | std::views::transform([&device, allocator](const auto descriptor_set) {
              static constexpr VmaAllocationCreateInfo kUniformBufferAllocationCreateInfo{
+                 // NOLINTNEXTLINE(hicpp-signed-bitwise)
                  .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
                  .usage = VMA_MEMORY_USAGE_AUTO};
-             gfx::Buffer buffer{sizeof(CameraTransforms),
+
+             gfx::Buffer buffer{sizeof(CameraTransforms),  // NOLINT(misc-const-correctness)
                                 vk::BufferUsageFlagBits::eUniformBuffer,
                                 allocator,
                                 kUniformBufferAllocationCreateInfo};
@@ -398,14 +400,18 @@ void Engine::Render(const Camera& camera, const Model& model) {
     current_frame_index_ = 0;
   }
 
-  static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
+  // NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index)
   const auto draw_fence = *draw_fences_[current_frame_index_];
+  const auto acquire_next_image_semaphore = *acquire_next_image_semaphores_[current_frame_index_];
+  const auto present_image_semaphore = *present_image_semaphores_[current_frame_index_];
+  // NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index)
+
+  static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
   auto result = device_->waitForFences(draw_fence, vk::True, kMaxTimeout);
   vk::resultCheck(result, "Fence failed to enter a signaled state");
   device_->resetFences(draw_fence);
 
   std::uint32_t image_index{};
-  const auto acquire_next_image_semaphore = *acquire_next_image_semaphores_[current_frame_index_];
   std::tie(result, image_index) = device_->acquireNextImageKHR(*swapchain_, kMaxTimeout, acquire_next_image_semaphore);
   vk::resultCheck(result, "Acquire next swapchain image failed");
 
@@ -443,7 +449,6 @@ void Engine::Render(const Camera& camera, const Model& model) {
   command_buffer.end();
 
   static constexpr vk::PipelineStageFlags kPipelineWaitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-  const auto present_image_semaphore = *present_image_semaphores_[current_frame_index_];
   device_.graphics_queue().submit(vk::SubmitInfo{.waitSemaphoreCount = 1,
                                                  .pWaitSemaphores = &acquire_next_image_semaphore,
                                                  .pWaitDstStageMask = &kPipelineWaitStage,

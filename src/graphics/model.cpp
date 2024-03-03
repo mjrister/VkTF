@@ -16,6 +16,7 @@
 #include <assimp/DefaultLogger.hpp>
 #include <assimp/Importer.hpp>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include "graphics/device.h"
 
@@ -137,11 +138,11 @@ std::unique_ptr<gfx::Model::Node> ImportScene(const aiScene& scene,
   command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
 
   std::vector<gfx::Buffer> staging_buffers;
-  staging_buffers.reserve(scene.mNumMeshes * 2);
+  staging_buffers.reserve(static_cast<std::size_t>(scene.mNumMeshes) * 2);
 
   auto scene_meshes =
       std::span{scene.mMeshes, scene.mNumMeshes}  //
-      | std::views::transform([=, &staging_buffers](const auto* const mesh) {
+      | std::views::transform([command_buffer, allocator, &staging_buffers](const auto* const mesh) {
           assert(mesh != nullptr);
 
           const auto vertices = GetVertices(*mesh);
@@ -164,14 +165,14 @@ std::unique_ptr<gfx::Model::Node> ImportScene(const aiScene& scene,
 
   command_buffer.end();
 
-  const auto copy_fence = device.createFenceUnique(vk::FenceCreateInfo{});
-  queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &command_buffer}, *copy_fence);
+  const auto fence = device.createFenceUnique(vk::FenceCreateInfo{});
+  queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &command_buffer}, *fence);
 
   // import the rest of the scene while copy commands are processing
   auto root_node = ImportNode(*scene.mRootNode, scene_meshes);
 
   static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
-  const auto result = device.waitForFences(*copy_fence, vk::True, kMaxTimeout);
+  const auto result = device.waitForFences(*fence, vk::True, kMaxTimeout);
   vk::resultCheck(result, "Fence failed to enter a signaled state");
 
   return root_node;
@@ -205,7 +206,7 @@ Model::Model(const Device& device, const VmaAllocator allocator, const std::file
   std::uint32_t import_flags = aiProcessPreset_TargetRealtime_Fast;
 
 #ifndef NDEBUG
-  import_flags |= aiProcess_ValidateDataStructure;
+  import_flags |= aiProcess_ValidateDataStructure;  // NOLINT(hicpp-signed-bitwise)
   Assimp::DefaultLogger::create(ASSIMP_DEFAULT_LOG_NAME, Assimp::Logger::DEBUGGING);
 #endif
 
@@ -215,6 +216,21 @@ Model::Model(const Device& device, const VmaAllocator allocator, const std::file
   const auto transfer_queue = device.transfer_queue();
   const auto transfer_index = device.physical_device().queue_family_indices().transfer_index;
   root_node_ = ImportScene(*scene, *device, transfer_queue, transfer_index, allocator);
+}
+
+void Model::Translate(const float dx, const float dy, const float dz) const {
+  auto& root_transform = root_node_->transform;
+  root_transform = glm::translate(root_transform, glm::vec3{dx, dy, dz});
+}
+
+void Model::Rotate(const glm::vec3& axis, const float angle) const {
+  auto& root_transform = root_node_->transform;
+  root_transform = glm::rotate(root_transform, angle, axis);
+}
+
+void Model::Scale(const float sx, const float sy, const float sz) const {
+  auto& root_transform = root_node_->transform;
+  root_transform = glm::scale(root_transform, glm::vec3{sx, sy, sz});
 }
 
 void Model::Render(const vk::CommandBuffer command_buffer, const vk::PipelineLayout pipeline_layout) const {

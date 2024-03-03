@@ -1,5 +1,6 @@
 #include "graphics/window.h"
 
+#include <cstdint>
 #include <format>
 #include <iostream>
 #include <print>

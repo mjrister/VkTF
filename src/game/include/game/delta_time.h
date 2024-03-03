@@ -10,6 +10,7 @@ class DeltaTime {
   using TimePoint = std::chrono::time_point<Clock, Duration>;
 
 public:
+  // NOLINTNEXTLINE(google-explicit-constructor, hicpp-explicit-conversions)
   [[nodiscard]] operator Duration::rep() const noexcept { return delta_time_; }
 
   void Update() noexcept {

@@ -17,12 +17,13 @@ struct RankedPhysicalDevice {
   int rank = kInvalidRank;
 };
 
-std::optional<std::uint32_t> FindQueueFamily(const std::vector<vk::QueueFamilyProperties>& queue_family_properties,
-                                             std::predicate<const vk::QueueFamilyProperties&> auto&& find_fn) {
-  if (const auto iterator = std::ranges::find_if(queue_family_properties, find_fn);
-      iterator != queue_family_properties.cend()) {
+std::optional<std::uint32_t> FindQueueFamilyIndex(
+    const std::vector<vk::QueueFamilyProperties>& all_queue_family_properties,
+    std::predicate<const vk::QueueFamilyProperties&> auto&& find_fn) {
+  if (const auto iterator = std::ranges::find_if(all_queue_family_properties, find_fn);
+      iterator != all_queue_family_properties.cend()) {
     assert(iterator->queueCount > 0);
-    const auto index = std::ranges::distance(queue_family_properties.cbegin(), iterator);
+    const auto index = std::ranges::distance(all_queue_family_properties.cbegin(), iterator);
     return static_cast<std::uint32_t>(index);
   }
   return std::nullopt;
@@ -32,20 +33,22 @@ std::optional<gfx::QueueFamilyIndices> FindQueueFamilyIndices(const vk::Physical
                                                               const vk::SurfaceKHR surface) {
   const auto all_queue_family_properties = physical_device.getQueueFamilyProperties();
 
-  const auto graphics_index = FindQueueFamily(all_queue_family_properties, [](const auto& queue_family_properties) {
-    return static_cast<bool>(queue_family_properties.queueFlags & vk::QueueFlagBits::eGraphics);
-  });
+  const auto graphics_index =
+      FindQueueFamilyIndex(all_queue_family_properties, [](const auto& queue_family_properties) {
+        return static_cast<bool>(queue_family_properties.queueFlags & vk::QueueFlagBits::eGraphics);
+      });
 
   const auto present_index =
-      FindQueueFamily(all_queue_family_properties, [physical_device, surface, index = 0u](const auto&) mutable {
+      FindQueueFamilyIndex(all_queue_family_properties, [physical_device, surface, index = 0u](const auto&) mutable {
         return physical_device.getSurfaceSupportKHR(index++, surface) == vk::True;
       });
 
-  const auto transfer_index = FindQueueFamily(all_queue_family_properties, [](const auto& queue_family_properties) {
-    // prefer a dedicated transfer queue family to enable asynchronous transfers to device memory
-    return static_cast<bool>(queue_family_properties.queueFlags & vk::QueueFlagBits::eTransfer)
-           && !static_cast<bool>(queue_family_properties.queueFlags & vk::QueueFlagBits::eGraphics);
-  });
+  const auto transfer_index =
+      FindQueueFamilyIndex(all_queue_family_properties, [](const auto& queue_family_properties) {
+        // prefer a dedicated transfer queue family to enable asynchronous transfers to device memory
+        return static_cast<bool>(queue_family_properties.queueFlags & vk::QueueFlagBits::eTransfer)
+               && !static_cast<bool>(queue_family_properties.queueFlags & vk::QueueFlagBits::eGraphics);
+      });
 
   if (graphics_index.has_value() && present_index.has_value()) {
     return gfx::QueueFamilyIndices{.graphics_index = *graphics_index,
@@ -91,9 +94,11 @@ namespace gfx {
 
 PhysicalDevice::PhysicalDevice(const vk::Instance instance, const vk::SurfaceKHR surface) {
   const auto [physical_device, limits, queue_family_indices, _] = SelectPhysicalDevice(instance, surface);
+  // NOLINTBEGIN(cppcoreguidelines-prefer-member-initializer)
   physical_device_ = physical_device;
   limits_ = limits;
   queue_family_indices_ = queue_family_indices;
+  // NOLINTEND(cppcoreguidelines-prefer-member-initializer)
 }
 
 }  // namespace gfx
