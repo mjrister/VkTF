@@ -1,7 +1,6 @@
 #include "graphics/swapchain.h"
 
 #include <array>
-#include <cassert>
 #include <cstdint>
 #include <limits>
 #include <ranges>
@@ -12,42 +11,40 @@
 
 namespace {
 
+constexpr auto kUint32Max = std::numeric_limits<std::uint32_t>::max();
+
 vk::SurfaceFormatKHR GetSwapchainSurfaceFormat(const vk::PhysicalDevice physical_device, const vk::SurfaceKHR surface) {
   const auto surface_formats = physical_device.getSurfaceFormatsKHR(surface);
-  if (constexpr vk::SurfaceFormatKHR kTargetSurfaceFormat{vk::Format::eB8G8R8A8Srgb, vk::ColorSpaceKHR::eSrgbNonlinear};
+  if (static constexpr vk::SurfaceFormatKHR kTargetSurfaceFormat{vk::Format::eB8G8R8A8Srgb,
+                                                                 vk::ColorSpaceKHR::eSrgbNonlinear};
       std::ranges::contains(surface_formats, kTargetSurfaceFormat)) {
     return kTargetSurfaceFormat;
   }
-  assert(!surface_formats.empty());
-  const auto surface_format = surface_formats.front();
-  assert(surface_format.format != vk::Format::eUndefined);
-  return surface_format;
+  return surface_formats.front();  // required to be non-empty by the Vulkan specification
 }
 
 vk::PresentModeKHR GetSwapchainPresentMode(const vk::PhysicalDevice physical_device, const vk::SurfaceKHR surface) {
   const auto present_modes = physical_device.getSurfacePresentModesKHR(surface);
-  if (constexpr auto kTargetPresentMode = vk::PresentModeKHR::eFifoRelaxed;
+  if (static constexpr auto kTargetPresentMode = vk::PresentModeKHR::eFifoRelaxed;
       std::ranges::contains(present_modes, kTargetPresentMode)) {
     return kTargetPresentMode;
   }
-  assert(std::ranges::contains(present_modes, vk::PresentModeKHR::eFifo));
-  return vk::PresentModeKHR::eFifo;
+  return vk::PresentModeKHR::eFifo;  // required to be supported by the Vulkan specification
 }
 
 std::uint32_t GetSwapchainImageCount(const vk::SurfaceCapabilitiesKHR& surface_capabilities) {
   const auto min_image_count = surface_capabilities.minImageCount;
-  assert(min_image_count > 0);
   auto max_image_count = surface_capabilities.maxImageCount;
-  if (constexpr std::uint32_t kNoMaxLimitImageCount = 0; max_image_count == kNoMaxLimitImageCount) {
-    max_image_count = std::numeric_limits<std::uint32_t>::max();
+  if (static constexpr std::uint32_t kNoLimitImageCount = 0; max_image_count == kNoLimitImageCount) {
+    max_image_count = kUint32Max;
   }
   return std::min(min_image_count + 1, max_image_count);
 }
 
 vk::Extent2D GetSwapchainImageExtent(const vk::SurfaceCapabilitiesKHR& surface_capabilities,
                                      const std::pair<int, int> framebuffer_size) {
-  if (constexpr auto kUndefinedExtent = std::numeric_limits<std::uint32_t>::max();
-      surface_capabilities.currentExtent != vk::Extent2D{.width = kUndefinedExtent, .height = kUndefinedExtent}) {
+  if (static constexpr vk::Extent2D kUndefinedExtent{.width = kUint32Max, .height = kUint32Max};
+      surface_capabilities.currentExtent != kUndefinedExtent) {
     return surface_capabilities.currentExtent;
   }
   const auto [min_width, min_height] = surface_capabilities.minImageExtent;

@@ -1,7 +1,6 @@
 #include "graphics/physical_device.h"
 
 #include <algorithm>
-#include <cassert>
 #include <optional>
 #include <ranges>
 #include <stdexcept>
@@ -22,7 +21,6 @@ std::optional<std::uint32_t> FindQueueFamilyIndex(
     std::predicate<const vk::QueueFamilyProperties&> auto&& find_fn) {
   if (const auto iterator = std::ranges::find_if(all_queue_family_properties, find_fn);
       iterator != all_queue_family_properties.cend()) {
-    assert(iterator->queueCount > 0);
     const auto index = std::ranges::distance(all_queue_family_properties.cbegin(), iterator);
     return static_cast<std::uint32_t>(index);
   }

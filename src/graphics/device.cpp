@@ -9,11 +9,12 @@
 namespace {
 
 vk::UniqueDevice CreateDevice(const gfx::PhysicalDevice& physical_device) {
+  static constexpr auto kHighestNormalizedQueuePriority = 1.0f;
   const auto [graphics_index, present_index, transfer_index] = physical_device.queue_family_indices();
+
   const auto device_queue_create_info =
       std::unordered_set{graphics_index, present_index, transfer_index}
       | std::views::transform([](const auto queue_family_index) {
-          static constexpr auto kHighestNormalizedQueuePriority = 1.0f;
           return vk::DeviceQueueCreateInfo{.queueFamilyIndex = queue_family_index,
                                            .queueCount = 1,
                                            .pQueuePriorities = &kHighestNormalizedQueuePriority};

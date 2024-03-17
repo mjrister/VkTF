@@ -12,7 +12,7 @@ namespace gfx {
 
 Camera::Camera(const glm::vec3& position, const glm::vec3& direction, const ViewFrustum& view_frustum)
     : position_{position}, orientation_{ToSphericalCoordinates(-direction)}, view_frustum_{view_frustum} {
-  assert(orientation_.radius > 0.0f);
+  assert(glm::length(direction) > 0.0f);
 }
 
 glm::mat4 Camera::GetViewTransform() const {

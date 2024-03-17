@@ -1,7 +1,6 @@
 #include "graphics/model.h"
 
 #include <algorithm>
-#include <cassert>
 #include <cstdint>
 #include <limits>
 #include <ranges>
@@ -31,9 +30,7 @@ glm::vec<N, T> GetVec(const std::span<aiVector3t<T>> data, const std::size_t ind
       v[component] = data[index][component];
     }
     if (normalize) {
-      const auto length = glm::length(v);
-      assert(length > 0.0f);
-      v = v / length;
+      v = glm::normalize(v);
     }
   }
   return v;
@@ -104,12 +101,10 @@ std::pair<gfx::Buffer, gfx::Buffer> CreateBuffers(const std::vector<T>& data,
 }
 
 std::unique_ptr<gfx::Model::Node> ImportNode(const aiNode& node, std::vector<gfx::Mesh>& scene_meshes) {
-  auto node_meshes = std::span{node.mMeshes, node.mNumMeshes}
-                     | std::views::transform([&scene_meshes](const auto index) {
-                         assert(index < scene_meshes.size());
-                         return std::move(scene_meshes[index]);
-                       })
-                     | std::ranges::to<std::vector>();
+  auto node_meshes =
+      std::span{node.mMeshes, node.mNumMeshes}
+      | std::views::transform([&scene_meshes](const auto index) { return std::move(scene_meshes[index]); })
+      | std::ranges::to<std::vector>();
 
   auto node_children = std::span{node.mChildren, node.mNumChildren}
                        | std::views::transform([&scene_meshes](const auto* const child_node) {
@@ -133,7 +128,6 @@ std::unique_ptr<gfx::Model::Node> ImportScene(const aiScene& scene,
       device.allocateCommandBuffersUnique(vk::CommandBufferAllocateInfo{.commandPool = *command_pool,
                                                                         .level = vk::CommandBufferLevel::ePrimary,
                                                                         .commandBufferCount = 1});
-  assert(!command_buffers.empty());
   const auto command_buffer = *command_buffers.front();
   command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
 
@@ -143,8 +137,6 @@ std::unique_ptr<gfx::Model::Node> ImportScene(const aiScene& scene,
   auto scene_meshes =
       std::span{scene.mMeshes, scene.mNumMeshes}  //
       | std::views::transform([command_buffer, allocator, &staging_buffers](const auto* const mesh) {
-          assert(mesh != nullptr);
-
           const auto vertices = GetVertices(*mesh);
           auto [staging_vertex_buffer, vertex_buffer] =
               CreateBuffers(vertices, vk::BufferUsageFlagBits::eVertexBuffer, command_buffer, allocator);

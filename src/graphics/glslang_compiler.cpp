@@ -12,12 +12,12 @@
 
 template <>
 struct std::formatter<glslang_stage_t> : std::formatter<std::string_view> {
-  [[nodiscard]] auto format(const glslang_stage_t stage, std::format_context& format_context) const {
+  [[nodiscard]] auto format(const glslang_stage_t stage, auto& format_context) const {
     return std::formatter<std::string_view>::format(to_string(stage), format_context);
   }
 
 private:
-  static constexpr std::string_view to_string(const glslang_stage_t stage) noexcept {
+  static std::string_view to_string(const glslang_stage_t stage) noexcept {
     switch (stage) {
       // clang-format off
 #define CASE(kGlslangStage) case kGlslangStage: return #kGlslangStage;  // NOLINT(cppcoreguidelines-macro-usage)
