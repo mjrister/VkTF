@@ -4,8 +4,13 @@
 
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
+#include <vulkan/vulkan.hpp>
 
-#include "game/game.h"
+#if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1
+VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
+#endif
+
+import game;
 
 int main() {  // NOLINT(bugprone-exception-escape)
   try {

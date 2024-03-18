@@ -10,9 +10,7 @@ This project makes use of GitHub issue templates. If you encounter a problem, pl
 
 In addition to the dependencies listed in the [Requirements](README.md#Requirements) section of the README, contributing to this project will require:
 
-- [python3](https://www.python.org/downloads/)
-  - [pre-commit](https://pre-commit.com)
-  - [cpplint](https://github.com/cpplint/cpplint)
+- [pre-commit](https://pre-commit.com)
 - [clang-format](https://clang.llvm.org/docs/ClangFormat.html)
 - [clang-tidy](https://clang.llvm.org/extra/clang-tidy/)
 
@@ -30,7 +28,7 @@ This project follows the [Google C++ Style Guide](https://google.github.io/style
 4. Objects with static storage duration are allowed.
 5. APIs are documented with [Doxygen](https://www.doxygen.nl/).
 
-Code style is enforced with `clang-format` and `cpplint` which are run prior to check-in using pre-commit hooks.
+Code style is enforced with `clang-format` which is run prior to check-in using a pre-commit hook.
 
 ## Commit Message Template
 

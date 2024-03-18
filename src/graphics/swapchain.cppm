@@ -1,17 +1,48 @@
-#include "graphics/swapchain.h"
+module;
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <limits>
 #include <ranges>
 #include <tuple>
+#include <vector>
 
-#include "graphics/device.h"
-#include "graphics/window.h"
+#include <vulkan/vulkan.hpp>
+
+export module swapchain;
+
+import device;
+import window;
+
+namespace gfx {
+
+export class Swapchain {
+public:
+  Swapchain(const Device& device, const Window& window, vk::SurfaceKHR surface);
+
+  [[nodiscard]] vk::SwapchainKHR operator*() const noexcept { return *swapchain_; }
+  [[nodiscard]] const vk::SwapchainKHR* operator->() const noexcept { return &(*swapchain_); }
+
+  [[nodiscard]] vk::Format image_format() const noexcept { return image_format_; }
+  [[nodiscard]] vk::Extent2D image_extent() const noexcept { return image_extent_; }
+
+  [[nodiscard]] std::ranges::view auto image_views() const {
+    return image_views_ | std::views::transform([](const auto& image_view) { return *image_view; });
+  }
+
+private:
+  vk::UniqueSwapchainKHR swapchain_;
+  vk::Format image_format_ = vk::Format::eUndefined;
+  vk::Extent2D image_extent_;
+  std::vector<vk::UniqueImageView> image_views_;
+};
+
+}  // namespace gfx
+
+module :private;
 
 namespace {
-
-constexpr auto kUint32Max = std::numeric_limits<std::uint32_t>::max();
 
 vk::SurfaceFormatKHR GetSwapchainSurfaceFormat(const vk::PhysicalDevice physical_device, const vk::SurfaceKHR surface) {
   const auto surface_formats = physical_device.getSurfaceFormatsKHR(surface);
@@ -36,15 +67,15 @@ std::uint32_t GetSwapchainImageCount(const vk::SurfaceCapabilitiesKHR& surface_c
   const auto min_image_count = surface_capabilities.minImageCount;
   auto max_image_count = surface_capabilities.maxImageCount;
   if (static constexpr std::uint32_t kNoLimitImageCount = 0; max_image_count == kNoLimitImageCount) {
-    max_image_count = kUint32Max;
+    max_image_count = std::numeric_limits<std::uint32_t>::max();
   }
   return std::min(min_image_count + 1, max_image_count);
 }
 
 vk::Extent2D GetSwapchainImageExtent(const vk::SurfaceCapabilitiesKHR& surface_capabilities,
                                      const std::pair<int, int> framebuffer_size) {
-  if (static constexpr vk::Extent2D kUndefinedExtent{.width = kUint32Max, .height = kUint32Max};
-      surface_capabilities.currentExtent != kUndefinedExtent) {
+  if (static constexpr auto kUndefinedExtent = std::numeric_limits<std::uint32_t>::max();
+      surface_capabilities.currentExtent != vk::Extent2D{.width = kUndefinedExtent, .height = kUndefinedExtent}) {
     return surface_capabilities.currentExtent;
   }
   const auto [min_width, min_height] = surface_capabilities.minImageExtent;

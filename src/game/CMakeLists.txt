@@ -1,4 +1,6 @@
-add_executable(game game.cpp main.cpp)
+add_executable(game main.cpp)
+
+target_sources(game PUBLIC FILE_SET CXX_MODULES FILES delta_time.cppm game.cppm)
 
 target_link_libraries(game PRIVATE graphics)
 target_include_directories(game PRIVATE include)

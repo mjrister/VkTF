@@ -1,11 +1,37 @@
-#include "game/game.h"
+module;
 
+#include <filesystem>
 #include <optional>
 
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 
-#include "game/delta_time.h"
+export module game;
+
+import camera;
+import delta_time;
+import engine;
+import model;
+import window;
+
+namespace gfx {
+
+export class Game {
+public:
+  Game();
+
+  void Run();
+
+private:
+  Window window_;
+  Engine engine_;
+  Camera camera_;
+  Model model_;
+};
+
+}  // namespace gfx
+
+module :private;
 
 namespace {
 constexpr auto kWindowWidth = 1920;

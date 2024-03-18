@@ -1,13 +1,31 @@
-#include "graphics/instance.h"
+module;
 
 #include <cstdint>
 #include <initializer_list>
 
-#include "graphics/window.h"
+#include <vulkan/vulkan.hpp>
 
-#if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1
-VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
-#endif
+export module instance;
+
+import window;
+
+namespace gfx {
+
+export class Instance {
+public:
+  static constexpr auto kApiVersion = vk::ApiVersion13;
+
+  Instance();
+
+  [[nodiscard]] vk::Instance operator*() const noexcept { return *instance_; }
+
+private:
+  vk::UniqueInstance instance_;
+};
+
+}  // namespace gfx
+
+module :private;
 
 namespace gfx {
 

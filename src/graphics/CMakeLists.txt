@@ -1,16 +1,19 @@
-add_library(graphics STATIC allocator.cpp
-                            buffer.cpp
-                            camera.cpp
-                            device.cpp
-                            engine.cpp
-                            glslang_compiler.cpp
-                            image.cpp
-                            instance.cpp
-                            model.cpp
-                            physical_device.cpp
-                            shader_module.cpp
-                            swapchain.cpp
-                            window.cpp)
+add_library(graphics STATIC)
+
+target_sources(graphics PUBLIC FILE_SET CXX_MODULES FILES allocator.cppm
+                                                          buffer.cppm
+                                                          camera.cppm
+                                                          device.cppm
+                                                          engine.cppm
+                                                          glslang_compiler.cppm
+                                                          image.cppm
+                                                          instance.cppm
+                                                          mesh.cppm
+                                                          model.cppm
+                                                          physical_device.cppm
+                                                          shader_module.cppm
+                                                          swapchain.cppm
+                                                          window.cppm)
 
 find_package(VulkanHeaders CONFIG REQUIRED)
 find_package(VulkanMemoryAllocator CONFIG REQUIRED)

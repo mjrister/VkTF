@@ -1,5 +1,6 @@
-#include "graphics/shader_module.h"
+module;
 
+#include <filesystem>
 #include <format>
 #include <fstream>
 #include <ios>
@@ -7,8 +8,27 @@
 #include <string>
 
 #include <glslang/Include/glslang_c_shader_types.h>
+#include <vulkan/vulkan.hpp>
 
-#include "graphics/glslang_compiler.h"
+export module shader_module;
+
+import glslang_compiler;
+
+namespace gfx {
+
+export class ShaderModule {
+public:
+  ShaderModule(vk::Device device, vk::ShaderStageFlagBits shader_stage, const std::filesystem::path& filepath);
+
+  [[nodiscard]] vk::ShaderModule operator*() const noexcept { return *shader_module_; }
+
+private:
+  vk::UniqueShaderModule shader_module_;
+};
+
+}  // namespace gfx
+
+module :private;
 
 namespace {
 

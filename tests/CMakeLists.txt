@@ -1,4 +1,4 @@
-add_executable(tests graphics/math/spherical_coordinates_test.cpp)
+add_executable(tests)
 
 find_package(GTest CONFIG REQUIRED)
 

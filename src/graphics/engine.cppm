@@ -1,4 +1,4 @@
-#include "graphics/engine.h"
+module;
 
 #include <algorithm>
 #include <array>
@@ -7,14 +7,65 @@
 #include <limits>
 #include <ranges>
 #include <utility>
+#include <vector>
 
-#include <glm/mat4x4.hpp>
+#include <vk_mem_alloc.h>
+#include <glm/glm.hpp>
+#include <vulkan/vulkan.hpp>
 
-#include "graphics/camera.h"
-#include "graphics/mesh.h"
-#include "graphics/model.h"
-#include "graphics/shader_module.h"
-#include "graphics/window.h"
+export module engine;
+
+import allocator;
+import buffer;
+import device;
+import camera;
+import instance;
+import image;
+import model;
+import shader_module;
+import swapchain;
+import window;
+
+namespace gfx {
+
+export class Engine {
+public:
+  explicit Engine(const Window& window);
+
+  [[nodiscard]] const Device& device() const noexcept { return device_; }
+  [[nodiscard]] VmaAllocator allocator() const noexcept { return *allocator_; }
+
+  void Render(const Camera& camera, const Model& model);
+
+private:
+  static constexpr std::size_t kMaxRenderFrames = 2;
+  std::size_t current_frame_index_{};
+  Instance instance_;
+  vk::UniqueSurfaceKHR surface_;
+  Device device_;
+  Allocator allocator_;
+  Swapchain swapchain_;
+  vk::SampleCountFlagBits msaa_sample_count_;
+  Image color_attachment_;
+  Image depth_attachment_;
+  vk::UniqueRenderPass render_pass_;
+  std::vector<vk::UniqueFramebuffer> framebuffers_;
+  vk::UniqueDescriptorSetLayout descriptor_set_layouts_;
+  vk::UniqueDescriptorPool descriptor_pool_;
+  std::vector<vk::DescriptorSet> descriptor_sets_;
+  std::vector<Buffer> uniform_buffers_;
+  vk::UniquePipelineLayout graphics_pipeline_layout_;
+  vk::UniquePipeline graphics_pipeline_;
+  vk::UniqueCommandPool command_pool_;
+  std::vector<vk::UniqueCommandBuffer> command_buffers_;
+  std::array<vk::UniqueSemaphore, kMaxRenderFrames> acquire_next_image_semaphores_;
+  std::array<vk::UniqueSemaphore, kMaxRenderFrames> present_image_semaphores_;
+  std::array<vk::UniqueFence, kMaxRenderFrames> draw_fences_;
+};
+
+}  // namespace gfx
+
+module :private;
 
 namespace {
 
@@ -193,7 +244,7 @@ vk::UniquePipelineLayout CreateGraphicsPipelineLayout(const vk::Device device,
                                                       const vk::DescriptorSetLayout& descriptor_set_layouts) {
   static constexpr vk::PushConstantRange kPushConstantRange{.stageFlags = vk::ShaderStageFlagBits::eVertex,
                                                             .offset = 0,
-                                                            .size = sizeof(gfx::Model::PushConstants)};
+                                                            .size = sizeof(gfx::PushConstants)};
 
   return device.createPipelineLayoutUnique(vk::PipelineLayoutCreateInfo{.setLayoutCount = 1,
                                                                         .pSetLayouts = &descriptor_set_layouts,
@@ -326,9 +377,7 @@ std::vector<vk::UniqueCommandBuffer> AllocateCommandBuffers(const vk::Device dev
 template <std::size_t N>
 std::array<vk::UniqueSemaphore, N> CreateSemaphores(const vk::Device device) {
   std::array<vk::UniqueSemaphore, N> semaphores;
-  std::ranges::generate(semaphores, [device] {  //
-    return device.createSemaphoreUnique(vk::SemaphoreCreateInfo{});
-  });
+  std::ranges::generate(semaphores, [device] { return device.createSemaphoreUnique(vk::SemaphoreCreateInfo{}); });
   return semaphores;
 }
 

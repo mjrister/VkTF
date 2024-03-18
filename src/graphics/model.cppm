@@ -1,13 +1,15 @@
-#include "graphics/model.h"
+module;
 
-#include <algorithm>
 #include <cstdint>
+#include <filesystem>
 #include <limits>
+#include <memory>
 #include <ranges>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
@@ -16,8 +18,49 @@
 #include <assimp/Importer.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <vulkan/vulkan.hpp>
 
-#include "graphics/device.h"
+export module model;
+
+import buffer;
+import device;
+import mesh;
+
+namespace gfx {
+
+export struct Vertex {
+  glm::vec3 position{0.0f};
+  glm::vec2 texture_coordinates{0.0f};
+  glm::vec3 normal{0.0f};
+};
+
+export struct PushConstants {
+  glm::mat4 model_transform{1.0f};
+};
+
+struct Node {
+  std::vector<Mesh> meshes;
+  std::vector<std::unique_ptr<Node>> children;
+  glm::mat4 transform{1.0f};
+};
+
+export class Model {
+public:
+  Model(const Device& device, VmaAllocator allocator, const std::filesystem::path& filepath);
+
+  void Translate(float dx, float dy, float dz) const;
+  void Rotate(const glm::vec3& axis, float angle) const;
+  void Scale(float sx, float sy, float sz) const;
+
+  void Render(vk::CommandBuffer command_buffer, vk::PipelineLayout pipeline_layout) const;
+
+private:
+  std::unique_ptr<Node> root_node_;
+};
+
+}  // namespace gfx
+
+module :private;
 
 namespace {
 
@@ -100,7 +143,7 @@ std::pair<gfx::Buffer, gfx::Buffer> CreateBuffers(const std::vector<T>& data,
   return std::pair{std::move(staging_buffer), std::move(buffer)};
 }
 
-std::unique_ptr<gfx::Model::Node> ImportNode(const aiNode& node, std::vector<gfx::Mesh>& scene_meshes) {
+std::unique_ptr<gfx::Node> ImportNode(const aiNode& node, std::vector<gfx::Mesh>& scene_meshes) {
   auto node_meshes =
       std::span{node.mMeshes, node.mNumMeshes}
       | std::views::transform([&scene_meshes](const auto index) { return std::move(scene_meshes[index]); })
@@ -112,14 +155,14 @@ std::unique_ptr<gfx::Model::Node> ImportNode(const aiNode& node, std::vector<gfx
                          })
                        | std::ranges::to<std::vector>();
 
-  return std::make_unique<gfx::Model::Node>(std::move(node_meshes), std::move(node_children), GetTransform(node));
+  return std::make_unique<gfx::Node>(std::move(node_meshes), std::move(node_children), GetTransform(node));
 }
 
-std::unique_ptr<gfx::Model::Node> ImportScene(const aiScene& scene,
-                                              const vk::Device device,
-                                              const vk::Queue queue,
-                                              const std::uint32_t queue_family_index,
-                                              const VmaAllocator allocator) {
+std::unique_ptr<gfx::Node> ImportScene(const aiScene& scene,
+                                       const vk::Device device,
+                                       const vk::Queue queue,
+                                       const std::uint32_t queue_family_index,
+                                       const VmaAllocator allocator) {
   const auto command_pool =
       device.createCommandPoolUnique(vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eTransient,
                                                                .queueFamilyIndex = queue_family_index});
@@ -170,15 +213,15 @@ std::unique_ptr<gfx::Model::Node> ImportScene(const aiScene& scene,
   return root_node;
 }
 
-void RenderNode(const gfx::Model::Node& node,
+void RenderNode(const gfx::Node& node,
                 const vk::CommandBuffer command_buffer,
                 const vk::PipelineLayout pipeline_layout,
                 const glm::mat4& parent_transform = glm::mat4{1.0f}) {
   const auto node_transform = parent_transform * node.transform;
-  command_buffer.pushConstants<gfx::Model::PushConstants>(pipeline_layout,
-                                                          vk::ShaderStageFlagBits::eVertex,
-                                                          0,
-                                                          gfx::Model::PushConstants{.node_transform = node_transform});
+  command_buffer.pushConstants<gfx::PushConstants>(pipeline_layout,
+                                                   vk::ShaderStageFlagBits::eVertex,
+                                                   0,
+                                                   gfx::PushConstants{.model_transform = node_transform});
 
   for (const auto& mesh : node.meshes) {
     mesh.Render(command_buffer);
