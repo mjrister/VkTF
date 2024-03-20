@@ -3,7 +3,7 @@
   "name": "vkrender",
   "version": "0.0.1",
   "dependencies": [
-    "assimp",
+    "cgltf",
     "glfw3",
     "glm",
     "glslang",

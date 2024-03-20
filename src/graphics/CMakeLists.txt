@@ -17,14 +17,12 @@ target_sources(graphics PUBLIC FILE_SET CXX_MODULES FILES allocator.cppm
 
 find_package(VulkanHeaders CONFIG REQUIRED)
 find_package(VulkanMemoryAllocator CONFIG REQUIRED)
-find_package(assimp CONFIG REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glslang CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 
 target_link_libraries(graphics PUBLIC GPUOpen::VulkanMemoryAllocator
                                       Vulkan::Headers
-                                      assimp::assimp
                                       glfw
                                       glm::glm
                                       glslang::glslang
@@ -40,5 +38,3 @@ target_compile_definitions(graphics PUBLIC GLFW_INCLUDE_VULKAN
                                            VMA_DYNAMIC_VULKAN_FUNCTIONS=0
                                            VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
                                            VULKAN_HPP_NO_CONSTRUCTORS)
-
-target_include_directories(graphics PUBLIC include)

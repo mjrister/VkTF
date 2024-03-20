@@ -18,7 +18,7 @@ public:
 
   void Render(const vk::CommandBuffer command_buffer) const {
     command_buffer.bindVertexBuffers(0, *vertex_buffer_, static_cast<vk::DeviceSize>(0));
-    command_buffer.bindIndexBuffer(*index_buffer_, 0, vk::IndexType::eUint32);
+    command_buffer.bindIndexBuffer(*index_buffer_, 0, vk::IndexType::eUint16);
     command_buffer.drawIndexed(index_count_, 1, 0, 0, 0);
   }
 

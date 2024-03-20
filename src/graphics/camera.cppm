@@ -47,7 +47,7 @@ module :private;
 
 namespace {
 
-[[nodiscard]] gfx::SphericalCoordinates ToSphericalCoordinates(const glm::vec3& cartesian_coordinates) {
+gfx::SphericalCoordinates ToSphericalCoordinates(const glm::vec3& cartesian_coordinates) {
   const auto radius = glm::length(cartesian_coordinates);
   return radius == 0.0f
              ? gfx::SphericalCoordinates{.radius = 0.0f, .theta = 0.0f, .phi = 0.0f}
@@ -56,7 +56,7 @@ namespace {
                                          .phi = std::asin(-cartesian_coordinates.y / radius)};
 }
 
-[[nodiscard]] glm::vec3 ToCartesianCoordinates(const gfx::SphericalCoordinates& spherical_coordinates) {
+glm::vec3 ToCartesianCoordinates(const gfx::SphericalCoordinates& spherical_coordinates) {
   const auto [radius, theta, phi] = spherical_coordinates;
   const auto cos_phi = std::cos(phi);
   const auto x = radius * std::sin(theta) * cos_phi;

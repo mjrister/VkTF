@@ -2,7 +2,6 @@
 
 layout(location = 0) in Vertex {
   vec3 position;
-  vec2 texture_coordinates;
   vec3 normal;
 } vertex;
 

@@ -1,23 +1,26 @@
 module;
 
+#include <array>
+#include <cassert>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
+#include <format>
 #include <limits>
 #include <memory>
 #include <ranges>
 #include <span>
 #include <stdexcept>
-#include <string>
+#include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
-#include <assimp/postprocess.h>
-#include <assimp/scene.h>
+#include <cgltf.h>
 #include <vk_mem_alloc.h>
-#include <assimp/DefaultLogger.hpp>
-#include <assimp/Importer.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <vulkan/vulkan.hpp>
 
 export module model;
@@ -30,7 +33,6 @@ namespace gfx {
 
 export struct Vertex {
   glm::vec3 position{0.0f};
-  glm::vec2 texture_coordinates{0.0f};
   glm::vec3 normal{0.0f};
 };
 
@@ -46,7 +48,7 @@ struct Node {
 
 export class Model {
 public:
-  Model(const Device& device, VmaAllocator allocator, const std::filesystem::path& filepath);
+  Model(const Device& device, VmaAllocator allocator, const std::filesystem::path& gltf_filepath);
 
   void Translate(float dx, float dy, float dz) const;
   void Rotate(const glm::vec3& axis, float angle) const;
@@ -62,66 +64,145 @@ private:
 
 module :private;
 
-namespace {
+template <>
+struct std::formatter<cgltf_result> : std::formatter<std::string_view> {
+  [[nodiscard]] auto format(const cgltf_result result, auto& format_context) const {
+    return std::formatter<std::string_view>::format(to_string(result), format_context);
+  }
 
-template <glm::length_t N, typename T>
-  requires(N > 0 && N <= 3)
-glm::vec<N, T> GetVec(const std::span<aiVector3t<T>> data, const std::size_t index, const bool normalize = false) {
-  glm::vec<N, T> v{};
-  if (index < data.size()) {
-    for (std::uint32_t component = 0; component < N; ++component) {
-      v[component] = data[index][component];
-    }
-    if (normalize) {
-      v = glm::normalize(v);
+private:
+  static std::string_view to_string(const cgltf_result result) noexcept {
+    switch (result) {
+      // clang-format off
+#define CASE(kResult) case kResult: return #kResult;  // NOLINT(cppcoreguidelines-macro-usage)
+      CASE(cgltf_result_success)
+      CASE(cgltf_result_data_too_short)
+      CASE(cgltf_result_unknown_format)
+      CASE(cgltf_result_invalid_json)
+      CASE(cgltf_result_invalid_gltf)
+      CASE(cgltf_result_invalid_options)
+      CASE(cgltf_result_file_not_found)
+      CASE(cgltf_result_io_error)
+      CASE(cgltf_result_out_of_memory)
+      CASE(cgltf_result_legacy_gltf)
+#undef CASE
+      // clang-format on
+      default:
+        std::unreachable();
     }
   }
-  return v;
+};
+
+namespace {
+
+using UniqueCgltfData = std::unique_ptr<cgltf_data, decltype(&cgltf_free)>;
+
+UniqueCgltfData ParseFile(const char* const gltf_filepath) {
+  static constexpr cgltf_options kOptions{};
+  UniqueCgltfData data{nullptr, nullptr};
+
+  if (const auto result = cgltf_parse_file(&kOptions, gltf_filepath, std::out_ptr(data, cgltf_free));
+      result != cgltf_result_success) {
+    throw std::runtime_error{std::format("Parse file failed with with error {}", result)};
+  }
+
+  if (const auto result = cgltf_load_buffers(&kOptions, data.get(), gltf_filepath); result != cgltf_result_success) {
+    throw std::runtime_error{std::format("Load buffers failed with error {}", result)};
+  }
+
+#ifndef NDEBUG
+  if (const auto result = cgltf_validate(data.get()); result != cgltf_result_success) {
+    throw std::runtime_error{std::format("Validation failed with error {}", result)};
+  }
+#endif
+
+  return data;
 }
 
-std::vector<gfx::Vertex> GetVertices(const aiMesh& mesh) {
-  const std::span positions{mesh.mVertices, mesh.HasPositions() ? mesh.mNumVertices : 0};
-  const std::span normals{mesh.mNormals, mesh.HasNormals() ? mesh.mNumVertices : 0};
-  const std::span texture_coordinates{mesh.mTextureCoords[0], mesh.HasTextureCoords(0) ? mesh.mNumVertices : 0};
+template <glm::length_t N>
+std::vector<glm::vec<N, float>> UnpackFloats(const cgltf_accessor& accessor) {
+  if (const auto components = cgltf_num_components(accessor.type); components != N) {
+    const auto* const name = accessor.name != nullptr && std::strlen(accessor.name) > 0 ? accessor.name : "unknown";
+    throw std::runtime_error{std::format("Failed to unpack floats for {} with {} components", name, components)};
+  }
+  std::vector<glm::vec<N, float>> data(accessor.count);
+  cgltf_accessor_unpack_floats(&accessor, glm::value_ptr(data.front()), N * accessor.count);
+  return data;
+}
 
-  return std::views::iota(0u, mesh.mNumVertices)
-         | std::views::transform([positions, normals, texture_coordinates](const auto index) {
-             return gfx::Vertex{.position = GetVec<3>(positions, index),
-                                .texture_coordinates = GetVec<2>(texture_coordinates, index),
-                                .normal = GetVec<3>(normals, index, true)};
+std::vector<gfx::Vertex> GetVertices(const cgltf_primitive& primitive) {
+  std::vector<glm::vec3> positions, normals;
+
+  for (const auto& attribute : std::span{primitive.attributes, primitive.attributes_count}) {
+    switch (const auto& accessor = *attribute.data; attribute.type) {
+      case cgltf_attribute_type_position: {
+        positions = UnpackFloats<3>(accessor);
+        break;
+      }
+      case cgltf_attribute_type_normal: {
+        normals = UnpackFloats<3>(accessor);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  static constexpr auto kCreateVertex = [](const auto& position, const auto& normal) {
+    return gfx::Vertex{.position = position, .normal = normal};
+  };
+  return std::views::zip_transform(kCreateVertex, positions, normals) | std::ranges::to<std::vector>();
+}
+
+std::vector<std::uint16_t> GetIndices(const cgltf_accessor& accessor) {
+  return std::views::iota(0u, accessor.count)  //
+         | std::views::transform([&accessor](const auto accessor_index) {
+             const auto vertex_index = cgltf_accessor_read_index(&accessor, accessor_index);
+             return static_cast<std::uint16_t>(vertex_index);
            })
          | std::ranges::to<std::vector>();
 }
 
-std::vector<std::uint32_t> GetIndices(const aiMesh& mesh) {
-  return std::span{mesh.mFaces, mesh.HasFaces() ? mesh.mNumFaces : 0}  //
-         | std::views::transform([](const auto& face) {
-             return std::span{face.mIndices, face.mNumIndices};
-           })
-         | std::views::join  //
-         | std::ranges::to<std::vector>();
+glm::mat4 GetTransform(const cgltf_node& node) {
+  glm::mat4 transform{1.0f};
+  if (node.has_matrix != 0 || node.has_translation != 0 || node.has_rotation != 0 || node.has_scale != 0) {
+    cgltf_node_transform_local(&node, glm::value_ptr(transform));
+  }
+  return transform;
 }
 
-glm::mat4 GetTransform(const aiNode& node) {
-  const auto& transform = node.mTransformation;
-  const std::span x{transform[0], 4};
-  const std::span y{transform[1], 4};
-  const std::span z{transform[2], 4};
-  const std::span w{transform[3], 4};
+std::vector<gfx::Mesh> GetSubMeshes(const cgltf_node& node,
+                                    std::unordered_map<const cgltf_mesh*, std::vector<gfx::Mesh>>& meshes) {
+  if (node.mesh == nullptr) return {};
+  auto iterator = meshes.find(node.mesh);
+  assert(iterator != meshes.cend());
+  return std::move(iterator->second);
+}
 
-  // clang-format off
-  return glm::mat4{x[0], y[0], z[0], w[0],
-                   x[1], y[1], z[1], w[1],
-                   x[2], y[2], z[2], w[2],
-                   x[3], y[3], z[3], w[3]};
-  // clang-format on
+std::unique_ptr<gfx::Node> ImportNode(const cgltf_node& node,
+                                      std::unordered_map<const cgltf_mesh*, std::vector<gfx::Mesh>>& meshes) {
+  auto child_nodes =
+      std::span{node.children, node.children_count}
+      | std::views::transform([&meshes](const auto* const child_node) { return ImportNode(*child_node, meshes); })
+      | std::ranges::to<std::vector>();
+
+  return std::make_unique<gfx::Node>(GetSubMeshes(node, meshes), std::move(child_nodes), GetTransform(node));
+}
+
+std::unique_ptr<gfx::Node> ImportScene(const cgltf_scene& scene,
+                                       std::unordered_map<const cgltf_mesh*, std::vector<gfx::Mesh>>& meshes) {
+  auto scene_nodes = std::span{scene.nodes, scene.nodes_count}
+                     | std::views::transform([&meshes](const auto* const node) { return ImportNode(*node, meshes); })
+                     | std::ranges::to<std::vector>();
+
+  return std::make_unique<gfx::Node>(std::vector<gfx::Mesh>{}, std::move(scene_nodes), glm::mat4{1.0f});
 }
 
 template <typename T>
-std::pair<gfx::Buffer, gfx::Buffer> CreateBuffers(const std::vector<T>& data,
-                                                  const vk::BufferUsageFlags buffer_usage_flags,
-                                                  const vk::CommandBuffer command_buffer,
-                                                  const VmaAllocator allocator) {
+std::array<gfx::Buffer, 2> CreateBuffers(const std::vector<T>& data,
+                                         const vk::BufferUsageFlags buffer_usage_flags,
+                                         const vk::CommandBuffer command_buffer,
+                                         const VmaAllocator allocator) {
   const auto size_bytes = sizeof(T) * data.size();
 
   static constexpr VmaAllocationCreateInfo kStagingBufferAllocationCreateInfo{
@@ -140,83 +221,75 @@ std::pair<gfx::Buffer, gfx::Buffer> CreateBuffers(const std::vector<T>& data,
                      kBufferAllocationCreateInfo};
   command_buffer.copyBuffer(*staging_buffer, *buffer, vk::BufferCopy{.size = size_bytes});
 
-  return std::pair{std::move(staging_buffer), std::move(buffer)};
+  return std::array{std::move(staging_buffer), std::move(buffer)};
 }
 
-std::unique_ptr<gfx::Node> ImportNode(const aiNode& node, std::vector<gfx::Mesh>& scene_meshes) {
-  auto node_meshes =
-      std::span{node.mMeshes, node.mNumMeshes}
-      | std::views::transform([&scene_meshes](const auto index) { return std::move(scene_meshes[index]); })
-      | std::ranges::to<std::vector>();
+std::vector<gfx::Mesh> CreateSubMeshes(const cgltf_mesh& mesh,
+                                       const vk::CommandBuffer command_buffer,
+                                       const VmaAllocator allocator,
+                                       std::vector<gfx::Buffer>& staging_buffers) {
+  return std::span{mesh.primitives, mesh.primitives_count}  //
+         | std::views::filter([](const auto& primitive) { return primitive.type == cgltf_primitive_type_triangles; })
+         | std::views::transform([command_buffer, allocator, &staging_buffers](const auto& primitive) {
+             const auto vertices = GetVertices(primitive);
+             auto [staging_vertex_buffer, vertex_buffer] =
+                 CreateBuffers(vertices, vk::BufferUsageFlagBits::eVertexBuffer, command_buffer, allocator);
 
-  auto node_children = std::span{node.mChildren, node.mNumChildren}
-                       | std::views::transform([&scene_meshes](const auto* const child_node) {
-                           return ImportNode(*child_node, scene_meshes);
-                         })
-                       | std::ranges::to<std::vector>();
+             const auto indices = GetIndices(*primitive.indices);
+             auto [staging_index_buffer, index_buffer] =
+                 CreateBuffers(indices, vk::BufferUsageFlagBits::eIndexBuffer, command_buffer, allocator);
 
-  return std::make_unique<gfx::Node>(std::move(node_meshes), std::move(node_children), GetTransform(node));
+             // staging buffers must be kept alive while copy commands complete
+             staging_buffers.push_back(std::move(staging_vertex_buffer));
+             staging_buffers.push_back(std::move(staging_index_buffer));
+
+             return gfx::Mesh{std::move(vertex_buffer),
+                              std::move(index_buffer),
+                              static_cast<std::uint32_t>(indices.size())};
+           })
+         | std::ranges::to<std::vector>();
 }
 
-std::unique_ptr<gfx::Node> ImportScene(const aiScene& scene,
-                                       const vk::Device device,
-                                       const vk::Queue queue,
-                                       const std::uint32_t queue_family_index,
-                                       const VmaAllocator allocator) {
+std::unordered_map<const cgltf_mesh*, std::vector<gfx::Mesh>> CreateMeshes(const cgltf_data& data,
+                                                                           const gfx::Device& device,
+                                                                           const VmaAllocator allocator) {
+  const auto transfer_queue = device.transfer_queue();
+  const auto transfer_index = device.physical_device().queue_family_indices().transfer_index;
+
   const auto command_pool =
-      device.createCommandPoolUnique(vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eTransient,
-                                                               .queueFamilyIndex = queue_family_index});
+      device->createCommandPoolUnique(vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eTransient,
+                                                                .queueFamilyIndex = transfer_index});
 
   const auto command_buffers =
-      device.allocateCommandBuffersUnique(vk::CommandBufferAllocateInfo{.commandPool = *command_pool,
-                                                                        .level = vk::CommandBufferLevel::ePrimary,
-                                                                        .commandBufferCount = 1});
+      device->allocateCommandBuffersUnique(vk::CommandBufferAllocateInfo{.commandPool = *command_pool,
+                                                                         .level = vk::CommandBufferLevel::ePrimary,
+                                                                         .commandBufferCount = 1});
   const auto command_buffer = *command_buffers.front();
   command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
 
   std::vector<gfx::Buffer> staging_buffers;
-  staging_buffers.reserve(static_cast<std::size_t>(scene.mNumMeshes) * 2);
-
-  auto scene_meshes =
-      std::span{scene.mMeshes, scene.mNumMeshes}  //
-      | std::views::transform([command_buffer, allocator, &staging_buffers](const auto* const mesh) {
-          const auto vertices = GetVertices(*mesh);
-          auto [staging_vertex_buffer, vertex_buffer] =
-              CreateBuffers(vertices, vk::BufferUsageFlagBits::eVertexBuffer, command_buffer, allocator);
-
-          const auto indices = GetIndices(*mesh);
-          auto [staging_index_buffer, index_buffer] =
-              CreateBuffers(indices, vk::BufferUsageFlagBits::eIndexBuffer, command_buffer, allocator);
-
-          // keep staging buffers alive until copy commands have completed
-          staging_buffers.push_back(std::move(staging_vertex_buffer));
-          staging_buffers.push_back(std::move(staging_index_buffer));
-
-          return gfx::Mesh{std::move(vertex_buffer),
-                           std::move(index_buffer),
-                           static_cast<std::uint32_t>(indices.size())};
-        })
-      | std::ranges::to<std::vector>();
+  auto meshes = std::span{data.meshes, data.meshes_count}
+                | std::views::transform([command_buffer, allocator, &staging_buffers](const auto& mesh) {
+                    return std::pair{&mesh, CreateSubMeshes(mesh, command_buffer, allocator, staging_buffers)};
+                  })
+                | std::ranges::to<std::unordered_map>();
 
   command_buffer.end();
 
-  const auto fence = device.createFenceUnique(vk::FenceCreateInfo{});
-  queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &command_buffer}, *fence);
-
-  // import the rest of the scene while copy commands are processing
-  auto root_node = ImportNode(*scene.mRootNode, scene_meshes);
+  const auto fence = device->createFenceUnique(vk::FenceCreateInfo{});
+  transfer_queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &command_buffer}, *fence);
 
   static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
-  const auto result = device.waitForFences(*fence, vk::True, kMaxTimeout);
+  const auto result = device->waitForFences(*fence, vk::True, kMaxTimeout);
   vk::resultCheck(result, "Fence failed to enter a signaled state");
 
-  return root_node;
+  return meshes;
 }
 
 void RenderNode(const gfx::Node& node,
                 const vk::CommandBuffer command_buffer,
                 const vk::PipelineLayout pipeline_layout,
-                const glm::mat4& parent_transform = glm::mat4{1.0f}) {
+                const glm::mat4 parent_transform = glm::mat4{1.0f}) {
   const auto node_transform = parent_transform * node.transform;
   command_buffer.pushConstants<gfx::PushConstants>(pipeline_layout,
                                                    vk::ShaderStageFlagBits::eVertex,
@@ -236,21 +309,10 @@ void RenderNode(const gfx::Node& node,
 
 namespace gfx {
 
-Model::Model(const Device& device, const VmaAllocator allocator, const std::filesystem::path& filepath) {
-  Assimp::Importer importer;
-  std::uint32_t import_flags = aiProcessPreset_TargetRealtime_Fast;
-
-#ifndef NDEBUG
-  import_flags |= aiProcess_ValidateDataStructure;  // NOLINT(hicpp-signed-bitwise)
-  Assimp::DefaultLogger::create(ASSIMP_DEFAULT_LOG_NAME, Assimp::Logger::DEBUGGING);
-#endif
-
-  const auto* scene = importer.ReadFile(filepath.string(), import_flags);
-  if (scene == nullptr) throw std::runtime_error{importer.GetErrorString()};
-
-  const auto transfer_queue = device.transfer_queue();
-  const auto transfer_index = device.physical_device().queue_family_indices().transfer_index;
-  root_node_ = ImportScene(*scene, *device, transfer_queue, transfer_index, allocator);
+Model::Model(const Device& device, const VmaAllocator allocator, const std::filesystem::path& gltf_filepath) {
+  const auto data = ParseFile(gltf_filepath.string().c_str());
+  auto meshes = CreateMeshes(*data, device, allocator);
+  root_node_ = ImportScene(*data->scene, meshes);
 }
 
 void Model::Translate(const float dx, const float dy, const float dz) const {

@@ -283,10 +283,6 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
                                           .offset = offsetof(gfx::Vertex, position)},
       vk::VertexInputAttributeDescription{.location = 1,
                                           .binding = 0,
-                                          .format = vk::Format::eR32G32Sfloat,
-                                          .offset = offsetof(gfx::Vertex, texture_coordinates)},
-      vk::VertexInputAttributeDescription{.location = 2,
-                                          .binding = 0,
                                           .format = vk::Format::eR32G32B32Sfloat,
                                           .offset = offsetof(gfx::Vertex, normal)}};
 
