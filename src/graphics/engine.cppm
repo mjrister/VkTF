@@ -74,7 +74,10 @@ struct CameraTransforms {
   glm::mat4 projection_transform{1.0f};
 };
 
-vk::SampleCountFlagBits GetMsaaSampleCount(const vk::PhysicalDeviceLimits& physical_device_limits) {
+vk::SampleCountFlagBits GetMsaaSampleCount(const vk::PhysicalDevice physical_device) {
+  const auto& physical_device_properties = physical_device.getProperties();
+  const auto& physical_device_limits = physical_device_properties.limits;
+
   const auto color_sample_count_flags = physical_device_limits.framebufferColorSampleCounts;
   const auto depth_sample_count_flags = physical_device_limits.framebufferDepthSampleCounts;
   const auto color_depth_sample_count_flags = color_sample_count_flags & depth_sample_count_flags;
@@ -359,7 +362,7 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
 vk::UniqueCommandPool CreateCommandPool(const gfx::Device& device) {
   return device->createCommandPoolUnique(
       vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-                                .queueFamilyIndex = device.physical_device().queue_family_indices().graphics_index});
+                                .queueFamilyIndex = device.queue_family_indices().graphics_index});
 }
 
 template <std::size_t N>
@@ -393,9 +396,9 @@ namespace gfx {
 Engine::Engine(const Window& window)
     : surface_{window.CreateSurface(*instance_)},
       device_{*instance_, *surface_},
-      allocator_{*instance_, *device_.physical_device(), *device_},
-      swapchain_{device_, window, *surface_},
-      msaa_sample_count_{GetMsaaSampleCount(device_.physical_device().limits())},
+      allocator_{*instance_, device_.physical_device(), *device_},
+      swapchain_{window, *surface_, device_},
+      msaa_sample_count_{GetMsaaSampleCount(device_.physical_device())},
       color_attachment_{*device_,
                         swapchain_.image_format(),
                         swapchain_.image_extent(),

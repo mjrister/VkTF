@@ -254,7 +254,7 @@ std::unordered_map<const cgltf_mesh*, std::vector<gfx::Mesh>> CreateMeshes(const
                                                                            const gfx::Device& device,
                                                                            const VmaAllocator allocator) {
   const auto transfer_queue = device.transfer_queue();
-  const auto transfer_index = device.physical_device().queue_family_indices().transfer_index;
+  const auto transfer_index = device.queue_family_indices().transfer_index;
 
   const auto command_pool =
       device->createCommandPoolUnique(vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eTransient,

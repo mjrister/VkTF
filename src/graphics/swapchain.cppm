@@ -19,7 +19,7 @@ namespace gfx {
 
 export class Swapchain {
 public:
-  Swapchain(const Device& device, const Window& window, vk::SurfaceKHR surface);
+  Swapchain(const Window& window, vk::SurfaceKHR surface, const Device& device);
 
   [[nodiscard]] vk::SwapchainKHR operator*() const noexcept { return *swapchain_; }
   [[nodiscard]] const vk::SwapchainKHR* operator->() const noexcept { return &(*swapchain_); }
@@ -104,9 +104,9 @@ std::vector<vk::UniqueImageView> CreateSwapchainImageViews(const vk::Device devi
 std::tuple<vk::UniqueSwapchainKHR, vk::Format, vk::Extent2D> CreateSwapchain(const gfx::Device& device,
                                                                              const gfx::Window& window,
                                                                              const vk::SurfaceKHR surface) {
-  const auto& physical_device = device.physical_device();
-  const auto surface_capabilities = physical_device->getSurfaceCapabilitiesKHR(surface);
-  const auto [image_format, image_color_space] = GetSwapchainSurfaceFormat(*physical_device, surface);
+  const auto physical_device = device.physical_device();
+  const auto surface_capabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
+  const auto [image_format, image_color_space] = GetSwapchainSurfaceFormat(physical_device, surface);
   const auto image_extent = GetSwapchainImageExtent(surface_capabilities, window.GetFramebufferSize());
 
   vk::SwapchainCreateInfoKHR swapchain_create_info{.surface = surface,
@@ -116,11 +116,10 @@ std::tuple<vk::UniqueSwapchainKHR, vk::Format, vk::Extent2D> CreateSwapchain(con
                                                    .imageExtent = image_extent,
                                                    .imageArrayLayers = 1,
                                                    .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
-                                                   .presentMode = GetSwapchainPresentMode(*physical_device, surface),
+                                                   .presentMode = GetSwapchainPresentMode(physical_device, surface),
                                                    .clipped = vk::True};
 
-  if (const auto [graphics_index, present_index, _] = physical_device.queue_family_indices();
-      graphics_index != present_index) {
+  if (const auto [graphics_index, present_index, _] = device.queue_family_indices(); graphics_index != present_index) {
     const std::array queue_family_indices{graphics_index, present_index};
     swapchain_create_info.imageSharingMode = vk::SharingMode::eConcurrent;
     swapchain_create_info.queueFamilyIndexCount = 2;
@@ -138,7 +137,7 @@ std::tuple<vk::UniqueSwapchainKHR, vk::Format, vk::Extent2D> CreateSwapchain(con
 
 namespace gfx {
 
-Swapchain::Swapchain(const Device& device, const Window& window, const vk::SurfaceKHR surface) {
+Swapchain::Swapchain(const Window& window, const vk::SurfaceKHR surface, const Device& device) {
   std::tie(swapchain_, image_format_, image_extent_) = CreateSwapchain(device, window, surface);
   image_views_ = CreateSwapchainImageViews(*device, *swapchain_, image_format_);
 }

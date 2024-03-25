@@ -10,7 +10,6 @@ target_sources(graphics PUBLIC FILE_SET CXX_MODULES FILES allocator.cppm
                                                           instance.cppm
                                                           mesh.cppm
                                                           model.cppm
-                                                          physical_device.cppm
                                                           shader_module.cppm
                                                           swapchain.cppm
                                                           window.cppm)
