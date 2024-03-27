@@ -22,7 +22,6 @@ public:
   Swapchain(const Window& window, vk::SurfaceKHR surface, const Device& device);
 
   [[nodiscard]] vk::SwapchainKHR operator*() const noexcept { return *swapchain_; }
-  [[nodiscard]] const vk::SwapchainKHR* operator->() const noexcept { return &(*swapchain_); }
 
   [[nodiscard]] vk::Format image_format() const noexcept { return image_format_; }
   [[nodiscard]] vk::Extent2D image_extent() const noexcept { return image_extent_; }
@@ -46,12 +45,11 @@ namespace {
 
 vk::SurfaceFormatKHR GetSwapchainSurfaceFormat(const vk::PhysicalDevice physical_device, const vk::SurfaceKHR surface) {
   const auto surface_formats = physical_device.getSurfaceFormatsKHR(surface);
-  if (static constexpr vk::SurfaceFormatKHR kTargetSurfaceFormat{vk::Format::eB8G8R8A8Srgb,
-                                                                 vk::ColorSpaceKHR::eSrgbNonlinear};
-      std::ranges::contains(surface_formats, kTargetSurfaceFormat)) {
-    return kTargetSurfaceFormat;
+  if (static constexpr vk::SurfaceFormatKHR kTargetFormat{vk::Format::eB8G8R8A8Srgb, vk::ColorSpaceKHR::eSrgbNonlinear};
+      std::ranges::contains(surface_formats, kTargetFormat)) {
+    return kTargetFormat;
   }
-  return surface_formats.front();  // required to be non-empty by the Vulkan specification
+  return surface_formats.front();
 }
 
 vk::PresentModeKHR GetSwapchainPresentMode(const vk::PhysicalDevice physical_device, const vk::SurfaceKHR surface) {
@@ -60,7 +58,7 @@ vk::PresentModeKHR GetSwapchainPresentMode(const vk::PhysicalDevice physical_dev
       std::ranges::contains(present_modes, kTargetPresentMode)) {
     return kTargetPresentMode;
   }
-  return vk::PresentModeKHR::eFifo;  // required to be supported by the Vulkan specification
+  return vk::PresentModeKHR::eFifo;
 }
 
 std::uint32_t GetSwapchainImageCount(const vk::SurfaceCapabilitiesKHR& surface_capabilities) {
@@ -85,9 +83,41 @@ vk::Extent2D GetSwapchainImageExtent(const vk::SurfaceCapabilitiesKHR& surface_c
                       .height = std::clamp(static_cast<std::uint32_t>(framebuffer_height), min_height, max_height)};
 }
 
-std::vector<vk::UniqueImageView> CreateSwapchainImageViews(const vk::Device device,
-                                                           const vk::SwapchainKHR swapchain,
-                                                           const vk::Format image_format) {
+std::tuple<vk::UniqueSwapchainKHR, vk::Format, vk::Extent2D> CreateSwapchain(const gfx::Window& window,
+                                                                             const vk::SurfaceKHR surface,
+                                                                             const gfx::Device& device) {
+  const auto physical_device = device.physical_device();
+  const auto surface_capabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
+  const auto [image_format, image_color_space] = GetSwapchainSurfaceFormat(physical_device, surface);
+  const auto image_extent = GetSwapchainImageExtent(surface_capabilities, window.GetFramebufferSize());
+  vk::SwapchainCreateInfoKHR swapchain_create_info{.surface = surface,
+                                                   .minImageCount = GetSwapchainImageCount(surface_capabilities),
+                                                   .imageFormat = image_format,
+                                                   .imageColorSpace = image_color_space,
+                                                   .imageExtent = image_extent,
+                                                   .imageArrayLayers = 1,
+                                                   .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
+                                                   .presentMode = GetSwapchainPresentMode(physical_device, surface),
+                                                   .clipped = vk::True};
+
+  const auto [graphics_index, present_index, _] = device.queue_family_indices();
+  const std::array queue_family_indices{graphics_index, present_index};
+  if (graphics_index != present_index) {
+    swapchain_create_info.imageSharingMode = vk::SharingMode::eConcurrent;
+    swapchain_create_info.queueFamilyIndexCount = 2;
+    swapchain_create_info.pQueueFamilyIndices = queue_family_indices.data();
+  } else {
+    swapchain_create_info.imageSharingMode = vk::SharingMode::eExclusive;
+    swapchain_create_info.queueFamilyIndexCount = 1;
+    swapchain_create_info.pQueueFamilyIndices = &graphics_index;
+  }
+
+  return std::tuple{device->createSwapchainKHRUnique(swapchain_create_info), image_format, image_extent};
+}
+
+std::vector<vk::UniqueImageView> CreateSwapchainImageViews(const vk::SwapchainKHR swapchain,
+                                                           const vk::Format image_format,
+                                                           const vk::Device device) {
   return device.getSwapchainImagesKHR(swapchain)  //
          | std::views::transform([device, image_format](const auto image) {
              return device.createImageViewUnique(vk::ImageViewCreateInfo{
@@ -101,45 +131,13 @@ std::vector<vk::UniqueImageView> CreateSwapchainImageViews(const vk::Device devi
          | std::ranges::to<std::vector>();
 }
 
-std::tuple<vk::UniqueSwapchainKHR, vk::Format, vk::Extent2D> CreateSwapchain(const gfx::Device& device,
-                                                                             const gfx::Window& window,
-                                                                             const vk::SurfaceKHR surface) {
-  const auto physical_device = device.physical_device();
-  const auto surface_capabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
-  const auto [image_format, image_color_space] = GetSwapchainSurfaceFormat(physical_device, surface);
-  const auto image_extent = GetSwapchainImageExtent(surface_capabilities, window.GetFramebufferSize());
-
-  vk::SwapchainCreateInfoKHR swapchain_create_info{.surface = surface,
-                                                   .minImageCount = GetSwapchainImageCount(surface_capabilities),
-                                                   .imageFormat = image_format,
-                                                   .imageColorSpace = image_color_space,
-                                                   .imageExtent = image_extent,
-                                                   .imageArrayLayers = 1,
-                                                   .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
-                                                   .presentMode = GetSwapchainPresentMode(physical_device, surface),
-                                                   .clipped = vk::True};
-
-  if (const auto [graphics_index, present_index, _] = device.queue_family_indices(); graphics_index != present_index) {
-    const std::array queue_family_indices{graphics_index, present_index};
-    swapchain_create_info.imageSharingMode = vk::SharingMode::eConcurrent;
-    swapchain_create_info.queueFamilyIndexCount = 2;
-    swapchain_create_info.pQueueFamilyIndices = queue_family_indices.data();
-  } else {
-    swapchain_create_info.imageSharingMode = vk::SharingMode::eExclusive;
-    swapchain_create_info.queueFamilyIndexCount = 1;
-    swapchain_create_info.pQueueFamilyIndices = &graphics_index;
-  }
-
-  return std::tuple{device->createSwapchainKHRUnique(swapchain_create_info), image_format, image_extent};
-}
-
 }  // namespace
 
 namespace gfx {
 
 Swapchain::Swapchain(const Window& window, const vk::SurfaceKHR surface, const Device& device) {
-  std::tie(swapchain_, image_format_, image_extent_) = CreateSwapchain(device, window, surface);
-  image_views_ = CreateSwapchainImageViews(*device, *swapchain_, image_format_);
+  std::tie(swapchain_, image_format_, image_extent_) = CreateSwapchain(window, surface, device);
+  image_views_ = CreateSwapchainImageViews(*swapchain_, image_format_, *device);
 }
 
 }  // namespace gfx
