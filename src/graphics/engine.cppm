@@ -32,9 +32,9 @@ export class Engine {
 public:
   explicit Engine(const Window& window);
 
-  [[nodiscard]] const Device& device() const noexcept { return device_; }
-  [[nodiscard]] VmaAllocator allocator() const noexcept { return *allocator_; }
+  [[nodiscard]] const vk::Device device() const noexcept { return *device_; }
 
+  [[nodiscard]] gfx::Model LoadModel(const std::filesystem::path& gltf_filepath) const;
   void Render(const Camera& camera, const Model& model);
 
 private:
@@ -244,13 +244,13 @@ std::vector<gfx::Buffer> CreateUniformBuffers(const gfx::Device& device,
 }
 
 vk::UniquePipelineLayout CreateGraphicsPipelineLayout(const vk::Device device,
-                                                      const vk::DescriptorSetLayout& descriptor_set_layouts) {
+                                                      const vk::DescriptorSetLayout& descriptor_set_layout) {
   static constexpr vk::PushConstantRange kPushConstantRange{.stageFlags = vk::ShaderStageFlagBits::eVertex,
                                                             .offset = 0,
                                                             .size = sizeof(gfx::PushConstants)};
 
   return device.createPipelineLayoutUnique(vk::PipelineLayoutCreateInfo{.setLayoutCount = 1,
-                                                                        .pSetLayouts = &descriptor_set_layouts,
+                                                                        .pSetLayouts = &descriptor_set_layout,
                                                                         .pushConstantRangeCount = 1,
                                                                         .pPushConstantRanges = &kPushConstantRange});
 }
@@ -441,6 +441,10 @@ Engine::Engine(const Window& window)
       acquire_next_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)},
       present_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)},
       draw_fences_{CreateFences<kMaxRenderFrames>(*device_)} {}
+
+Model Engine::LoadModel(const std::filesystem::path& gltf_filepath) const {
+  return gfx::Model{gltf_filepath, device_, *allocator_};
+}
 
 void Engine::Render(const Camera& camera, const Model& model) {
   if (++current_frame_index_ == kMaxRenderFrames) {

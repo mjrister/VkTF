@@ -289,7 +289,7 @@ std::unordered_map<const cgltf_mesh*, std::vector<gfx::Mesh>> CreateMeshes(const
 void RenderNode(const gfx::Node& node,
                 const vk::CommandBuffer command_buffer,
                 const vk::PipelineLayout pipeline_layout,
-                const glm::mat4 parent_transform = glm::mat4{1.0f}) {
+                const glm::mat4& parent_transform = glm::mat4{1.0f}) {
   const auto node_transform = parent_transform * node.transform;
   command_buffer.pushConstants<gfx::PushConstants>(pipeline_layout,
                                                    vk::ShaderStageFlagBits::eVertex,

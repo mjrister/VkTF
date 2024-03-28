@@ -90,8 +90,7 @@ Game::Game()
     : window_{"VkRender", kWindowWidth, kWindowHeight},
       engine_{window_},
       camera_{CreateCamera(window_.GetAspectRatio())},
-      model_{"assets/models/sponza/Main.1_Sponza/NewSponza_Main_glTF_002.gltf", engine_.device(), engine_.allocator()} {
-}
+      model_{engine_.LoadModel("assets/models/sponza/Main.1_Sponza/NewSponza_Main_glTF_002.gltf")} {}
 
 void Game::Run() {
   for (DeltaTime delta_time; !window_.IsClosed();) {
@@ -101,7 +100,7 @@ void Game::Run() {
     HandleMouseEvents(window_, camera_);
     engine_.Render(camera_, model_);
   }
-  engine_.device()->waitIdle();
+  engine_.device().waitIdle();
 }
 
 }  // namespace gfx
