@@ -53,15 +53,11 @@ vk::PhysicalDevice SelectPhysicalDevice(const vk::Instance instance) {
   if (physical_devices.empty()) {
     throw std::runtime_error{"No supported physical device could be found"};
   }
-  static constexpr auto kIsDiscreteGpu = [](const auto physical_device) {
+  const auto iterator = std::ranges::find_if(physical_devices, [](const auto physical_device) {
     const auto device_type = physical_device.getProperties().deviceType;
     return device_type == vk::PhysicalDeviceType::eDiscreteGpu;
-  };
-  if (const auto iterator = std::ranges::find_if(physical_devices, kIsDiscreteGpu);
-      iterator != std::ranges::cend(physical_devices)) {
-    return *iterator;
-  }
-  return physical_devices.front();
+  });
+  return iterator != std::ranges::cend(physical_devices) ? *iterator : physical_devices.front();
 }
 
 std::optional<std::uint32_t> FindQueueFamilyIndex(

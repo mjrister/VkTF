@@ -48,7 +48,7 @@ struct Node {
 
 export class Model {
 public:
-  Model(const Device& device, VmaAllocator allocator, const std::filesystem::path& gltf_filepath);
+  Model(const std::filesystem::path& gltf_filepath, const Device& device, VmaAllocator allocator);
 
   void Translate(float dx, float dy, float dz) const;
   void Rotate(const glm::vec3& axis, float angle) const;
@@ -309,7 +309,7 @@ void RenderNode(const gfx::Node& node,
 
 namespace gfx {
 
-Model::Model(const Device& device, const VmaAllocator allocator, const std::filesystem::path& gltf_filepath) {
+Model::Model(const std::filesystem::path& gltf_filepath, const Device& device, const VmaAllocator allocator) {
   const auto data = ParseFile(gltf_filepath.string().c_str());
   auto meshes = CreateMeshes(*data, device, allocator);
   root_node_ = ImportScene(*data->scene, meshes);

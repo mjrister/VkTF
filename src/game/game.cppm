@@ -90,7 +90,7 @@ Game::Game()
     : window_{"VkRender", kWindowWidth, kWindowHeight},
       engine_{window_},
       camera_{CreateCamera(window_.GetAspectRatio())},
-      model_{engine_.device(), engine_.allocator(), "assets/models/sponza/Main.1_Sponza/NewSponza_Main_glTF_002.gltf"} {
+      model_{"assets/models/sponza/Main.1_Sponza/NewSponza_Main_glTF_002.gltf", engine_.device(), engine_.allocator()} {
 }
 
 void Game::Run() {

@@ -261,10 +261,10 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
                                           const vk::PipelineLayout pipeline_layout,
                                           const vk::RenderPass render_pass) {
   const std::filesystem::path vertex_shader_filepath{"assets/shaders/mesh.vert"};
-  const gfx::ShaderModule vertex_shader_module{device, vk::ShaderStageFlagBits::eVertex, vertex_shader_filepath};
+  const gfx::ShaderModule vertex_shader_module{vertex_shader_filepath, vk::ShaderStageFlagBits::eVertex, device};
 
   const std::filesystem::path fragment_shader_filepath{"assets/shaders/mesh.frag"};
-  const gfx::ShaderModule fragment_shader_module{device, vk::ShaderStageFlagBits::eFragment, fragment_shader_filepath};
+  const gfx::ShaderModule fragment_shader_module{fragment_shader_filepath, vk::ShaderStageFlagBits::eFragment, device};
 
   const std::array shader_stage_create_info{
       vk::PipelineShaderStageCreateInfo{.stage = vk::ShaderStageFlagBits::eVertex,
@@ -399,22 +399,22 @@ Engine::Engine(const Window& window)
       allocator_{*instance_, device_.physical_device(), *device_},
       swapchain_{window, *surface_, device_},
       msaa_sample_count_{GetMsaaSampleCount(device_.physical_device())},
-      color_attachment_{*device_,
-                        swapchain_.image_format(),
+      color_attachment_{swapchain_.image_format(),
                         swapchain_.image_extent(),
                         msaa_sample_count_,
                         vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransientAttachment,
                         vk::ImageAspectFlagBits::eColor,
+                        *device_,
                         *allocator_,
                         VmaAllocationCreateInfo{.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
                                                 .usage = VMA_MEMORY_USAGE_AUTO,
                                                 .priority = 1.0f}},
-      depth_attachment_{*device_,
-                        vk::Format::eD24UnormS8Uint,  // TODO(#54): check device support
+      depth_attachment_{vk::Format::eD24UnormS8Uint,  // TODO(#54): check device support
                         swapchain_.image_extent(),
                         msaa_sample_count_,
                         vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eTransientAttachment,
                         vk::ImageAspectFlagBits::eDepth,
+                        *device_,
                         *allocator_,
                         VmaAllocationCreateInfo{.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
                                                 .usage = VMA_MEMORY_USAGE_AUTO,
