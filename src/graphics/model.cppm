@@ -1,6 +1,5 @@
 module;
 
-#include <array>
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -105,11 +104,9 @@ UniqueCgltfData ParseFile(const char* const gltf_filepath) {
       result != cgltf_result_success) {
     throw std::runtime_error{std::format("Parse file failed with with error {}", result)};
   }
-
   if (const auto result = cgltf_load_buffers(&kOptions, data.get(), gltf_filepath); result != cgltf_result_success) {
     throw std::runtime_error{std::format("Load buffers failed with error {}", result)};
   }
-
 #ifndef NDEBUG
   if (const auto result = cgltf_validate(data.get()); result != cgltf_result_success) {
     throw std::runtime_error{std::format("Validation failed with error {}", result)};
@@ -176,7 +173,7 @@ std::vector<gfx::Mesh> GetSubMeshes(const cgltf_node& node,
   if (node.mesh == nullptr) return {};
   auto iterator = meshes.find(node.mesh);
   assert(iterator != meshes.cend());
-  return std::move(iterator->second);
+  return std::move(iterator->second);  // TODO(matthew-rister): this assumes a 1:1 mapping between nodes and meshes
 }
 
 std::unique_ptr<gfx::Node> ImportNode(const cgltf_node& node,
@@ -199,52 +196,44 @@ std::unique_ptr<gfx::Node> ImportScene(const cgltf_scene& scene,
 }
 
 template <typename T>
-std::array<gfx::Buffer, 2> CreateBuffers(const std::vector<T>& data,
-                                         const vk::BufferUsageFlags buffer_usage_flags,
-                                         const vk::CommandBuffer command_buffer,
-                                         const VmaAllocator allocator) {
+gfx::Buffer CreateBuffer(const std::vector<T>& data,
+                         const vk::BufferUsageFlags buffer_usage_flags,
+                         const vk::CommandBuffer command_buffer,
+                         const VmaAllocator allocator,
+                         std::vector<gfx::Buffer>& staging_buffers) {
   const auto size_bytes = sizeof(T) * data.size();
 
   static constexpr VmaAllocationCreateInfo kStagingBufferAllocationCreateInfo{
       .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
       .usage = VMA_MEMORY_USAGE_AUTO};
-  gfx::Buffer staging_buffer{size_bytes,
-                             vk::BufferUsageFlagBits::eTransferSrc,
-                             allocator,
-                             kStagingBufferAllocationCreateInfo};
-  staging_buffer.CopyOnce<const T>(data);
+  auto& staging_buffer = staging_buffers.emplace_back(size_bytes,
+                                                      vk::BufferUsageFlagBits::eTransferSrc,
+                                                      allocator,
+                                                      kStagingBufferAllocationCreateInfo);
+  staging_buffer.CopyOnce<T>(data);
 
-  static constexpr VmaAllocationCreateInfo kBufferAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+  static constexpr VmaAllocationCreateInfo kBufferAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO};
   gfx::Buffer buffer{size_bytes,
                      buffer_usage_flags | vk::BufferUsageFlagBits::eTransferDst,
                      allocator,
                      kBufferAllocationCreateInfo};
   command_buffer.copyBuffer(*staging_buffer, *buffer, vk::BufferCopy{.size = size_bytes});
 
-  return std::array{std::move(staging_buffer), std::move(buffer)};
+  return buffer;
 }
 
 std::vector<gfx::Mesh> CreateSubMeshes(const cgltf_mesh& mesh,
                                        const vk::CommandBuffer command_buffer,
                                        const VmaAllocator allocator,
                                        std::vector<gfx::Buffer>& staging_buffers) {
-  return std::span{mesh.primitives, mesh.primitives_count}  //
+  return std::span{mesh.primitives, mesh.primitives_count}
          | std::views::filter([](const auto& primitive) { return primitive.type == cgltf_primitive_type_triangles; })
          | std::views::transform([command_buffer, allocator, &staging_buffers](const auto& primitive) {
+             using enum vk::BufferUsageFlagBits;
              const auto vertices = GetVertices(primitive);
-             auto [staging_vertex_buffer, vertex_buffer] =
-                 CreateBuffers(vertices, vk::BufferUsageFlagBits::eVertexBuffer, command_buffer, allocator);
-
              const auto indices = GetIndices(*primitive.indices);
-             auto [staging_index_buffer, index_buffer] =
-                 CreateBuffers(indices, vk::BufferUsageFlagBits::eIndexBuffer, command_buffer, allocator);
-
-             // staging buffers must be kept alive while copy commands complete
-             staging_buffers.push_back(std::move(staging_vertex_buffer));
-             staging_buffers.push_back(std::move(staging_index_buffer));
-
-             return gfx::Mesh{std::move(vertex_buffer),
-                              std::move(index_buffer),
+             return gfx::Mesh{CreateBuffer(vertices, eVertexBuffer, command_buffer, allocator, staging_buffers),
+                              CreateBuffer(indices, eIndexBuffer, command_buffer, allocator, staging_buffers),
                               static_cast<std::uint32_t>(indices.size())};
            })
          | std::ranges::to<std::vector>();
@@ -267,7 +256,7 @@ std::unordered_map<const cgltf_mesh*, std::vector<gfx::Mesh>> CreateMeshes(const
   const auto command_buffer = *command_buffers.front();
   command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
 
-  std::vector<gfx::Buffer> staging_buffers;
+  std::vector<gfx::Buffer> staging_buffers;  // staging buffers must remain in scope until copy commands complete
   auto meshes = std::span{data.meshes, data.meshes_count}
                 | std::views::transform([command_buffer, allocator, &staging_buffers](const auto& mesh) {
                     return std::pair{&mesh, CreateSubMeshes(mesh, command_buffer, allocator, staging_buffers)};
