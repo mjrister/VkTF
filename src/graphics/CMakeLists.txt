@@ -1,18 +1,15 @@
-add_library(graphics STATIC)
-
-target_sources(graphics PUBLIC FILE_SET CXX_MODULES FILES allocator.cppm
-                                                          buffer.cppm
-                                                          camera.cppm
-                                                          device.cppm
-                                                          engine.cppm
-                                                          glslang_compiler.cppm
-                                                          image.cppm
-                                                          instance.cppm
-                                                          mesh.cppm
-                                                          model.cppm
-                                                          shader_module.cppm
-                                                          swapchain.cppm
-                                                          window.cppm)
+add_library(graphics STATIC allocator.cpp
+                            buffer.cpp
+                            camera.cpp
+                            device.cpp
+                            engine.cpp
+                            glslang_compiler.cpp
+                            image.cpp
+                            instance.cpp
+                            model.cpp
+                            shader_module.cpp
+                            swapchain.cpp
+                            window.cpp)
 
 find_package(VulkanHeaders CONFIG REQUIRED)
 find_package(VulkanMemoryAllocator CONFIG REQUIRED)
@@ -26,7 +23,8 @@ target_link_libraries(graphics PUBLIC GPUOpen::VulkanMemoryAllocator
                                       glm::glm
                                       glslang::glslang
                                       glslang::glslang-default-resource-limits
-                                      glslang::SPIRV)
+                                      glslang::SPIRV
+                                      math)
 
 target_compile_definitions(graphics PUBLIC GLFW_INCLUDE_VULKAN
                                            GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
@@ -37,3 +35,5 @@ target_compile_definitions(graphics PUBLIC GLFW_INCLUDE_VULKAN
                                            VMA_DYNAMIC_VULKAN_FUNCTIONS=0
                                            VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
                                            VULKAN_HPP_NO_CONSTRUCTORS)
+
+target_include_directories(graphics PUBLIC ${CGLTF_INCLUDE_DIRS} include)

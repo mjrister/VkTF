@@ -1,56 +1,10 @@
-module;
+#include "graphics/window.h"
 
 #include <cstdint>
 #include <format>
 #include <iostream>
-#include <memory>
 #include <print>
-#include <span>
 #include <stdexcept>
-#include <utility>
-
-#include <GLFW/glfw3.h>
-#if GLFW_INCLUDE_VULKAN
-#include <vulkan/vulkan.hpp>
-#endif
-
-export module window;
-
-using UniqueGlfwWindow = std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)>;
-
-namespace gfx {
-
-export class Window {
-public:
-  Window(const char* title, int width, int height);
-
-  [[nodiscard]] std::pair<int, int> GetSize() const noexcept;
-  [[nodiscard]] std::pair<int, int> GetFramebufferSize() const noexcept;
-  [[nodiscard]] std::pair<float, float> GetCursorPosition() const noexcept;
-  [[nodiscard]] float GetAspectRatio() const noexcept;
-
-  [[nodiscard]] bool IsKeyPressed(const int key) const noexcept { return glfwGetKey(window_.get(), key) == GLFW_PRESS; }
-  [[nodiscard]] bool IsMouseButtonPressed(const int button) const noexcept {
-    return glfwGetMouseButton(window_.get(), button) == GLFW_PRESS;
-  }
-
-  [[nodiscard]] bool IsClosed() const noexcept { return glfwWindowShouldClose(window_.get()) == GLFW_TRUE; }
-  void Close() const noexcept { glfwSetWindowShouldClose(window_.get(), GLFW_TRUE); }
-
-  static void Update() noexcept { glfwPollEvents(); }
-
-#ifdef GLFW_INCLUDE_VULKAN
-  [[nodiscard]] static std::span<const char* const> GetInstanceExtensions();
-  [[nodiscard]] vk::UniqueSurfaceKHR CreateSurface(vk::Instance instance) const;
-#endif
-
-private:
-  UniqueGlfwWindow window_;
-};
-
-}  // namespace gfx
-
-module :private;
 
 namespace {
 
@@ -85,6 +39,8 @@ private:
 #endif
   }
 };
+
+using UniqueGlfwWindow = std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)>;
 
 UniqueGlfwWindow CreateGlfwWindow(const char* const title, int width, int height) {
   [[maybe_unused]] const auto& glfw_context = GlfwContext::Get();

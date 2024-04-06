@@ -1,37 +1,6 @@
-module;
+#include "graphics/allocator.h"
 
-#include <utility>
-
-#include <vk_mem_alloc.h>
-#include <vulkan/vulkan.hpp>
-
-export module allocator;
-
-import instance;
-
-namespace gfx {
-
-export class Allocator {
-public:
-  Allocator(vk::Instance instance, vk::PhysicalDevice physical_device, vk::Device device);
-
-  Allocator(const Allocator&) = delete;
-  Allocator(Allocator&& allocator) noexcept { *this = std::move(allocator); }
-
-  Allocator& operator=(const Allocator&) = delete;
-  Allocator& operator=(Allocator&& allocator) noexcept;
-
-  ~Allocator() noexcept { vmaDestroyAllocator(allocator_); }
-
-  [[nodiscard]] VmaAllocator operator*() const noexcept { return allocator_; }
-
-private:
-  VmaAllocator allocator_{};
-};
-
-}  // namespace gfx
-
-module :private;
+#include "graphics/instance.h"
 
 namespace {
 

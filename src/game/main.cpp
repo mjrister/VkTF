@@ -13,7 +13,7 @@
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 #endif
 
-import game;
+#include "game/game.h"
 
 int main() {  // NOLINT(bugprone-exception-escape)
   try {

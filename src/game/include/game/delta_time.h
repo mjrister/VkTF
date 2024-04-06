@@ -1,12 +1,11 @@
-module;
+#ifndef SRC_GAME_INCLUDE_GAME_DELTA_TIME_H_
+#define SRC_GAME_INCLUDE_GAME_DELTA_TIME_H_
 
 #include <chrono>
 
-export module delta_time;
-
 namespace gfx {
 
-export class DeltaTime {
+class DeltaTime {
   using Clock = std::chrono::steady_clock;
   using Duration = std::chrono::duration<float>;
   using TimePoint = std::chrono::time_point<Clock, Duration>;
@@ -27,3 +26,5 @@ private:
 };
 
 }  // namespace gfx
+
+#endif  // SRC_GAME_INCLUDE_GAME_DELTA_TIME_H_

@@ -1,47 +1,4 @@
-module;
-
-#include <utility>
-
-#include <vk_mem_alloc.h>
-#include <vulkan/vulkan.hpp>
-
-export module image;
-
-namespace gfx {
-
-export class Image {
-public:
-  Image(vk::Format format,
-        vk::Extent2D extent,
-        vk::SampleCountFlagBits sample_count,
-        vk::ImageUsageFlags image_usage_flags,
-        vk::ImageAspectFlags image_aspect_flags,
-        vk::Device device,
-        VmaAllocator allocator,
-        const VmaAllocationCreateInfo& allocation_create_info);
-
-  Image(const Image&) = delete;
-  Image(Image&& image) noexcept { *this = std::move(image); }
-
-  Image& operator=(const Image&) = delete;
-  Image& operator=(Image&& image) noexcept;
-
-  ~Image() noexcept;
-
-  [[nodiscard]] vk::ImageView image_view() const noexcept { return *image_view_; }
-  [[nodiscard]] vk::Format format() const noexcept { return format_; }
-
-private:
-  vk::Image image_;
-  vk::UniqueImageView image_view_;
-  vk::Format format_{};
-  VmaAllocator allocator_{};
-  VmaAllocation allocation_{};
-};
-
-}  // namespace gfx
-
-module :private;
+#include "graphics/image.h"
 
 namespace gfx {
 

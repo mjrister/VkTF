@@ -1,6 +1,5 @@
-module;
+#include "graphics/shader_module.h"
 
-#include <filesystem>
 #include <format>
 #include <fstream>
 #include <ios>
@@ -8,27 +7,8 @@ module;
 #include <string>
 
 #include <glslang/Include/glslang_c_shader_types.h>
-#include <vulkan/vulkan.hpp>
 
-export module shader_module;
-
-import glslang_compiler;
-
-namespace gfx {
-
-export class ShaderModule {
-public:
-  ShaderModule(const std::filesystem::path& glsl_filepath, vk::ShaderStageFlagBits shader_stage, vk::Device device);
-
-  [[nodiscard]] vk::ShaderModule operator*() const noexcept { return *shader_module_; }
-
-private:
-  vk::UniqueShaderModule shader_module_;
-};
-
-}  // namespace gfx
-
-module :private;
+#include "graphics/glslang_compiler.h"
 
 namespace {
 
@@ -59,7 +39,7 @@ glslang_stage_t GetGlslangStage(const vk::ShaderStageFlagBits shader_stage) {
     case vk::ShaderStageFlagBits::eCallableKHR:
       return GLSLANG_STAGE_CALLABLE;
     default:
-      throw std::invalid_argument{std::format("Unsupported shader stage {}", vk::to_string(shader_stage))};
+      throw std::runtime_error{std::format("Unsupported shader stage {}", vk::to_string(shader_stage))};
   }
 }
 

@@ -1,17 +1,16 @@
-module;
+#ifndef SRC_GRAPHICS_INCLUDE_GRAPHICS_MESH_H_
+#define SRC_GRAPHICS_INCLUDE_GRAPHICS_MESH_H_
 
 #include <cstdint>
 #include <utility>
 
 #include <vulkan/vulkan.hpp>
 
-export module mesh;
-
-import buffer;
+#include "graphics/buffer.h"
 
 namespace gfx {
 
-export class Mesh {
+class Mesh {
 public:
   Mesh(Buffer&& vertex_buffer, Buffer&& index_buffer, const std::uint32_t index_count) noexcept
       : vertex_buffer_{std::move(vertex_buffer)}, index_buffer_{std::move(index_buffer)}, index_count_{index_count} {}
@@ -29,3 +28,5 @@ private:
 };
 
 }  // namespace gfx
+
+#endif  // SRC_GRAPHICS_INCLUDE_GRAPHICS_MESH_H_

@@ -1,67 +1,24 @@
-module;
+#include "graphics/model.h"
 
 #include <cassert>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
 #include <format>
 #include <limits>
-#include <memory>
 #include <ranges>
 #include <span>
 #include <stdexcept>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
-#include <vector>
 
 #include <cgltf.h>
-#include <vk_mem_alloc.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <vulkan/vulkan.hpp>
 
-export module model;
-
-import buffer;
-import device;
-import mesh;
-
-namespace gfx {
-
-export struct Vertex {
-  glm::vec3 position{0.0f};
-  glm::vec3 normal{0.0f};
-};
-
-export struct PushConstants {
-  glm::mat4 model_transform{1.0f};
-};
-
-struct Node {
-  std::vector<Mesh> meshes;
-  std::vector<std::unique_ptr<Node>> children;
-  glm::mat4 transform{1.0f};
-};
-
-export class Model {
-public:
-  Model(const std::filesystem::path& gltf_filepath, const Device& device, VmaAllocator allocator);
-
-  void Translate(float dx, float dy, float dz) const;
-  void Rotate(const glm::vec3& axis, float angle) const;
-  void Scale(float sx, float sy, float sz) const;
-
-  void Render(vk::CommandBuffer command_buffer, vk::PipelineLayout pipeline_layout) const;
-
-private:
-  std::unique_ptr<Node> root_node_;
-};
-
-}  // namespace gfx
-
-module :private;
+#include "graphics/buffer.h"
+#include "graphics/device.h"
 
 template <>
 struct std::formatter<cgltf_result> : std::formatter<std::string_view> {
@@ -171,7 +128,7 @@ glm::mat4 GetTransform(const cgltf_node& node) {
 std::vector<gfx::Mesh> GetSubMeshes(const cgltf_node& node,
                                     std::unordered_map<const cgltf_mesh*, std::vector<gfx::Mesh>>& meshes) {
   if (node.mesh == nullptr) return {};
-  auto iterator = meshes.find(node.mesh);
+  const auto iterator = meshes.find(node.mesh);
   assert(iterator != meshes.cend());
   return std::move(iterator->second);  // TODO(matthew-rister): this assumes a 1:1 mapping between nodes and meshes
 }
@@ -210,7 +167,7 @@ gfx::Buffer CreateBuffer(const std::vector<T>& data,
                                                       vk::BufferUsageFlagBits::eTransferSrc,
                                                       allocator,
                                                       kStagingBufferAllocationCreateInfo);
-  staging_buffer.CopyOnce<T>(data);
+  staging_buffer.template CopyOnce<T>(data);
 
   static constexpr VmaAllocationCreateInfo kBufferAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO};
   gfx::Buffer buffer{size_bytes,
