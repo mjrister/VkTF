@@ -10,6 +10,7 @@
 #include <vulkan/vulkan.hpp>
 
 namespace gfx {
+class Camera;
 class Device;
 
 struct Vertex {
@@ -19,6 +20,7 @@ struct Vertex {
 
 struct PushConstants {
   glm::mat4 model_transform{1.0f};
+  glm::mat4 view_projection_transform{1.0f};
 };
 
 class Model {
@@ -33,7 +35,7 @@ public:
 
   ~Model() noexcept;
 
-  void Render(vk::CommandBuffer command_buffer, vk::PipelineLayout pipeline_layout) const;
+  void Render(const Camera& camera, vk::CommandBuffer command_buffer, vk::PipelineLayout pipeline_layout) const;
 
 private:
   class Node;

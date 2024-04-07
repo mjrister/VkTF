@@ -6,7 +6,6 @@
 #include <vector>
 
 #include "graphics/allocator.h"
-#include "graphics/buffer.h"
 #include "graphics/device.h"
 #include "graphics/image.h"
 #include "graphics/instance.h"
@@ -39,10 +38,6 @@ private:
   Image depth_attachment_;
   vk::UniqueRenderPass render_pass_;
   std::vector<vk::UniqueFramebuffer> framebuffers_;
-  vk::UniqueDescriptorSetLayout descriptor_set_layouts_;
-  vk::UniqueDescriptorPool descriptor_pool_;
-  std::vector<vk::DescriptorSet> descriptor_sets_;
-  std::vector<Buffer> uniform_buffers_;
   vk::UniquePipelineLayout graphics_pipeline_layout_;
   vk::UniquePipeline graphics_pipeline_;
   vk::UniqueCommandPool command_pool_;

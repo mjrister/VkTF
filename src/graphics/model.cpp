@@ -18,6 +18,7 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include "graphics/buffer.h"
+#include "graphics/camera.h"
 #include "graphics/device.h"
 #include "graphics/mesh.h"
 
@@ -187,9 +188,7 @@ public:
   Node(const cgltf_scene& scene, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes);
   Node(const cgltf_node& node, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes);
 
-  void Render(vk::CommandBuffer command_buffer,
-              vk::PipelineLayout pipeline_layout,
-              const glm::mat4& parent_transform = glm::mat4{1.0f}) const;
+  void Render(vk::CommandBuffer command_buffer, vk::PipelineLayout pipeline_layout, PushConstants push_constants) const;
 
 private:
   std::vector<Mesh> meshes_;
@@ -234,8 +233,14 @@ Model::Model(const std::filesystem::path& gltf_filepath, const Device& device, c
 
 Model::~Model() noexcept = default;  // this is necessary to enable forward declaring Model::Node with std::unique_ptr
 
-void Model::Render(const vk::CommandBuffer command_buffer, const vk::PipelineLayout pipeline_layout) const {
-  root_node_->Render(command_buffer, pipeline_layout);
+void Model::Render(const Camera& camera,
+                   const vk::CommandBuffer command_buffer,
+                   const vk::PipelineLayout pipeline_layout) const {
+  root_node_->Render(
+      command_buffer,
+      pipeline_layout,
+      PushConstants{.model_transform = glm::mat4{1.0f},
+                    .view_projection_transform = camera.GetProjectionTransform() * camera.GetViewTransform()});
 }
 
 Model::Node::Node(const cgltf_scene& scene, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes)
@@ -252,21 +257,18 @@ Model::Node::Node(const cgltf_node& node, std::unordered_map<const cgltf_mesh*, 
                 | std::ranges::to<std::vector>()},
       transform_{GetTransform(node)} {}
 
-void Model::Node::Render(vk::CommandBuffer command_buffer,
-                         vk::PipelineLayout pipeline_layout,
-                         const glm::mat4& parent_transform) const {
-  const auto node_transform = parent_transform * transform_;
-  command_buffer.pushConstants<PushConstants>(pipeline_layout,
-                                              vk::ShaderStageFlagBits::eVertex,
-                                              0,
-                                              PushConstants{.model_transform = node_transform});
+void Model::Node::Render(const vk::CommandBuffer command_buffer,
+                         const vk::PipelineLayout pipeline_layout,
+                         PushConstants push_constants) const {
+  push_constants.model_transform *= transform_;
+  command_buffer.pushConstants<PushConstants>(pipeline_layout, vk::ShaderStageFlagBits::eVertex, 0, push_constants);
 
   for (const auto& mesh : meshes_) {
     mesh.Render(command_buffer);
   }
 
   for (const auto& child_node : children_) {
-    child_node->Render(command_buffer, pipeline_layout, node_transform);
+    child_node->Render(command_buffer, pipeline_layout, push_constants);
   }
 }
 
