@@ -11,14 +11,15 @@
 #include <string_view>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include <cgltf.h>
 #include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 #include "graphics/buffer.h"
 #include "graphics/device.h"
+#include "graphics/mesh.h"
 
 template <>
 struct std::formatter<cgltf_result> : std::formatter<std::string_view> {
@@ -133,25 +134,6 @@ std::vector<gfx::Mesh> GetSubMeshes(const cgltf_node& node,
   return std::move(iterator->second);  // TODO(matthew-rister): this assumes a 1:1 mapping between nodes and meshes
 }
 
-std::unique_ptr<gfx::Node> ImportNode(const cgltf_node& node,
-                                      std::unordered_map<const cgltf_mesh*, std::vector<gfx::Mesh>>& meshes) {
-  auto child_nodes =
-      std::span{node.children, node.children_count}
-      | std::views::transform([&meshes](const auto* const child_node) { return ImportNode(*child_node, meshes); })
-      | std::ranges::to<std::vector>();
-
-  return std::make_unique<gfx::Node>(GetSubMeshes(node, meshes), std::move(child_nodes), GetTransform(node));
-}
-
-std::unique_ptr<gfx::Node> ImportScene(const cgltf_scene& scene,
-                                       std::unordered_map<const cgltf_mesh*, std::vector<gfx::Mesh>>& meshes) {
-  auto scene_nodes = std::span{scene.nodes, scene.nodes_count}
-                     | std::views::transform([&meshes](const auto* const node) { return ImportNode(*node, meshes); })
-                     | std::ranges::to<std::vector>();
-
-  return std::make_unique<gfx::Node>(std::vector<gfx::Mesh>{}, std::move(scene_nodes), glm::mat4{1.0f});
-}
-
 template <typename T>
 gfx::Buffer CreateBuffer(const std::vector<T>& data,
                          const vk::BufferUsageFlags buffer_usage_flags,
@@ -196,9 +178,27 @@ std::vector<gfx::Mesh> CreateSubMeshes(const cgltf_mesh& mesh,
          | std::ranges::to<std::vector>();
 }
 
-std::unordered_map<const cgltf_mesh*, std::vector<gfx::Mesh>> CreateMeshes(const cgltf_data& data,
-                                                                           const gfx::Device& device,
-                                                                           const VmaAllocator allocator) {
+}  // namespace
+
+namespace gfx {
+
+class Model::Node {
+public:
+  Node(const cgltf_scene& scene, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes);
+  Node(const cgltf_node& node, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes);
+
+  void Render(vk::CommandBuffer command_buffer,
+              vk::PipelineLayout pipeline_layout,
+              const glm::mat4& parent_transform = glm::mat4{1.0f}) const;
+
+private:
+  std::vector<Mesh> meshes_;
+  std::vector<std::unique_ptr<Node>> children_;
+  glm::mat4 transform_{1.0f};
+};
+
+Model::Model(const std::filesystem::path& gltf_filepath, const Device& device, const VmaAllocator allocator) {
+  const auto data = ParseFile(gltf_filepath.string().c_str());
   const auto transfer_queue = device.transfer_queue();
   const auto transfer_index = device.queue_family_indices().transfer_index;
 
@@ -213,8 +213,8 @@ std::unordered_map<const cgltf_mesh*, std::vector<gfx::Mesh>> CreateMeshes(const
   const auto command_buffer = *command_buffers.front();
   command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
 
-  std::vector<gfx::Buffer> staging_buffers;  // staging buffers must remain in scope until copy commands complete
-  auto meshes = std::span{data.meshes, data.meshes_count}
+  std::vector<Buffer> staging_buffers;  // staging buffers must remain in scope until copy commands complete
+  auto meshes = std::span{data->meshes, data->meshes_count}
                 | std::views::transform([command_buffer, allocator, &staging_buffers](const auto& mesh) {
                     return std::pair{&mesh, CreateSubMeshes(mesh, command_buffer, allocator, staging_buffers)};
                   })
@@ -229,55 +229,45 @@ std::unordered_map<const cgltf_mesh*, std::vector<gfx::Mesh>> CreateMeshes(const
   const auto result = device->waitForFences(*fence, vk::True, kMaxTimeout);
   vk::resultCheck(result, "Fence failed to enter a signaled state");
 
-  return meshes;
+  root_node_ = std::make_unique<Node>(*data->scene, meshes);
 }
 
-void RenderNode(const gfx::Node& node,
-                const vk::CommandBuffer command_buffer,
-                const vk::PipelineLayout pipeline_layout,
-                const glm::mat4& parent_transform = glm::mat4{1.0f}) {
-  const auto node_transform = parent_transform * node.transform;
-  command_buffer.pushConstants<gfx::PushConstants>(pipeline_layout,
-                                                   vk::ShaderStageFlagBits::eVertex,
-                                                   0,
-                                                   gfx::PushConstants{.model_transform = node_transform});
+Model::~Model() noexcept = default;  // this is necessary to enable forward declaring Model::Node with std::unique_ptr
 
-  for (const auto& mesh : node.meshes) {
+void Model::Render(const vk::CommandBuffer command_buffer, const vk::PipelineLayout pipeline_layout) const {
+  root_node_->Render(command_buffer, pipeline_layout);
+}
+
+Model::Node::Node(const cgltf_scene& scene, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes)
+    : children_{
+        std::span{scene.nodes, scene.nodes_count}  //
+        | std::views::transform([&meshes](const auto* const node) { return std::make_unique<Node>(*node, meshes); })
+        | std::ranges::to<std::vector>()} {}
+
+Model::Node::Node(const cgltf_node& node, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes)
+    : meshes_{GetSubMeshes(node, meshes)},
+      children_{std::span{node.children, node.children_count}
+                | std::views::transform(
+                    [&meshes](const auto* const child_node) { return std::make_unique<Node>(*child_node, meshes); })
+                | std::ranges::to<std::vector>()},
+      transform_{GetTransform(node)} {}
+
+void Model::Node::Render(vk::CommandBuffer command_buffer,
+                         vk::PipelineLayout pipeline_layout,
+                         const glm::mat4& parent_transform) const {
+  const auto node_transform = parent_transform * transform_;
+  command_buffer.pushConstants<PushConstants>(pipeline_layout,
+                                              vk::ShaderStageFlagBits::eVertex,
+                                              0,
+                                              PushConstants{.model_transform = node_transform});
+
+  for (const auto& mesh : meshes_) {
     mesh.Render(command_buffer);
   }
 
-  for (const auto& child_node : node.children) {
-    RenderNode(*child_node, command_buffer, pipeline_layout, node_transform);
+  for (const auto& child_node : children_) {
+    child_node->Render(command_buffer, pipeline_layout, node_transform);
   }
-}
-
-}  // namespace
-
-namespace gfx {
-
-Model::Model(const std::filesystem::path& gltf_filepath, const Device& device, const VmaAllocator allocator) {
-  const auto data = ParseFile(gltf_filepath.string().c_str());
-  auto meshes = CreateMeshes(*data, device, allocator);
-  root_node_ = ImportScene(*data->scene, meshes);
-}
-
-void Model::Translate(const float dx, const float dy, const float dz) const {
-  auto& root_transform = root_node_->transform;
-  root_transform = glm::translate(root_transform, glm::vec3{dx, dy, dz});
-}
-
-void Model::Rotate(const glm::vec3& axis, const float angle) const {
-  auto& root_transform = root_node_->transform;
-  root_transform = glm::rotate(root_transform, angle, axis);
-}
-
-void Model::Scale(const float sx, const float sy, const float sz) const {
-  auto& root_transform = root_node_->transform;
-  root_transform = glm::scale(root_transform, glm::vec3{sx, sy, sz});
-}
-
-void Model::Render(const vk::CommandBuffer command_buffer, const vk::PipelineLayout pipeline_layout) const {
-  RenderNode(*root_node_, command_buffer, pipeline_layout);
 }
 
 }  // namespace gfx

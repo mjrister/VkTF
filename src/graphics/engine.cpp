@@ -393,7 +393,7 @@ Engine::Engine(const Window& window)
       draw_fences_{CreateFences<kMaxRenderFrames>(*device_)} {}
 
 Model Engine::LoadModel(const std::filesystem::path& gltf_filepath) const {
-  return gfx::Model{gltf_filepath, device_, *allocator_};
+  return Model{gltf_filepath, device_, *allocator_};
 }
 
 void Engine::Render(const Camera& camera, const Model& model) {

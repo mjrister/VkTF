@@ -3,14 +3,11 @@
 
 #include <filesystem>
 #include <memory>
-#include <vector>
 
 #include <vk_mem_alloc.h>
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 #include <vulkan/vulkan.hpp>
-
-#include "graphics/mesh.h"
 
 namespace gfx {
 class Device;
@@ -24,24 +21,22 @@ struct PushConstants {
   glm::mat4 model_transform{1.0f};
 };
 
-// TODO(matthew-rister): avoid leaking internal implementation details
-struct Node {
-  std::vector<Mesh> meshes;
-  std::vector<std::unique_ptr<Node>> children;
-  glm::mat4 transform{1.0f};
-};
-
 class Model {
 public:
   Model(const std::filesystem::path& gltf_filepath, const Device& device, VmaAllocator allocator);
 
-  void Translate(float dx, float dy, float dz) const;
-  void Rotate(const glm::vec3& axis, float angle) const;
-  void Scale(float sx, float sy, float sz) const;
+  Model(const Model&) = delete;
+  Model(Model&&) noexcept = default;
+
+  Model& operator=(const Model&) = delete;
+  Model& operator=(Model&&) noexcept = default;
+
+  ~Model() noexcept;
 
   void Render(vk::CommandBuffer command_buffer, vk::PipelineLayout pipeline_layout) const;
 
 private:
+  class Node;
   std::unique_ptr<Node> root_node_;
 };
 
