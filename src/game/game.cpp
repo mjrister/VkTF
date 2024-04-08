@@ -72,7 +72,7 @@ void Game::Run() {
     Window::Update();
     HandleKeyEvents(window_, camera_, delta_time);
     HandleMouseEvents(window_, camera_);
-    engine_.Render(camera_, model_);
+    engine_.Render(model_, camera_);
   }
   engine_.device().waitIdle();
 }

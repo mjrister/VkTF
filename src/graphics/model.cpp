@@ -1,7 +1,7 @@
 #include "graphics/model.h"
 
+#include <array>
 #include <cassert>
-#include <cstdint>
 #include <cstring>
 #include <format>
 #include <limits>
@@ -19,8 +19,8 @@
 
 #include "graphics/buffer.h"
 #include "graphics/camera.h"
-#include "graphics/device.h"
 #include "graphics/mesh.h"
+#include "graphics/shader_module.h"
 
 template <>
 struct std::formatter<cgltf_result> : std::formatter<std::string_view> {
@@ -52,6 +52,16 @@ private:
 };
 
 namespace {
+
+struct Vertex {
+  glm::vec3 position{0.0f};
+  glm::vec3 normal{0.0f};
+};
+
+struct PushConstants {
+  glm::mat4 model_transform{1.0f};
+  glm::mat4 view_projection_transform{1.0f};
+};
 
 using UniqueCgltfData = std::unique_ptr<cgltf_data, decltype(&cgltf_free)>;
 
@@ -86,7 +96,7 @@ std::vector<glm::vec<N, float>> UnpackFloats(const cgltf_accessor& accessor) {
   return data;
 }
 
-std::vector<gfx::Vertex> GetVertices(const cgltf_primitive& primitive) {
+std::vector<Vertex> GetVertices(const cgltf_primitive& primitive) {
   std::vector<glm::vec3> positions, normals;
 
   for (const auto& attribute : std::span{primitive.attributes, primitive.attributes_count}) {
@@ -105,7 +115,7 @@ std::vector<gfx::Vertex> GetVertices(const cgltf_primitive& primitive) {
   }
 
   static constexpr auto kCreateVertex = [](const auto& position, const auto& normal) {
-    return gfx::Vertex{.position = position, .normal = normal};
+    return Vertex{.position = position, .normal = normal};
   };
   return std::views::zip_transform(kCreateVertex, positions, normals) | std::ranges::to<std::vector>();
 }
@@ -132,7 +142,7 @@ std::vector<gfx::Mesh> GetSubMeshes(const cgltf_node& node,
   if (node.mesh == nullptr) return {};
   const auto iterator = meshes.find(node.mesh);
   assert(iterator != meshes.cend());
-  return std::move(iterator->second);  // TODO(matthew-rister): this assumes a 1:1 mapping between nodes and meshes
+  return std::move(iterator->second);
 }
 
 template <typename T>
@@ -179,6 +189,152 @@ std::vector<gfx::Mesh> CreateSubMeshes(const cgltf_mesh& mesh,
          | std::ranges::to<std::vector>();
 }
 
+std::unordered_map<const cgltf_mesh*, std::vector<gfx::Mesh>> CreateMeshes(const cgltf_data& data,
+                                                                           const vk::Device device,
+                                                                           const vk::Queue queue,
+                                                                           const std::uint32_t queue_family_index,
+                                                                           const VmaAllocator allocator) {
+  const auto command_pool =
+      device.createCommandPoolUnique(vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eTransient,
+                                                               .queueFamilyIndex = queue_family_index});
+  const auto command_buffers =
+      device.allocateCommandBuffersUnique(vk::CommandBufferAllocateInfo{.commandPool = *command_pool,
+                                                                        .level = vk::CommandBufferLevel::ePrimary,
+                                                                        .commandBufferCount = 1});
+  const auto command_buffer = *command_buffers.front();
+  command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+
+  std::vector<gfx::Buffer> staging_buffers;  // staging buffers must remain in scope until copy commands complete
+  auto meshes = std::span{data.meshes, data.meshes_count}
+                | std::views::transform([command_buffer, allocator, &staging_buffers](const auto& mesh) {
+                    return std::pair{&mesh, CreateSubMeshes(mesh, command_buffer, allocator, staging_buffers)};
+                  })
+                | std::ranges::to<std::unordered_map>();
+
+  command_buffer.end();
+
+  const auto fence = device.createFenceUnique(vk::FenceCreateInfo{});
+  queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &command_buffer}, *fence);
+
+  static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
+  const auto result = device.waitForFences(*fence, vk::True, kMaxTimeout);
+  vk::resultCheck(result, "Fence failed to enter a signaled state");
+
+  return meshes;
+}
+
+vk::UniquePipelineLayout CreatePipelineLayout(const vk::Device device) {
+  static constexpr vk::PushConstantRange kPushConstantRange{.stageFlags = vk::ShaderStageFlagBits::eVertex,
+                                                            .offset = 0,
+                                                            .size = sizeof(PushConstants)};
+  return device.createPipelineLayoutUnique(
+      vk::PipelineLayoutCreateInfo{.pushConstantRangeCount = 1, .pPushConstantRanges = &kPushConstantRange});
+}
+
+vk::UniquePipeline CreatePipeline(const vk::Device device,
+                                  const vk::Extent2D viewport_extent,
+                                  const vk::SampleCountFlagBits msaa_sample_count,
+                                  const vk::RenderPass render_pass,
+                                  const vk::PipelineLayout pipeline_layout) {
+  const std::filesystem::path vertex_shader_filepath{"assets/shaders/mesh.vert"};
+  const gfx::ShaderModule vertex_shader_module{vertex_shader_filepath, vk::ShaderStageFlagBits::eVertex, device};
+
+  const std::filesystem::path fragment_shader_filepath{"assets/shaders/mesh.frag"};
+  const gfx::ShaderModule fragment_shader_module{fragment_shader_filepath, vk::ShaderStageFlagBits::eFragment, device};
+
+  const std::array shader_stage_create_info{
+      vk::PipelineShaderStageCreateInfo{.stage = vk::ShaderStageFlagBits::eVertex,
+                                        .module = *vertex_shader_module,
+                                        .pName = "main"},
+      vk::PipelineShaderStageCreateInfo{.stage = vk::ShaderStageFlagBits::eFragment,
+                                        .module = *fragment_shader_module,
+                                        .pName = "main"}};
+
+  static constexpr vk::VertexInputBindingDescription kVertexInputBindingDescription{
+      .binding = 0,
+      .stride = sizeof(Vertex),
+      .inputRate = vk::VertexInputRate::eVertex};
+
+  static constexpr std::array kVertexAttributeDescriptions{
+      vk::VertexInputAttributeDescription{.location = 0,
+                                          .binding = 0,
+                                          .format = vk::Format::eR32G32B32Sfloat,
+                                          .offset = offsetof(Vertex, position)},
+      vk::VertexInputAttributeDescription{.location = 1,
+                                          .binding = 0,
+                                          .format = vk::Format::eR32G32B32Sfloat,
+                                          .offset = offsetof(Vertex, normal)}};
+
+  static constexpr vk::PipelineVertexInputStateCreateInfo kVertexInputStateCreateInfo{
+      .vertexBindingDescriptionCount = 1,
+      .pVertexBindingDescriptions = &kVertexInputBindingDescription,
+      .vertexAttributeDescriptionCount = static_cast<std::uint32_t>(kVertexAttributeDescriptions.size()),
+      .pVertexAttributeDescriptions = kVertexAttributeDescriptions.data()};
+
+  static constexpr vk::PipelineInputAssemblyStateCreateInfo kInputAssemblyStateCreateInfo{
+      .topology = vk::PrimitiveTopology::eTriangleList};
+
+  const vk::Viewport viewport{.x = 0.0f,
+                              .y = 0.0f,
+                              .width = static_cast<float>(viewport_extent.width),
+                              .height = static_cast<float>(viewport_extent.height),
+                              .minDepth = 0.0f,
+                              .maxDepth = 1.0f};
+  const vk::Rect2D scissor{.offset = vk::Offset2D{0, 0}, .extent = viewport_extent};
+
+  const vk::PipelineViewportStateCreateInfo viewport_state_create_info{.viewportCount = 1,
+                                                                       .pViewports = &viewport,
+                                                                       .scissorCount = 1,
+                                                                       .pScissors = &scissor};
+
+  static constexpr vk::PipelineRasterizationStateCreateInfo kRasterizationStateCreateInfo{
+      .polygonMode = vk::PolygonMode::eFill,
+      .cullMode = vk::CullModeFlagBits::eBack,
+      .frontFace = vk::FrontFace::eCounterClockwise,
+      .lineWidth = 1.0f};
+
+  static constexpr vk::PipelineDepthStencilStateCreateInfo kDepthStencilStateCreateInfo{
+      .depthTestEnable = vk::True,
+      .depthWriteEnable = vk::True,
+      .depthCompareOp = vk::CompareOp::eLess};
+
+  const vk::PipelineMultisampleStateCreateInfo multisample_state_create_info{.rasterizationSamples = msaa_sample_count};
+
+  using enum vk::ColorComponentFlagBits;
+  static constexpr vk::PipelineColorBlendAttachmentState kColorBlendAttachmentState{
+      .blendEnable = vk::True,
+      .srcColorBlendFactor = vk::BlendFactor::eSrcAlpha,
+      .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
+      .colorBlendOp = vk::BlendOp::eAdd,
+      .srcAlphaBlendFactor = vk::BlendFactor::eOne,
+      .dstAlphaBlendFactor = vk::BlendFactor::eZero,
+      .alphaBlendOp = vk::BlendOp::eAdd,
+      .colorWriteMask = eR | eG | eB | eA};
+
+  static constexpr vk::PipelineColorBlendStateCreateInfo kColorBlendStateCreateInfo{
+      .attachmentCount = 1,
+      .pAttachments = &kColorBlendAttachmentState,
+      .blendConstants = std::array{0.0f, 0.0f, 0.0f, 0.0f}};
+
+  auto [result, pipeline] = device.createGraphicsPipelineUnique(
+      nullptr,
+      vk::GraphicsPipelineCreateInfo{.stageCount = static_cast<std::uint32_t>(shader_stage_create_info.size()),
+                                     .pStages = shader_stage_create_info.data(),
+                                     .pVertexInputState = &kVertexInputStateCreateInfo,
+                                     .pInputAssemblyState = &kInputAssemblyStateCreateInfo,
+                                     .pViewportState = &viewport_state_create_info,
+                                     .pRasterizationState = &kRasterizationStateCreateInfo,
+                                     .pMultisampleState = &multisample_state_create_info,
+                                     .pDepthStencilState = &kDepthStencilStateCreateInfo,
+                                     .pColorBlendState = &kColorBlendStateCreateInfo,
+                                     .layout = pipeline_layout,
+                                     .renderPass = render_pass,
+                                     .subpass = 0});
+  vk::resultCheck(result, "Graphics pipeline creation failed");
+
+  return std::move(pipeline);
+}
+
 }  // namespace
 
 namespace gfx {
@@ -196,58 +352,37 @@ private:
   glm::mat4 transform_{1.0f};
 };
 
-Model::Model(const std::filesystem::path& gltf_filepath, const Device& device, const VmaAllocator allocator) {
+Model::Model(const std::filesystem::path& gltf_filepath,
+             const vk::Device device,
+             const vk::Queue transfer_queue,
+             const std::uint32_t transfer_queue_family_index,
+             const vk::Extent2D viewport_extent,
+             const vk::SampleCountFlagBits msaa_sample_count,
+             const vk::RenderPass render_pass,
+             const VmaAllocator allocator) {
   const auto data = ParseFile(gltf_filepath.string().c_str());
-  const auto transfer_queue = device.transfer_queue();
-  const auto transfer_index = device.queue_family_indices().transfer_index;
-
-  const auto command_pool =
-      device->createCommandPoolUnique(vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eTransient,
-                                                                .queueFamilyIndex = transfer_index});
-
-  const auto command_buffers =
-      device->allocateCommandBuffersUnique(vk::CommandBufferAllocateInfo{.commandPool = *command_pool,
-                                                                         .level = vk::CommandBufferLevel::ePrimary,
-                                                                         .commandBufferCount = 1});
-  const auto command_buffer = *command_buffers.front();
-  command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-
-  std::vector<Buffer> staging_buffers;  // staging buffers must remain in scope until copy commands complete
-  auto meshes = std::span{data->meshes, data->meshes_count}
-                | std::views::transform([command_buffer, allocator, &staging_buffers](const auto& mesh) {
-                    return std::pair{&mesh, CreateSubMeshes(mesh, command_buffer, allocator, staging_buffers)};
-                  })
-                | std::ranges::to<std::unordered_map>();
-
-  command_buffer.end();
-
-  const auto fence = device->createFenceUnique(vk::FenceCreateInfo{});
-  transfer_queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &command_buffer}, *fence);
-
-  static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
-  const auto result = device->waitForFences(*fence, vk::True, kMaxTimeout);
-  vk::resultCheck(result, "Fence failed to enter a signaled state");
-
+  auto meshes = CreateMeshes(*data, device, transfer_queue, transfer_queue_family_index, allocator);
   root_node_ = std::make_unique<Node>(*data->scene, meshes);
+  pipeline_layout_ = CreatePipelineLayout(device);
+  pipeline_ = CreatePipeline(device, viewport_extent, msaa_sample_count, render_pass, *pipeline_layout_);
 }
 
 Model::~Model() noexcept = default;  // this is necessary to enable forward declaring Model::Node with std::unique_ptr
 
-void Model::Render(const Camera& camera,
-                   const vk::CommandBuffer command_buffer,
-                   const vk::PipelineLayout pipeline_layout) const {
+void Model::Render(const Camera& camera, const vk::CommandBuffer command_buffer) const {
+  command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_);
   root_node_->Render(
       command_buffer,
-      pipeline_layout,
+      *pipeline_layout_,
       PushConstants{.model_transform = glm::mat4{1.0f},
                     .view_projection_transform = camera.GetProjectionTransform() * camera.GetViewTransform()});
 }
 
 Model::Node::Node(const cgltf_scene& scene, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes)
-    : children_{
-        std::span{scene.nodes, scene.nodes_count}  //
-        | std::views::transform([&meshes](const auto* const node) { return std::make_unique<Node>(*node, meshes); })
-        | std::ranges::to<std::vector>()} {}
+    : children_{std::span{scene.nodes, scene.nodes_count}
+                | std::views::transform(
+                    [&meshes](const auto* const scene_node) { return std::make_unique<Node>(*scene_node, meshes); })
+                | std::ranges::to<std::vector>()} {}
 
 Model::Node::Node(const cgltf_node& node, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes)
     : meshes_{GetSubMeshes(node, meshes)},

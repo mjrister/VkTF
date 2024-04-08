@@ -23,11 +23,11 @@ public:
   [[nodiscard]] vk::Device device() const noexcept { return *device_; }
 
   [[nodiscard]] Model LoadModel(const std::filesystem::path& gltf_filepath) const;
-  void Render(const Camera& camera, const Model& model);
+  void Render(const Model& model, const Camera& camera);
 
 private:
   static constexpr std::size_t kMaxRenderFrames = 2;
-  std::size_t current_frame_index_{};
+  std::size_t current_frame_index_ = 0;
   Instance instance_;
   vk::UniqueSurfaceKHR surface_;
   Device device_;
@@ -38,8 +38,6 @@ private:
   Image depth_attachment_;
   vk::UniqueRenderPass render_pass_;
   std::vector<vk::UniqueFramebuffer> framebuffers_;
-  vk::UniquePipelineLayout graphics_pipeline_layout_;
-  vk::UniquePipeline graphics_pipeline_;
   vk::UniqueCommandPool command_pool_;
   std::vector<vk::UniqueCommandBuffer> command_buffers_;
   std::array<vk::UniqueSemaphore, kMaxRenderFrames> acquire_next_image_semaphores_;

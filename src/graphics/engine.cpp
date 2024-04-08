@@ -4,14 +4,12 @@
 #include <cstdint>
 #include <limits>
 #include <ranges>
-#include <utility>
 
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.hpp>
 
 #include "graphics/camera.h"
 #include "graphics/model.h"
-#include "graphics/shader_module.h"
 #include "graphics/window.h"
 
 namespace {
@@ -125,118 +123,6 @@ std::vector<vk::UniqueFramebuffer> CreateFramebuffers(const vk::Device device,
          | std::ranges::to<std::vector>();
 }
 
-vk::UniquePipelineLayout CreateGraphicsPipelineLayout(const vk::Device device) {
-  static constexpr vk::PushConstantRange kPushConstantRange{.stageFlags = vk::ShaderStageFlagBits::eVertex,
-                                                            .offset = 0,
-                                                            .size = sizeof(gfx::PushConstants)};
-  return device.createPipelineLayoutUnique(
-      vk::PipelineLayoutCreateInfo{.pushConstantRangeCount = 1, .pPushConstantRanges = &kPushConstantRange});
-}
-
-vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
-                                          const vk::Extent2D swapchain_image_extent,
-                                          const vk::SampleCountFlagBits msaa_sample_count,
-                                          const vk::PipelineLayout pipeline_layout,
-                                          const vk::RenderPass render_pass) {
-  const std::filesystem::path vertex_shader_filepath{"assets/shaders/mesh.vert"};
-  const gfx::ShaderModule vertex_shader_module{vertex_shader_filepath, vk::ShaderStageFlagBits::eVertex, device};
-
-  const std::filesystem::path fragment_shader_filepath{"assets/shaders/mesh.frag"};
-  const gfx::ShaderModule fragment_shader_module{fragment_shader_filepath, vk::ShaderStageFlagBits::eFragment, device};
-
-  const std::array shader_stage_create_info{
-      vk::PipelineShaderStageCreateInfo{.stage = vk::ShaderStageFlagBits::eVertex,
-                                        .module = *vertex_shader_module,
-                                        .pName = "main"},
-      vk::PipelineShaderStageCreateInfo{.stage = vk::ShaderStageFlagBits::eFragment,
-                                        .module = *fragment_shader_module,
-                                        .pName = "main"}};
-
-  static constexpr vk::VertexInputBindingDescription kVertexInputBindingDescription{
-      .binding = 0,
-      .stride = sizeof(gfx::Vertex),
-      .inputRate = vk::VertexInputRate::eVertex};
-
-  static constexpr std::array kVertexAttributeDescriptions{
-      vk::VertexInputAttributeDescription{.location = 0,
-                                          .binding = 0,
-                                          .format = vk::Format::eR32G32B32Sfloat,
-                                          .offset = offsetof(gfx::Vertex, position)},
-      vk::VertexInputAttributeDescription{.location = 1,
-                                          .binding = 0,
-                                          .format = vk::Format::eR32G32B32Sfloat,
-                                          .offset = offsetof(gfx::Vertex, normal)}};
-
-  static constexpr vk::PipelineVertexInputStateCreateInfo kVertexInputStateCreateInfo{
-      .vertexBindingDescriptionCount = 1,
-      .pVertexBindingDescriptions = &kVertexInputBindingDescription,
-      .vertexAttributeDescriptionCount = static_cast<std::uint32_t>(kVertexAttributeDescriptions.size()),
-      .pVertexAttributeDescriptions = kVertexAttributeDescriptions.data()};
-
-  static constexpr vk::PipelineInputAssemblyStateCreateInfo kInputAssemblyStateCreateInfo{
-      .topology = vk::PrimitiveTopology::eTriangleList};
-
-  const vk::Viewport viewport{.x = 0.0f,
-                              .y = 0.0f,
-                              .width = static_cast<float>(swapchain_image_extent.width),
-                              .height = static_cast<float>(swapchain_image_extent.height),
-                              .minDepth = 0.0f,
-                              .maxDepth = 1.0f};
-  const vk::Rect2D scissor{.offset = vk::Offset2D{0, 0}, .extent = swapchain_image_extent};
-
-  const vk::PipelineViewportStateCreateInfo viewport_state_create_info{.viewportCount = 1,
-                                                                       .pViewports = &viewport,
-                                                                       .scissorCount = 1,
-                                                                       .pScissors = &scissor};
-
-  static constexpr vk::PipelineRasterizationStateCreateInfo kRasterizationStateCreateInfo{
-      .polygonMode = vk::PolygonMode::eFill,
-      .cullMode = vk::CullModeFlagBits::eBack,
-      .frontFace = vk::FrontFace::eCounterClockwise,
-      .lineWidth = 1.0f};
-
-  static constexpr vk::PipelineDepthStencilStateCreateInfo kDepthStencilStateCreateInfo{
-      .depthTestEnable = vk::True,
-      .depthWriteEnable = vk::True,
-      .depthCompareOp = vk::CompareOp::eLess};
-
-  const vk::PipelineMultisampleStateCreateInfo multisample_state_create_info{.rasterizationSamples = msaa_sample_count};
-
-  using enum vk::ColorComponentFlagBits;
-  static constexpr vk::PipelineColorBlendAttachmentState kColorBlendAttachmentState{
-      .blendEnable = vk::True,
-      .srcColorBlendFactor = vk::BlendFactor::eSrcAlpha,
-      .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
-      .colorBlendOp = vk::BlendOp::eAdd,
-      .srcAlphaBlendFactor = vk::BlendFactor::eOne,
-      .dstAlphaBlendFactor = vk::BlendFactor::eZero,
-      .alphaBlendOp = vk::BlendOp::eAdd,
-      .colorWriteMask = eR | eG | eB | eA};
-
-  static constexpr vk::PipelineColorBlendStateCreateInfo kColorBlendStateCreateInfo{
-      .attachmentCount = 1,
-      .pAttachments = &kColorBlendAttachmentState,
-      .blendConstants = std::array{0.0f, 0.0f, 0.0f, 0.0f}};
-
-  auto [result, graphics_pipeline] = device.createGraphicsPipelineUnique(
-      nullptr,
-      vk::GraphicsPipelineCreateInfo{.stageCount = static_cast<std::uint32_t>(shader_stage_create_info.size()),
-                                     .pStages = shader_stage_create_info.data(),
-                                     .pVertexInputState = &kVertexInputStateCreateInfo,
-                                     .pInputAssemblyState = &kInputAssemblyStateCreateInfo,
-                                     .pViewportState = &viewport_state_create_info,
-                                     .pRasterizationState = &kRasterizationStateCreateInfo,
-                                     .pMultisampleState = &multisample_state_create_info,
-                                     .pDepthStencilState = &kDepthStencilStateCreateInfo,
-                                     .pColorBlendState = &kColorBlendStateCreateInfo,
-                                     .layout = pipeline_layout,
-                                     .renderPass = render_pass,
-                                     .subpass = 0});
-  vk::resultCheck(result, "Graphics pipeline creation failed");
-
-  return std::move(graphics_pipeline);
-}
-
 vk::UniqueCommandPool CreateCommandPool(const gfx::Device& device) {
   return device->createCommandPoolUnique(
       vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
@@ -306,12 +192,6 @@ Engine::Engine(const Window& window)
                                        *render_pass_,
                                        color_attachment_.image_view(),
                                        depth_attachment_.image_view())},
-      graphics_pipeline_layout_{CreateGraphicsPipelineLayout(*device_)},
-      graphics_pipeline_{CreateGraphicsPipeline(*device_,
-                                                swapchain_.image_extent(),
-                                                msaa_sample_count_,
-                                                *graphics_pipeline_layout_,
-                                                *render_pass_)},
       command_pool_{CreateCommandPool(device_)},
       command_buffers_{AllocateCommandBuffers<kMaxRenderFrames>(*device_, *command_pool_)},
       acquire_next_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)},
@@ -319,10 +199,17 @@ Engine::Engine(const Window& window)
       draw_fences_{CreateFences<kMaxRenderFrames>(*device_)} {}
 
 Model Engine::LoadModel(const std::filesystem::path& gltf_filepath) const {
-  return Model{gltf_filepath, device_, *allocator_};
+  return Model{gltf_filepath,
+               *device_,
+               device_.transfer_queue(),
+               device_.queue_family_indices().transfer_index,
+               swapchain_.image_extent(),
+               msaa_sample_count_,
+               *render_pass_,
+               *allocator_};
 }
 
-void Engine::Render(const Camera& camera, const Model& model) {
+void Engine::Render(const Model& model, const Camera& camera) {
   if (++current_frame_index_ == kMaxRenderFrames) {
     current_frame_index_ = 0;
   }
@@ -344,7 +231,6 @@ void Engine::Render(const Camera& camera, const Model& model) {
 
   const auto command_buffer = *command_buffers_[current_frame_index_];
   command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-  command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphics_pipeline_);
 
   static constexpr std::array kClearColor{0.0f, 0.0f, 0.0f, 1.0f};
   static constexpr std::array kClearValues{vk::ClearValue{.color = vk::ClearColorValue{kClearColor}},
@@ -359,7 +245,7 @@ void Engine::Render(const Camera& camera, const Model& model) {
           .pClearValues = kClearValues.data()},
       vk::SubpassContents::eInline);
 
-  model.Render(camera, command_buffer, *graphics_pipeline_layout_);
+  model.Render(camera, command_buffer);
 
   command_buffer.endRenderPass();
   command_buffer.end();

@@ -1,31 +1,26 @@
 #ifndef SRC_GRAPHICS_INCLUDE_GRAPHICS_MODEL_H_
 #define SRC_GRAPHICS_INCLUDE_GRAPHICS_MODEL_H_
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 
 #include <vk_mem_alloc.h>
-#include <glm/mat4x4.hpp>
-#include <glm/vec3.hpp>
 #include <vulkan/vulkan.hpp>
 
 namespace gfx {
 class Camera;
-class Device;
-
-struct Vertex {
-  glm::vec3 position{0.0f};
-  glm::vec3 normal{0.0f};
-};
-
-struct PushConstants {
-  glm::mat4 model_transform{1.0f};
-  glm::mat4 view_projection_transform{1.0f};
-};
 
 class Model {
 public:
-  Model(const std::filesystem::path& gltf_filepath, const Device& device, VmaAllocator allocator);
+  Model(const std::filesystem::path& gltf_filepath,
+        vk::Device device,
+        vk::Queue transfer_queue,
+        std::uint32_t transfer_queue_family_index,
+        vk::Extent2D viewport_extent,
+        vk::SampleCountFlagBits msaa_sample_count,
+        vk::RenderPass render_pass,
+        VmaAllocator allocator);
 
   Model(const Model&) = delete;
   Model(Model&&) noexcept = default;
@@ -35,11 +30,14 @@ public:
 
   ~Model() noexcept;
 
-  void Render(const Camera& camera, vk::CommandBuffer command_buffer, vk::PipelineLayout pipeline_layout) const;
+  void Render(const Camera& camera, vk::CommandBuffer command_buffer) const;
 
 private:
   class Node;
+
   std::unique_ptr<Node> root_node_;
+  vk::UniquePipelineLayout pipeline_layout_;
+  vk::UniquePipeline pipeline_;
 };
 
 }  // namespace gfx
