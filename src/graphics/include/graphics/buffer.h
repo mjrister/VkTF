@@ -12,9 +12,9 @@ namespace gfx {
 
 class Buffer {
 public:
-  Buffer(vk::DeviceSize size,
-         vk::BufferUsageFlags buffer_usage_flags,
-         VmaAllocator allocator,
+  Buffer(const vk::DeviceSize size,
+         const vk::BufferUsageFlags buffer_usage_flags,
+         const VmaAllocator allocator,
          const VmaAllocationCreateInfo& allocation_create_info);
 
   Buffer(const Buffer&) = delete;

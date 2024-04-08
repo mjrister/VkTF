@@ -10,13 +10,13 @@ namespace gfx {
 
 class Image {
 public:
-  Image(vk::Format format,
-        vk::Extent2D extent,
-        vk::SampleCountFlagBits sample_count,
-        vk::ImageUsageFlags image_usage_flags,
-        vk::ImageAspectFlags image_aspect_flags,
-        vk::Device device,
-        VmaAllocator allocator,
+  Image(const vk::Format format,
+        const vk::Extent2D extent,
+        const vk::SampleCountFlagBits sample_count,
+        const vk::ImageUsageFlags image_usage_flags,
+        const vk::ImageAspectFlags image_aspect_flags,
+        const vk::Device device,
+        const VmaAllocator allocator,
         const VmaAllocationCreateInfo& allocation_create_info);
 
   Image(const Image&) = delete;

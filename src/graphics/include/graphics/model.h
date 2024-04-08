@@ -14,13 +14,13 @@ class Camera;
 class Model {
 public:
   Model(const std::filesystem::path& gltf_filepath,
-        vk::Device device,
-        vk::Queue transfer_queue,
-        std::uint32_t transfer_queue_family_index,
-        vk::Extent2D viewport_extent,
-        vk::SampleCountFlagBits msaa_sample_count,
-        vk::RenderPass render_pass,
-        VmaAllocator allocator);
+        const vk::Device device,
+        const vk::Queue transfer_queue,
+        const std::uint32_t transfer_queue_family_index,
+        const vk::Extent2D viewport_extent,
+        const vk::SampleCountFlagBits msaa_sample_count,
+        const vk::RenderPass render_pass,
+        const VmaAllocator allocator);
 
   Model(const Model&) = delete;
   Model(Model&&) noexcept = default;
@@ -30,7 +30,7 @@ public:
 
   ~Model() noexcept;
 
-  void Render(const Camera& camera, vk::CommandBuffer command_buffer) const;
+  void Render(const Camera& camera, const vk::CommandBuffer command_buffer) const;
 
 private:
   class Node;

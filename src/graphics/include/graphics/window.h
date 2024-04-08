@@ -13,7 +13,7 @@ namespace gfx {
 
 class Window {
 public:
-  Window(const char* title, int width, int height);
+  Window(const char* const title, const int width, const int height);
 
   [[nodiscard]] std::pair<int, int> GetSize() const noexcept;
   [[nodiscard]] std::pair<int, int> GetFramebufferSize() const noexcept;
@@ -32,7 +32,7 @@ public:
 
 #ifdef GLFW_INCLUDE_VULKAN
   [[nodiscard]] static std::span<const char* const> GetInstanceExtensions();
-  [[nodiscard]] vk::UniqueSurfaceKHR CreateSurface(vk::Instance instance) const;
+  [[nodiscard]] vk::UniqueSurfaceKHR CreateSurface(const vk::Instance instance) const;
 #endif
 
 private:
