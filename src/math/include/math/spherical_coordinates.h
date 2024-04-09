@@ -6,9 +6,9 @@
 namespace gfx {
 
 struct SphericalCoordinates {
-  float radius{};
-  float theta{};
-  float phi{};
+  float radius = 0.0f;
+  float theta = 0.0f;
+  float phi = 0.0f;
 };
 
 SphericalCoordinates ToSphericalCoordinates(const glm::vec3& cartesian_coordinates);

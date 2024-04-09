@@ -47,10 +47,10 @@ private:
   void UnmapMemory() noexcept;
 
   vk::Buffer buffer_;
-  vk::DeviceSize size_{};
-  void* mapped_memory_{};
-  VmaAllocator allocator_{};
-  VmaAllocation allocation_{};
+  vk::DeviceSize size_ = 0;
+  void* mapped_memory_ = nullptr;
+  VmaAllocator allocator_ = nullptr;
+  VmaAllocation allocation_ = nullptr;
 };
 
 }  // namespace gfx

@@ -48,7 +48,7 @@ VmaAllocator CreateAllocator(const vk::Instance instance,
                                                      .instance = instance,
                                                      .vulkanApiVersion = gfx::Instance::kApiVersion};
 
-  VmaAllocator allocator{};
+  VmaAllocator allocator = nullptr;
   const auto result = vmaCreateAllocator(&allocator_create_info, &allocator);
   vk::resultCheck(static_cast<vk::Result>(result), "Allocator creation failed");
 
@@ -64,7 +64,7 @@ Allocator::Allocator(const vk::Instance instance, const vk::PhysicalDevice physi
 
 Allocator& Allocator::operator=(Allocator&& allocator) noexcept {
   if (this != &allocator) {
-    allocator_ = std::exchange(allocator.allocator_, {});
+    allocator_ = std::exchange(allocator.allocator_, nullptr);
   }
   return *this;
 }

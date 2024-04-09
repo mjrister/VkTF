@@ -34,8 +34,8 @@ private:
   vk::Image image_;
   vk::UniqueImageView image_view_;
   vk::Format format_ = vk::Format::eUndefined;
-  VmaAllocator allocator_{};
-  VmaAllocation allocation_{};
+  VmaAllocator allocator_ = nullptr;
+  VmaAllocation allocation_ = nullptr;
 };
 
 }  // namespace gfx

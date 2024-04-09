@@ -21,7 +21,7 @@ Image::Image(const vk::Format format,
       .samples = static_cast<VkSampleCountFlagBits>(sample_count),
       .usage = static_cast<VkImageUsageFlags>(image_usage_flags)};
 
-  VkImage image{};
+  VkImage image = nullptr;
   const auto result =
       vmaCreateImage(allocator_, &image_create_info, &allocation_create_info, &image, &allocation_, nullptr);
   vk::resultCheck(static_cast<vk::Result>(result), "Image creation failed");
@@ -37,11 +37,11 @@ Image::Image(const vk::Format format,
 
 Image& Image::operator=(Image&& image) noexcept {
   if (this != &image) {
-    allocator_ = std::exchange(image.allocator_, {});
-    allocation_ = std::exchange(image.allocation_, {});
-    image_ = std::exchange(image.image_, {});
-    image_view_ = std::exchange(image.image_view_, {});
-    format_ = std::exchange(image.format_, {});
+    image_ = std::exchange(image.image_, nullptr);
+    image_view_ = std::exchange(image.image_view_, vk::UniqueImageView{});
+    format_ = std::exchange(image.format_, vk::Format::eUndefined);
+    allocator_ = std::exchange(image.allocator_, nullptr);
+    allocation_ = std::exchange(image.allocation_, nullptr);
   }
   return *this;
 }

@@ -11,7 +11,7 @@ Buffer::Buffer(const vk::DeviceSize size,
                                               .size = size,
                                               .usage = static_cast<VkBufferUsageFlags>(buffer_usage_flags)};
 
-  VkBuffer buffer{};
+  VkBuffer buffer = nullptr;
   const auto result =
       vmaCreateBuffer(allocator_, &buffer_create_info, &allocation_create_info, &buffer, &allocation_, nullptr);
   vk::resultCheck(static_cast<vk::Result>(result), "Buffer creation failed");
@@ -21,11 +21,11 @@ Buffer::Buffer(const vk::DeviceSize size,
 Buffer& Buffer::operator=(Buffer&& buffer) noexcept {
   if (this != &buffer) {
     UnmapMemory();
-    allocator_ = std::exchange(buffer.allocator_, {});
-    allocation_ = std::exchange(buffer.allocation_, {});
-    buffer_ = std::exchange(buffer.buffer_, {});
-    size_ = std::exchange(buffer.size_, {});
-    mapped_memory_ = std::exchange(buffer.mapped_memory_, {});
+    buffer_ = std::exchange(buffer.buffer_, nullptr);
+    size_ = std::exchange(buffer.size_, 0);
+    mapped_memory_ = std::exchange(buffer.mapped_memory_, nullptr);
+    allocator_ = std::exchange(buffer.allocator_, nullptr);
+    allocation_ = std::exchange(buffer.allocation_, nullptr);
   }
   return *this;
 }

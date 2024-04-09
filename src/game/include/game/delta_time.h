@@ -22,7 +22,7 @@ public:
 
 private:
   TimePoint previous_time_ = Clock::now();
-  Duration::rep delta_time_{};
+  Duration::rep delta_time_ = 0;
 };
 
 }  // namespace gfx

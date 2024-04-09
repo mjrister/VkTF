@@ -23,7 +23,7 @@ public:
   [[nodiscard]] VmaAllocator operator*() const noexcept { return allocator_; }
 
 private:
-  VmaAllocator allocator_{};
+  VmaAllocator allocator_ = nullptr;
 };
 
 }  // namespace gfx

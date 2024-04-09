@@ -18,7 +18,7 @@ vk::SurfaceFormatKHR GetSwapchainSurfaceFormat(const vk::PhysicalDevice physical
       std::ranges::contains(surface_formats, kTargetFormat)) {
     return kTargetFormat;
   }
-  assert(!surface_formats.empty());  // required the Vulkan specification
+  assert(!surface_formats.empty());  // required by the Vulkan specification
   return surface_formats.front();
 }
 
@@ -28,7 +28,7 @@ vk::PresentModeKHR GetSwapchainPresentMode(const vk::PhysicalDevice physical_dev
       std::ranges::contains(present_modes, kTargetPresentMode)) {
     return kTargetPresentMode;
   }
-  assert(std::ranges::contains(present_modes, vk::PresentModeKHR::eFifo));  // required the Vulkan specification
+  assert(std::ranges::contains(present_modes, vk::PresentModeKHR::eFifo));  // required by the Vulkan specification
   return vk::PresentModeKHR::eFifo;
 }
 

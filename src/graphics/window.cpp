@@ -74,13 +74,15 @@ Window::Window(const char* const title, const int width, const int height)
     : window_{CreateGlfwWindow(title, width, height)} {}
 
 std::pair<int, int> Window::GetSize() const noexcept {
-  int width{}, height{};
+  int width = 0;
+  int height = 0;
   glfwGetWindowSize(window_.get(), &width, &height);
   return std::pair{width, height};
 }
 
 std::pair<int, int> Window::GetFramebufferSize() const noexcept {
-  int width{}, height{};
+  int width = 0;
+  int height = 0;
   glfwGetFramebufferSize(window_.get(), &width, &height);
   return std::pair{width, height};
 }
@@ -91,7 +93,8 @@ float Window::GetAspectRatio() const noexcept {
 }
 
 std::pair<float, float> Window::GetCursorPosition() const noexcept {
-  double x{}, y{};
+  double x = 0.0;
+  double y = 0.0;
   glfwGetCursorPos(window_.get(), &x, &y);
   return std::pair{static_cast<float>(x), static_cast<float>(y)};
 }
@@ -99,14 +102,14 @@ std::pair<float, float> Window::GetCursorPosition() const noexcept {
 #ifdef GLFW_INCLUDE_VULKAN
 
 std::span<const char* const> Window::GetInstanceExtensions() {
-  std::uint32_t required_extension_count{};
+  std::uint32_t required_extension_count = 0;
   const auto* const* required_extensions = glfwGetRequiredInstanceExtensions(&required_extension_count);
   if (required_extensions == nullptr) throw std::runtime_error{"No window surface instance extensions"};
   return std::span{required_extensions, required_extension_count};  // pointer lifetime managed by GLFW
 }
 
 vk::UniqueSurfaceKHR Window::CreateSurface(const vk::Instance instance) const {
-  VkSurfaceKHR surface{};
+  VkSurfaceKHR surface = nullptr;
   const auto result = glfwCreateWindowSurface(instance, window_.get(), nullptr, &surface);
   vk::resultCheck(static_cast<vk::Result>(result), "Window surface creation failed");
   const vk::ObjectDestroy<vk::Instance, VULKAN_HPP_DEFAULT_DISPATCHER_TYPE> deleter{instance};
