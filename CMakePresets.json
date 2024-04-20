@@ -184,6 +184,10 @@
       "configurePreset": "windows-relwithdebinfo"
     },
     {
+      "name": "windows-clang-tidy",
+      "configurePreset": "windows-clang-tidy"
+    },
+    {
       "name": "linux-debug",
       "configurePreset": "linux-debug"
     },
@@ -194,6 +198,10 @@
     {
       "name": "linux-relwithdebinfo",
       "configurePreset": "linux-relwithdebinfo"
+    },
+    {
+      "name": "linux-clang-tidy",
+      "configurePreset": "linux-clang-tidy"
     }
   ],
   "testPresets": [

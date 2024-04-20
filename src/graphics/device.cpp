@@ -14,7 +14,7 @@ namespace {
 vk::PhysicalDevice SelectPhysicalDevice(const vk::Instance instance) {
   const auto physical_devices = instance.enumeratePhysicalDevices();
   if (physical_devices.empty()) {
-    throw std::runtime_error{"No supported physical device could be found"};
+    throw std::runtime_error{"No physical device could be found"};
   }
   const auto iterator = std::ranges::find_if(physical_devices, [](const auto physical_device) {
     const auto device_type = physical_device.getProperties().deviceType;

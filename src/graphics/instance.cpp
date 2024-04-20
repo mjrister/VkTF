@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <initializer_list>
 
+#include "graphics/window.h"
+
 namespace gfx {
 
 Instance::Instance() {

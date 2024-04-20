@@ -11,8 +11,8 @@ struct SphericalCoordinates {
   float phi = 0.0f;
 };
 
-SphericalCoordinates ToSphericalCoordinates(const glm::vec3& cartesian_coordinates);
-glm::vec3 ToCartesianCoordinates(const SphericalCoordinates& spherical_coordinates);
+[[nodiscard]] SphericalCoordinates ToSphericalCoordinates(const glm::vec3& cartesian_coordinates);
+[[nodiscard]] glm::vec3 ToCartesianCoordinates(const SphericalCoordinates& spherical_coordinates);
 
 }  // namespace gfx
 

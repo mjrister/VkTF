@@ -3,8 +3,6 @@
 
 #include <vulkan/vulkan.hpp>
 
-#include "graphics/window.h"
-
 namespace gfx {
 
 class Instance {

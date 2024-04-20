@@ -1,6 +1,7 @@
 #include "graphics/engine.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cstdint>
 #include <limits>
 #include <ranges>
@@ -29,6 +30,7 @@ vk::SampleCountFlagBits GetMsaaSampleCount(const vk::PhysicalDevice physical_dev
     }
   }
 
+  assert(color_depth_sample_count_flags & e1);
   return e1;
 }
 

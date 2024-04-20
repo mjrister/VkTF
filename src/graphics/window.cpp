@@ -1,5 +1,6 @@
 #include "graphics/window.h"
 
+#include <cassert>
 #include <cstdint>
 #include <format>
 #include <iostream>
@@ -53,6 +54,8 @@ UniqueGlfwWindow CreateGlfwWindow(const char* const title, int width, int height
   glfwWindowHint(GLFW_BLUE_BITS, video_mode->blueBits);
   glfwWindowHint(GLFW_REFRESH_RATE, video_mode->refreshRate);
 
+  assert(width > 0);
+  assert(height > 0);
   width = std::min(width, video_mode->width);
   height = std::min(height, video_mode->height);
 

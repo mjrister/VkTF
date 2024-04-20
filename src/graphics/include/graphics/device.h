@@ -2,15 +2,17 @@
 #define SRC_GRAPHICS_INCLUDE_GRAPHICS_DEVICE_H_
 
 #include <cstdint>
+#include <limits>
 
 #include <vulkan/vulkan.hpp>
 
 namespace gfx {
 
 struct QueueFamilyIndices {
-  std::uint32_t graphics_index = 0;
-  std::uint32_t present_index = 0;
-  std::uint32_t transfer_index = 0;
+  static constexpr auto kInvalidIndex = std::numeric_limits<std::uint32_t>::max();
+  std::uint32_t graphics_index = kInvalidIndex;
+  std::uint32_t present_index = kInvalidIndex;
+  std::uint32_t transfer_index = kInvalidIndex;
 };
 
 class Device {
