@@ -59,8 +59,8 @@ struct Vertex {
 };
 
 struct PushConstants {
-  glm::mat4 model_transform{1.0f};
-  glm::mat4 view_projection_transform{1.0f};
+  glm::mat4 model_view_transform{1.0f};
+  glm::mat4 projection_transform{1.0f};
 };
 
 using UniqueCgltfData = std::unique_ptr<cgltf_data, decltype(&cgltf_free)>;
@@ -344,7 +344,11 @@ public:
   Node(const cgltf_scene& scene, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes);
   Node(const cgltf_node& node, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes);
 
-  void Render(vk::CommandBuffer command_buffer, vk::PipelineLayout pipeline_layout, PushConstants push_constants) const;
+  void Render(const vk::CommandBuffer command_buffer,
+              const vk::PipelineLayout pipeline_layout,
+              const glm::mat4& model_transform,
+              const glm::mat4& view_transform,
+              const glm::mat4& projection_transform) const;
 
 private:
   std::vector<Mesh> meshes_;
@@ -371,11 +375,11 @@ Model::~Model() noexcept = default;  // this is necessary to enable forward decl
 
 void Model::Render(const Camera& camera, const vk::CommandBuffer command_buffer) const {
   command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_);
-  root_node_->Render(
-      command_buffer,
-      *pipeline_layout_,
-      PushConstants{.model_transform = glm::mat4{1.0f},
-                    .view_projection_transform = camera.GetProjectionTransform() * camera.GetViewTransform()});
+  root_node_->Render(command_buffer,
+                     *pipeline_layout_,
+                     glm::mat4{1.0f},
+                     camera.GetViewTransform(),
+                     camera.GetProjectionTransform());
 }
 
 Model::Node::Node(const cgltf_scene& scene, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes)
@@ -394,16 +398,22 @@ Model::Node::Node(const cgltf_node& node, std::unordered_map<const cgltf_mesh*, 
 
 void Model::Node::Render(const vk::CommandBuffer command_buffer,
                          const vk::PipelineLayout pipeline_layout,
-                         PushConstants push_constants) const {
-  push_constants.model_transform *= transform_;
-  command_buffer.pushConstants<PushConstants>(pipeline_layout, vk::ShaderStageFlagBits::eVertex, 0, push_constants);
+                         const glm::mat4& model_transform,
+                         const glm::mat4& view_transform,
+                         const glm::mat4& projection_transform) const {
+  const auto node_transform = model_transform * transform_;
+  command_buffer.pushConstants<PushConstants>(pipeline_layout,
+                                              vk::ShaderStageFlagBits::eVertex,
+                                              0,
+                                              PushConstants{.model_view_transform = view_transform * node_transform,
+                                                            .projection_transform = projection_transform});
 
   for (const auto& mesh : meshes_) {
     mesh.Render(command_buffer);
   }
 
   for (const auto& child_node : children_) {
-    child_node->Render(command_buffer, pipeline_layout, push_constants);
+    child_node->Render(command_buffer, pipeline_layout, node_transform, view_transform, projection_transform);
   }
 }
 
