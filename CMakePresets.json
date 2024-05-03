@@ -127,14 +127,6 @@
       ]
     },
     {
-      "name": "windows-clang-tidy",
-      "inherits": "windows-debug",
-      "cacheVariables": {
-        "CMAKE_CXX_CLANG_TIDY": "clang-tidy;--config-file=${sourceDir}/.clang-tidy;-p=${sourceDir}/out/build/${presetName};--extra-arg=/EHsc",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": true
-      }
-    },
-    {
       "name": "linux-debug",
       "inherits": [
         "linux",
@@ -160,14 +152,6 @@
         "x64",
         "relwithdebinfo"
       ]
-    },
-    {
-      "name": "linux-clang-tidy",
-      "inherits": "linux-debug",
-      "cacheVariables": {
-        "CMAKE_CXX_CLANG_TIDY": "clang-tidy;--config-file=${sourceDir}/.clang-tidy;-p=${sourceDir}/out/build/${presetName}",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": true
-      }
     }
   ],
   "buildPresets": [
@@ -184,10 +168,6 @@
       "configurePreset": "windows-relwithdebinfo"
     },
     {
-      "name": "windows-clang-tidy",
-      "configurePreset": "windows-clang-tidy"
-    },
-    {
       "name": "linux-debug",
       "configurePreset": "linux-debug"
     },
@@ -198,10 +178,6 @@
     {
       "name": "linux-relwithdebinfo",
       "configurePreset": "linux-relwithdebinfo"
-    },
-    {
-      "name": "linux-clang-tidy",
-      "configurePreset": "linux-clang-tidy"
     }
   ],
   "testPresets": [
