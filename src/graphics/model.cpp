@@ -189,40 +189,6 @@ std::vector<gfx::Mesh> CreateSubMeshes(const cgltf_mesh& mesh,
          | std::ranges::to<std::vector>();
 }
 
-std::unordered_map<const cgltf_mesh*, std::vector<gfx::Mesh>> CreateMeshes(const cgltf_data& data,
-                                                                           const vk::Device device,
-                                                                           const vk::Queue queue,
-                                                                           const std::uint32_t queue_family_index,
-                                                                           const VmaAllocator allocator) {
-  const auto command_pool =
-      device.createCommandPoolUnique(vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eTransient,
-                                                               .queueFamilyIndex = queue_family_index});
-  const auto command_buffers =
-      device.allocateCommandBuffersUnique(vk::CommandBufferAllocateInfo{.commandPool = *command_pool,
-                                                                        .level = vk::CommandBufferLevel::ePrimary,
-                                                                        .commandBufferCount = 1});
-  const auto command_buffer = *command_buffers.front();
-  command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-
-  std::vector<gfx::Buffer> staging_buffers;  // staging buffers must remain in scope until copy commands complete
-  auto meshes = std::span{data.meshes, data.meshes_count}
-                | std::views::transform([command_buffer, allocator, &staging_buffers](const auto& mesh) {
-                    return std::pair{&mesh, CreateSubMeshes(mesh, command_buffer, allocator, staging_buffers)};
-                  })
-                | std::ranges::to<std::unordered_map>();
-
-  command_buffer.end();
-
-  const auto fence = device.createFenceUnique(vk::FenceCreateInfo{});
-  queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &command_buffer}, *fence);
-
-  static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
-  const auto result = device.waitForFences(*fence, vk::True, kMaxTimeout);
-  vk::resultCheck(result, "Fence failed to enter a signaled state");
-
-  return meshes;
-}
-
 vk::UniquePipelineLayout CreatePipelineLayout(const vk::Device device) {
   static constexpr vk::PushConstantRange kPushConstantRange{.stageFlags = vk::ShaderStageFlagBits::eVertex,
                                                             .offset = 0,
@@ -358,17 +324,43 @@ private:
 
 Model::Model(const std::filesystem::path& gltf_filepath,
              const vk::Device device,
-             const vk::Queue transfer_queue,
-             const std::uint32_t transfer_queue_family_index,
+             const vk::Queue queue,
+             const std::uint32_t queue_family_index,
              const vk::Extent2D viewport_extent,
              const vk::SampleCountFlagBits msaa_sample_count,
              const vk::RenderPass render_pass,
              const VmaAllocator allocator) {
   const auto data = ParseFile(gltf_filepath.string().c_str());
-  auto meshes = CreateMeshes(*data, device, transfer_queue, transfer_queue_family_index, allocator);
-  root_node_ = std::make_unique<Node>(*data->scene, meshes);
+
+  const auto command_pool =
+      device.createCommandPoolUnique(vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eTransient,
+                                                               .queueFamilyIndex = queue_family_index});
+  const auto command_buffers =
+      device.allocateCommandBuffersUnique(vk::CommandBufferAllocateInfo{.commandPool = *command_pool,
+                                                                        .level = vk::CommandBufferLevel::ePrimary,
+                                                                        .commandBufferCount = 1});
+  const auto command_buffer = *command_buffers.front();
+  command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+
+  std::vector<Buffer> staging_buffers;  // staging buffers must remain in scope until copy commands complete
+  auto meshes = std::span{data->meshes, data->meshes_count}
+                | std::views::transform([command_buffer, allocator, &staging_buffers](const auto& mesh) {
+                    return std::pair{&mesh, CreateSubMeshes(mesh, command_buffer, allocator, staging_buffers)};
+                  })
+                | std::ranges::to<std::unordered_map>();
+
+  command_buffer.end();
+
+  const auto fence = device.createFenceUnique(vk::FenceCreateInfo{});
+  queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &command_buffer}, *fence);
+
   pipeline_layout_ = CreatePipelineLayout(device);
   pipeline_ = CreatePipeline(device, viewport_extent, msaa_sample_count, render_pass, *pipeline_layout_);
+  root_node_ = std::make_unique<Node>(*data->scene, meshes);
+
+  static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
+  const auto result = device.waitForFences(*fence, vk::True, kMaxTimeout);
+  vk::resultCheck(result, "Fence failed to enter a signaled state");
 }
 
 Model::~Model() noexcept = default;  // this is necessary to enable forward declaring Model::Node with std::unique_ptr

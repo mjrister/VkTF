@@ -62,6 +62,7 @@ Commit changes can be categorized into the following types:
 | `docs`     | Updates project or source code documentation         |
 | `feat`     | Adds a new feature for a user                        |
 | `fix`      | Fixes a user facing defect                           |
+| `pref`     | Improves application performance                     |
 | `refactor` | Alters code structure without changing functionality |
 | `style`    | Applies formatting or changes code style conventions |
 | `test`     | Relates to tests and testing infrastructure          |
@@ -80,7 +81,6 @@ The footer is optional and can include references to related GitHub issues affec
 build: compile vcpkg libraries with ASan
 
 
-
 When compiling address sanitizer on Windows, external libraries managed
 
 by vcpkg will fail to compile with the following error: "error LNK2038:
@@ -92,7 +92,6 @@ mismatch detected for 'annotate_string': value '0' doesn't match value
 library which creates conflicting symbols when also used by an external
 
 library due to ODR.
-
 
 
 Although this functionality can be disabled with macro definitions
@@ -110,7 +109,6 @@ to use /fsanitize=address. These custom triplets can then be enabled by
 first configuring vcpkg to know about them in vcpkg-configuration.json
 
 and then setting CMake cache variables to use them in CMakePresets.json.
-
 
 
 Closes #13
