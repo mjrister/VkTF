@@ -5,6 +5,7 @@
 #include <cstring>
 #include <format>
 #include <limits>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <stdexcept>
@@ -63,11 +64,9 @@ struct PushConstants {
   glm::mat4 projection_transform{1.0f};
 };
 
-using UniqueCgltfData = std::unique_ptr<cgltf_data, decltype(&cgltf_free)>;
-
-UniqueCgltfData ParseFile(const char* const gltf_filepath) {
+std::unique_ptr<cgltf_data, decltype(&cgltf_free)> ParseFile(const char* const gltf_filepath) {
   static constexpr cgltf_options kOptions{};
-  UniqueCgltfData data{nullptr, nullptr};
+  std::unique_ptr<cgltf_data, decltype(&cgltf_free)> data{nullptr, nullptr};
 
   if (const auto result = cgltf_parse_file(&kOptions, gltf_filepath, std::out_ptr(data, cgltf_free));
       result != cgltf_result_success) {
@@ -85,11 +84,20 @@ UniqueCgltfData ParseFile(const char* const gltf_filepath) {
   return data;
 }
 
+template <typename T>
+  requires requires(T element) {
+    { element.name } -> std::same_as<char*&>;
+  }
+std::string_view GetName(const T& element) {
+  const auto size = element.name == nullptr ? 0 : std::strlen(element.name);
+  return size == 0 ? "unknown" : std::string_view{element.name, size};
+}
+
 template <glm::length_t N>
 std::vector<glm::vec<N, float>> UnpackFloats(const cgltf_accessor& accessor) {
   if (const auto components = cgltf_num_components(accessor.type); components != N) {
-    const auto* const name = accessor.name != nullptr && std::strlen(accessor.name) > 0 ? accessor.name : "unknown";
-    throw std::runtime_error{std::format("Failed to unpack floats for {} with {} components", name, components)};
+    throw std::runtime_error{
+        std::format("Failed to unpack floats for {} with {} components", GetName(accessor), components)};
   }
   std::vector<glm::vec<N, float>> data(accessor.count);
   cgltf_accessor_unpack_floats(&accessor, glm::value_ptr(data.front()), N * accessor.count);
@@ -97,18 +105,16 @@ std::vector<glm::vec<N, float>> UnpackFloats(const cgltf_accessor& accessor) {
 }
 
 std::vector<Vertex> GetVertices(const cgltf_primitive& primitive) {
-  std::vector<glm::vec3> positions, normals;
+  std::optional<std::vector<glm::vec3>> positions, normals;
 
   for (const auto& attribute : std::span{primitive.attributes, primitive.attributes_count}) {
     switch (const auto& accessor = *attribute.data; attribute.type) {
-      case cgltf_attribute_type_position: {
+      case cgltf_attribute_type_position:
         positions = UnpackFloats<3>(accessor);
         break;
-      }
-      case cgltf_attribute_type_normal: {
+      case cgltf_attribute_type_normal:
         normals = UnpackFloats<3>(accessor);
         break;
-      }
       default:
         break;
     }
@@ -117,7 +123,7 @@ std::vector<Vertex> GetVertices(const cgltf_primitive& primitive) {
   static constexpr auto kCreateVertex = [](const auto& position, const auto& normal) {
     return Vertex{.position = position, .normal = normal};
   };
-  return std::views::zip_transform(kCreateVertex, positions, normals) | std::ranges::to<std::vector>();
+  return std::views::zip_transform(kCreateVertex, positions.value(), normals.value()) | std::ranges::to<std::vector>();
 }
 
 std::vector<std::uint16_t> GetIndices(const cgltf_accessor& accessor) {
