@@ -8,7 +8,6 @@
 #include <tuple>
 
 #include "graphics/device.h"
-#include "graphics/window.h"
 
 namespace {
 
@@ -41,26 +40,28 @@ std::uint32_t GetSwapchainImageCount(const vk::SurfaceCapabilitiesKHR& surface_c
   return std::min(min_image_count + 1, max_image_count);
 }
 
-vk::Extent2D GetSwapchainImageExtent(const gfx::Window& window,
-                                     const vk::SurfaceCapabilitiesKHR& surface_capabilities) {
+vk::Extent2D GetSwapchainImageExtent(const vk::SurfaceCapabilitiesKHR& surface_capabilities,
+                                     const vk::Extent2D framebuffer_extent) {
   if (static constexpr auto kUndefinedExtent = std::numeric_limits<std::uint32_t>::max();
       surface_capabilities.currentExtent != vk::Extent2D{.width = kUndefinedExtent, .height = kUndefinedExtent}) {
     return surface_capabilities.currentExtent;
   }
   const auto [min_width, min_height] = surface_capabilities.minImageExtent;
   const auto [max_width, max_height] = surface_capabilities.maxImageExtent;
-  const auto [framebuffer_width, framebuffer_height] = window.GetFramebufferSize();
-  return vk::Extent2D{.width = std::clamp(static_cast<std::uint32_t>(framebuffer_width), min_width, max_width),
-                      .height = std::clamp(static_cast<std::uint32_t>(framebuffer_height), min_height, max_height)};
+  const auto [framebuffer_width, framebuffer_height] = framebuffer_extent;
+  return vk::Extent2D{.width = std::clamp(framebuffer_width, min_width, max_width),
+                      .height = std::clamp(framebuffer_height, min_height, max_height)};
 }
 
-std::tuple<vk::UniqueSwapchainKHR, vk::Format, vk::Extent2D> CreateSwapchain(const gfx::Window& window,
-                                                                             const vk::SurfaceKHR surface,
-                                                                             const gfx::Device& device) {
-  const auto physical_device = device.physical_device();
+std::tuple<vk::UniqueSwapchainKHR, vk::Format, vk::Extent2D> CreateSwapchain(
+    const vk::Device device,
+    const vk::PhysicalDevice physical_device,
+    const vk::SurfaceKHR surface,
+    const vk::Extent2D framebuffer_extent,
+    const gfx::QueueFamilyIndices& queue_family_indices) {
   const auto surface_capabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
   const auto [image_format, image_color_space] = GetSwapchainSurfaceFormat(physical_device, surface);
-  const auto image_extent = GetSwapchainImageExtent(window, surface_capabilities);
+  const auto image_extent = GetSwapchainImageExtent(surface_capabilities, framebuffer_extent);
   vk::SwapchainCreateInfoKHR swapchain_create_info{.surface = surface,
                                                    .minImageCount = GetSwapchainImageCount(surface_capabilities),
                                                    .imageFormat = image_format,
@@ -71,24 +72,24 @@ std::tuple<vk::UniqueSwapchainKHR, vk::Format, vk::Extent2D> CreateSwapchain(con
                                                    .presentMode = GetSwapchainPresentMode(physical_device, surface),
                                                    .clipped = vk::True};
 
-  const auto [graphics_index, present_index, _] = device.queue_family_indices();
-  const std::array queue_family_indices{graphics_index, present_index};
+  const auto [graphics_index, present_index, _] = queue_family_indices;
+  const std::array graphics_and_present_index{graphics_index, present_index};
   if (graphics_index != present_index) {
     swapchain_create_info.imageSharingMode = vk::SharingMode::eConcurrent;
     swapchain_create_info.queueFamilyIndexCount = 2;
-    swapchain_create_info.pQueueFamilyIndices = queue_family_indices.data();
+    swapchain_create_info.pQueueFamilyIndices = graphics_and_present_index.data();
   } else {
     swapchain_create_info.imageSharingMode = vk::SharingMode::eExclusive;
     swapchain_create_info.queueFamilyIndexCount = 1;
     swapchain_create_info.pQueueFamilyIndices = &graphics_index;
   }
 
-  return std::tuple{device->createSwapchainKHRUnique(swapchain_create_info), image_format, image_extent};
+  return std::tuple{device.createSwapchainKHRUnique(swapchain_create_info), image_format, image_extent};
 }
 
-std::vector<vk::UniqueImageView> CreateSwapchainImageViews(const vk::SwapchainKHR swapchain,
-                                                           const vk::Format image_format,
-                                                           const vk::Device device) {
+std::vector<vk::UniqueImageView> CreateSwapchainImageViews(const vk::Device device,
+                                                           const vk::SwapchainKHR swapchain,
+                                                           const vk::Format image_format) {
   return device.getSwapchainImagesKHR(swapchain)  //
          | std::views::transform([device, image_format](const auto image) {
              return device.createImageViewUnique(vk::ImageViewCreateInfo{
@@ -106,9 +107,14 @@ std::vector<vk::UniqueImageView> CreateSwapchainImageViews(const vk::SwapchainKH
 
 namespace gfx {
 
-Swapchain::Swapchain(const Window& window, const vk::SurfaceKHR surface, const Device& device) {
-  std::tie(swapchain_, image_format_, image_extent_) = CreateSwapchain(window, surface, device);
-  image_views_ = CreateSwapchainImageViews(*swapchain_, image_format_, *device);
+Swapchain::Swapchain(const vk::Device device,
+                     const vk::PhysicalDevice physical_device,
+                     const vk::SurfaceKHR surface,
+                     const vk::Extent2D framebuffer_extent,
+                     const QueueFamilyIndices& queue_family_indices) {
+  std::tie(swapchain_, image_format_, image_extent_) =
+      CreateSwapchain(device, physical_device, surface, framebuffer_extent, queue_family_indices);
+  image_views_ = CreateSwapchainImageViews(device, *swapchain_, image_format_);
 }
 
 }  // namespace gfx

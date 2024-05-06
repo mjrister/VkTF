@@ -58,9 +58,9 @@ std::string ReadFile(const std::filesystem::path& glsl_filepath) {
 
 namespace gfx {
 
-ShaderModule::ShaderModule(const std::filesystem::path& glsl_filepath,
+ShaderModule::ShaderModule(const vk::Device device,
                            const vk::ShaderStageFlagBits shader_stage,
-                           const vk::Device device) {
+                           const std::filesystem::path& glsl_filepath) {
   const auto glsl = ReadFile(glsl_filepath);
   const auto spirv = GlslangCompiler::Get().Compile(GetGlslangStage(shader_stage), glsl.c_str());
 

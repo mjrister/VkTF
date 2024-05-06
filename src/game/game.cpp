@@ -42,8 +42,7 @@ void HandleKeyEvents(const gfx::Window& window, gfx::Camera& camera, const gfx::
 void HandleMouseEvents(const gfx::Window& window, gfx::Camera& camera) {
   static std::optional<glm::vec2> previous_cursor_position;
   if (window.IsMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT)) {
-    const auto [x, y] = window.GetCursorPosition();
-    const glm::vec2 cursor_position{x, y};
+    const auto cursor_position = window.GetCursorPosition();
     if (previous_cursor_position.has_value()) {
       static constexpr auto kCursorSpeed = 0.00390625f;
       const auto delta_cursor_position = cursor_position - *previous_cursor_position;

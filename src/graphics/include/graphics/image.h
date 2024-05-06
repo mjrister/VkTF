@@ -10,12 +10,12 @@ namespace gfx {
 
 class Image {
 public:
-  Image(const vk::Format format,
+  Image(const vk::Device device,
+        const vk::Format format,
         const vk::Extent2D extent,
         const vk::SampleCountFlagBits sample_count,
         const vk::ImageUsageFlags image_usage_flags,
         const vk::ImageAspectFlags image_aspect_flags,
-        const vk::Device device,
         const VmaAllocator allocator,
         const VmaAllocationCreateInfo& allocation_create_info);
 

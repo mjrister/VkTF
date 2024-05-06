@@ -8,12 +8,15 @@
 #include <vulkan/vulkan.hpp>
 
 namespace gfx {
-class Device;
-class Window;
+struct QueueFamilyIndices;
 
 class Swapchain {
 public:
-  Swapchain(const Window& window, const vk::SurfaceKHR surface, const Device& device);
+  Swapchain(const vk::Device device,
+            const vk::PhysicalDevice physical_device,
+            const vk::SurfaceKHR surface,
+            const vk::Extent2D framebuffer_extent,
+            const QueueFamilyIndices& queue_family_indices);
 
   [[nodiscard]] vk::SwapchainKHR operator*() const noexcept { return *swapchain_; }
 

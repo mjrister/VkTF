@@ -209,10 +209,10 @@ vk::UniquePipeline CreatePipeline(const vk::Device device,
                                   const vk::RenderPass render_pass,
                                   const vk::PipelineLayout pipeline_layout) {
   const std::filesystem::path vertex_shader_filepath{"assets/shaders/mesh.vert"};
-  const gfx::ShaderModule vertex_shader_module{vertex_shader_filepath, vk::ShaderStageFlagBits::eVertex, device};
+  const gfx::ShaderModule vertex_shader_module{device, vk::ShaderStageFlagBits::eVertex, vertex_shader_filepath};
 
   const std::filesystem::path fragment_shader_filepath{"assets/shaders/mesh.frag"};
-  const gfx::ShaderModule fragment_shader_module{fragment_shader_filepath, vk::ShaderStageFlagBits::eFragment, device};
+  const gfx::ShaderModule fragment_shader_module{device, vk::ShaderStageFlagBits::eFragment, fragment_shader_filepath};
 
   const std::array shader_stage_create_info{
       vk::PipelineShaderStageCreateInfo{.stage = vk::ShaderStageFlagBits::eVertex,
@@ -316,11 +316,11 @@ public:
   Node(const cgltf_scene& scene, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes);
   Node(const cgltf_node& node, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes);
 
-  void Render(const vk::CommandBuffer command_buffer,
-              const vk::PipelineLayout pipeline_layout,
-              const glm::mat4& model_transform,
+  void Render(const glm::mat4& model_transform,
               const glm::mat4& view_transform,
-              const glm::mat4& projection_transform) const;
+              const glm::mat4& projection_transform,
+              const vk::PipelineLayout pipeline_layout,
+              const vk::CommandBuffer command_buffer) const;
 
 private:
   std::vector<Mesh> meshes_;
@@ -373,11 +373,11 @@ Model::~Model() noexcept = default;  // this is necessary to enable forward decl
 
 void Model::Render(const Camera& camera, const vk::CommandBuffer command_buffer) const {
   command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_);
-  root_node_->Render(command_buffer,
-                     *pipeline_layout_,
-                     glm::mat4{1.0f},
+  root_node_->Render(glm::mat4{1.0f},
                      camera.GetViewTransform(),
-                     camera.GetProjectionTransform());
+                     camera.GetProjectionTransform(),
+                     *pipeline_layout_,
+                     command_buffer);
 }
 
 Model::Node::Node(const cgltf_scene& scene, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes)
@@ -394,11 +394,11 @@ Model::Node::Node(const cgltf_node& node, std::unordered_map<const cgltf_mesh*, 
                 | std::ranges::to<std::vector>()},
       transform_{GetTransform(node)} {}
 
-void Model::Node::Render(const vk::CommandBuffer command_buffer,
-                         const vk::PipelineLayout pipeline_layout,
-                         const glm::mat4& model_transform,
+void Model::Node::Render(const glm::mat4& model_transform,
                          const glm::mat4& view_transform,
-                         const glm::mat4& projection_transform) const {
+                         const glm::mat4& projection_transform,
+                         const vk::PipelineLayout pipeline_layout,
+                         const vk::CommandBuffer command_buffer) const {
   const auto node_transform = model_transform * transform_;
   command_buffer.pushConstants<PushConstants>(pipeline_layout,
                                               vk::ShaderStageFlagBits::eVertex,
@@ -411,7 +411,7 @@ void Model::Node::Render(const vk::CommandBuffer command_buffer,
   }
 
   for (const auto& child_node : children_) {
-    child_node->Render(command_buffer, pipeline_layout, node_transform, view_transform, projection_transform);
+    child_node->Render(node_transform, view_transform, projection_transform, pipeline_layout, command_buffer);
   }
 }
 

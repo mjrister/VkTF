@@ -34,10 +34,8 @@ private:
     if (glfwInit() == GLFW_FALSE) {
       throw std::runtime_error{"GLFW initialization failed"};
     }
-#ifdef GLFW_INCLUDE_VULKAN
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);  // TODO(#50): enable after implementing swapchain recreation
-#endif
   }
 };
 
@@ -59,14 +57,14 @@ UniqueGlfwWindow CreateGlfwWindow(const char* const title, int width, int height
   width = std::min(width, video_mode->width);
   height = std::min(height, video_mode->height);
 
-  auto* window = glfwCreateWindow(width, height, title, nullptr, nullptr);
+  UniqueGlfwWindow window{glfwCreateWindow(width, height, title, nullptr, nullptr), glfwDestroyWindow};
   if (window == nullptr) throw std::runtime_error{"GLFW window creation failed"};
 
   const auto center_x = (video_mode->width - width) / 2;
   const auto center_y = (video_mode->height - height) / 2;
-  glfwSetWindowPos(window, center_x, center_y);
+  glfwSetWindowPos(window.get(), center_x, center_y);
 
-  return UniqueGlfwWindow{window, glfwDestroyWindow};
+  return window;
 }
 
 }  // namespace
@@ -76,33 +74,31 @@ namespace gfx {
 Window::Window(const char* const title, const int width, const int height)
     : window_{CreateGlfwWindow(title, width, height)} {}
 
-std::pair<int, int> Window::GetSize() const noexcept {
+vk::Extent2D Window::GetExtent() const noexcept {
   int width = 0;
   int height = 0;
   glfwGetWindowSize(window_.get(), &width, &height);
-  return std::pair{width, height};
+  return vk::Extent2D{.width = static_cast<std::uint32_t>(width), .height = static_cast<std::uint32_t>(height)};
 }
 
-std::pair<int, int> Window::GetFramebufferSize() const noexcept {
+vk::Extent2D Window::GetFramebufferExtent() const noexcept {
   int width = 0;
   int height = 0;
   glfwGetFramebufferSize(window_.get(), &width, &height);
-  return std::pair{width, height};
+  return vk::Extent2D{.width = static_cast<std::uint32_t>(width), .height = static_cast<std::uint32_t>(height)};
 }
 
 float Window::GetAspectRatio() const noexcept {
-  const auto [width, height] = GetSize();
+  const auto [width, height] = GetExtent();
   return height == 0 ? 0.0f : static_cast<float>(width) / static_cast<float>(height);
 }
 
-std::pair<float, float> Window::GetCursorPosition() const noexcept {
+glm::vec2 Window::GetCursorPosition() const noexcept {
   double x = 0.0;
   double y = 0.0;
   glfwGetCursorPos(window_.get(), &x, &y);
-  return std::pair{static_cast<float>(x), static_cast<float>(y)};
+  return glm::vec2{static_cast<float>(x), static_cast<float>(y)};
 }
-
-#ifdef GLFW_INCLUDE_VULKAN
 
 std::span<const char* const> Window::GetInstanceExtensions() {
   std::uint32_t required_extension_count = 0;
@@ -118,7 +114,5 @@ vk::UniqueSurfaceKHR Window::CreateSurface(const vk::Instance instance) const {
   const vk::ObjectDestroy<vk::Instance, VULKAN_HPP_DEFAULT_DISPATCHER_TYPE> deleter{instance};
   return vk::UniqueSurfaceKHR{vk::SurfaceKHR{surface}, deleter};
 }
-
-#endif
 
 }  // namespace gfx
