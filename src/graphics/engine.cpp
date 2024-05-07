@@ -207,8 +207,8 @@ Engine::Engine(const Window& window)
 Model Engine::LoadModel(const std::filesystem::path& gltf_filepath) const {
   return Model{gltf_filepath,
                *device_,
-               device_.transfer_queue(),
-               device_.queue_family_indices().transfer_index,
+               device_.graphics_queue(),  // TODO(matthew-rister): prefer a dedicated transfer queue
+               device_.queue_family_indices().graphics_index,
                swapchain_.image_extent(),
                msaa_sample_count_,
                *render_pass_,

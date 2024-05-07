@@ -35,4 +35,4 @@ target_compile_definitions(graphics PUBLIC GLFW_INCLUDE_VULKAN
                                            VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
                                            VULKAN_HPP_NO_CONSTRUCTORS)
 
-target_include_directories(graphics PUBLIC ${CGLTF_INCLUDE_DIRS} include)
+target_include_directories(graphics PUBLIC ${CGLTF_INCLUDE_DIRS} {Stb_INCLUDE_DIR} include)

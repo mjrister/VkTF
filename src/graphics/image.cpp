@@ -1,5 +1,32 @@
 #include "graphics/image.h"
 
+namespace {
+
+void TransitionImageLayout(const vk::Image image,
+                           const vk::ImageSubresourceRange& image_subresource_range,
+                           const std::pair<vk::PipelineStageFlags, vk::PipelineStageFlags>& stage_masks,
+                           const std::pair<vk::AccessFlags, vk::AccessFlags>& access_masks,
+                           const std::pair<vk::ImageLayout, vk::ImageLayout>& image_layouts,
+                           const vk::CommandBuffer command_buffer) {
+  const auto [src_stage_mask, dst_stage_mask] = stage_masks;
+  const auto [src_access_mask, dst_access_mask] = access_masks;
+  const auto [old_layout, new_layout] = image_layouts;
+
+  command_buffer.pipelineBarrier(src_stage_mask,
+                                 dst_stage_mask,
+                                 vk::DependencyFlags{},
+                                 nullptr,
+                                 nullptr,
+                                 vk::ImageMemoryBarrier{.srcAccessMask = src_access_mask,
+                                                        .dstAccessMask = dst_access_mask,
+                                                        .oldLayout = old_layout,
+                                                        .newLayout = new_layout,
+                                                        .image = image,
+                                                        .subresourceRange = image_subresource_range});
+}
+
+}  // namespace
+
 namespace gfx {
 
 Image::Image(const vk::Device device,
@@ -10,7 +37,7 @@ Image::Image(const vk::Device device,
              const vk::ImageAspectFlags image_aspect_flags,
              const VmaAllocator allocator,
              const VmaAllocationCreateInfo& allocation_create_info)
-    : format_{format}, allocator_{allocator} {
+    : format_{format}, extent_{extent}, image_aspect_flags_{image_aspect_flags}, allocator_{allocator} {
   const VkImageCreateInfo image_create_info{
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .imageType = VK_IMAGE_TYPE_2D,
@@ -50,6 +77,34 @@ Image::~Image() noexcept {
   if (allocator_ != nullptr) {
     vmaDestroyImage(allocator_, image_, allocation_);
   }
+}
+
+void Image::Copy(const vk::Buffer src_buffer, const vk::CommandBuffer command_buffer) const {
+  const vk::ImageSubresourceRange image_subresource_range{.aspectMask = image_aspect_flags_,
+                                                          .levelCount = 1,
+                                                          .layerCount = 1};
+
+  TransitionImageLayout(image_,
+                        image_subresource_range,
+                        std::pair{vk::PipelineStageFlagBits::eHost, vk::PipelineStageFlagBits::eTransfer},
+                        std::pair{vk::AccessFlagBits::eNone, vk::AccessFlagBits::eTransferWrite},
+                        std::pair{vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal},
+                        command_buffer);
+
+  command_buffer.copyBufferToImage(
+      src_buffer,
+      image_,
+      vk::ImageLayout::eTransferDstOptimal,
+      vk::BufferImageCopy{
+          .imageSubresource = vk::ImageSubresourceLayers{.aspectMask = image_aspect_flags_, .layerCount = 1},
+          .imageExtent = vk::Extent3D{.width = extent_.width, .height = extent_.height, .depth = 1}});
+
+  TransitionImageLayout(image_,
+                        image_subresource_range,
+                        std::pair{vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader},
+                        std::pair{vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eShaderRead},
+                        std::pair{vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal},
+                        command_buffer);
 }
 
 }  // namespace gfx

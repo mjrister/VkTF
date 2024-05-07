@@ -30,10 +30,14 @@ public:
   [[nodiscard]] vk::ImageView image_view() const noexcept { return *image_view_; }
   [[nodiscard]] vk::Format format() const noexcept { return format_; }
 
+  void Copy(const vk::Buffer src_buffer, const vk::CommandBuffer command_buffer) const;
+
 private:
   vk::Image image_;
   vk::UniqueImageView image_view_;
   vk::Format format_ = vk::Format::eUndefined;
+  vk::Extent2D extent_;
+  vk::ImageAspectFlags image_aspect_flags_;
   VmaAllocator allocator_ = nullptr;
   VmaAllocation allocation_ = nullptr;
 };

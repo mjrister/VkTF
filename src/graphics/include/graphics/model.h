@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <vector>
 
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.hpp>
@@ -36,6 +37,10 @@ public:
 private:
   class Node;
 
+  vk::UniqueDescriptorPool descriptor_pool_;
+  vk::UniqueDescriptorSetLayout descriptor_set_layout_;
+  vk::UniqueSampler sampler_;
+  std::vector<Image> textures_;
   vk::UniquePipelineLayout pipeline_layout_;
   vk::UniquePipeline pipeline_;
   std::unique_ptr<Node> root_node_;
