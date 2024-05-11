@@ -53,7 +53,7 @@ gfx::QueueFamilyIndices FindQueueFamilyIndices(const vk::PhysicalDevice physical
   throw std::runtime_error{"Physical device does not support required queue families"};
 }
 
-vk::UniqueDevice CreateDevice(const vk::PhysicalDevice physical_device,
+vk::UniqueDevice CreateDevice(const gfx::PhysicalDevice& physical_device,
                               const gfx::QueueFamilyIndices& queue_family_indices) {
   static constexpr auto kHighestNormalizedQueuePriority = 1.0f;
   const auto [graphics_index, present_index, transfer_index] = queue_family_indices;
@@ -68,12 +68,14 @@ vk::UniqueDevice CreateDevice(const vk::PhysicalDevice physical_device,
       | std::ranges::to<std::vector>();
 
   static constexpr std::array kDeviceExtensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+  const vk::PhysicalDeviceFeatures enabled_features{.samplerAnisotropy = physical_device.features().samplerAnisotropy};
 
-  auto device = physical_device.createDeviceUnique(
+  auto device = physical_device->createDeviceUnique(
       vk::DeviceCreateInfo{.queueCreateInfoCount = static_cast<std::uint32_t>(device_queue_create_info.size()),
                            .pQueueCreateInfos = device_queue_create_info.data(),
                            .enabledExtensionCount = static_cast<std::uint32_t>(kDeviceExtensions.size()),
-                           .ppEnabledExtensionNames = kDeviceExtensions.data()});
+                           .ppEnabledExtensionNames = kDeviceExtensions.data(),
+                           .pEnabledFeatures = &enabled_features});
 
 #if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1
   VULKAN_HPP_DEFAULT_DISPATCHER.init(*device);
@@ -89,7 +91,7 @@ namespace gfx {
 Device::Device(const vk::Instance instance, const vk::SurfaceKHR surface)
     : physical_device_{instance},
       queue_family_indices_{FindQueueFamilyIndices(*physical_device_, surface)},
-      device_{CreateDevice(*physical_device_, queue_family_indices_)},
+      device_{CreateDevice(physical_device_, queue_family_indices_)},
       graphics_queue_{device_->getQueue(queue_family_indices_.graphics_index, 0)},
       present_queue_{device_->getQueue(queue_family_indices_.present_index, 0)},
       transfer_queue_{device_->getQueue(queue_family_indices_.transfer_index, 0)} {}

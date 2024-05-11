@@ -358,12 +358,16 @@ void UpdateDescriptorSet(const vk::Device device,
                               nullptr);
 }
 
-vk::UniqueSampler CreateSampler(const vk::Device device) {
-  // TODO(matthew-rister): enable sampler anisotropy
-  return device.createSamplerUnique(vk::SamplerCreateInfo{.magFilter = vk::Filter::eLinear,
-                                                          .minFilter = vk::Filter::eLinear,
-                                                          .addressModeU = vk::SamplerAddressMode::eRepeat,
-                                                          .addressModeV = vk::SamplerAddressMode::eRepeat});
+vk::UniqueSampler CreateSampler(const vk::Device device,
+                                const vk::PhysicalDeviceFeatures& physical_device_features,
+                                const vk::PhysicalDeviceLimits& physical_device_limits) {
+  return device.createSamplerUnique(
+      vk::SamplerCreateInfo{.magFilter = vk::Filter::eLinear,
+                            .minFilter = vk::Filter::eLinear,
+                            .addressModeU = vk::SamplerAddressMode::eRepeat,
+                            .addressModeV = vk::SamplerAddressMode::eRepeat,
+                            .anisotropyEnable = physical_device_features.samplerAnisotropy,
+                            .maxAnisotropy = physical_device_limits.maxSamplerAnisotropy});
 }
 
 vk::UniquePipelineLayout CreatePipelineLayout(const vk::Device device,
@@ -508,6 +512,8 @@ private:
 };
 
 Model::Model(const std::filesystem::path& gltf_filepath,
+             const vk::PhysicalDeviceFeatures& physical_device_features,
+             const vk::PhysicalDeviceLimits& physical_device_limits,
              const vk::Device device,
              const vk::Queue queue,
              const std::uint32_t queue_family_index,
@@ -541,7 +547,7 @@ Model::Model(const std::filesystem::path& gltf_filepath,
   descriptor_set_layout_ = CreateDescriptorSetLayout(device);
   pipeline_layout_ = CreatePipelineLayout(device, *descriptor_set_layout_);
   pipeline_ = CreatePipeline(device, viewport_extent, msaa_sample_count, render_pass, *pipeline_layout_);
-  sampler_ = CreateSampler(device);
+  sampler_ = CreateSampler(device, physical_device_features, physical_device_limits);
   textures_.reserve(material_count);
 
   std::vector<Buffer> staging_buffers;  // staging buffers must remain in scope until copy commands complete

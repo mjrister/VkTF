@@ -16,6 +16,8 @@ class Image;
 class Model {
 public:
   Model(const std::filesystem::path& gltf_filepath,
+        const vk::PhysicalDeviceFeatures& physical_device_features,
+        const vk::PhysicalDeviceLimits& physical_device_limits,
         const vk::Device device,
         const vk::Queue queue,
         const std::uint32_t queue_family_index,

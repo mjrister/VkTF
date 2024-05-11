@@ -202,7 +202,10 @@ Engine::Engine(const Window& window)
       draw_fences_{CreateFences<kMaxRenderFrames>(*device_)} {}
 
 Model Engine::LoadModel(const std::filesystem::path& gltf_filepath) const {
+  const auto& physical_device = device_.physical_device();
   return Model{gltf_filepath,
+               physical_device.features(),
+               physical_device.limits(),
                *device_,
                device_.graphics_queue(),  // TODO(matthew-rister): prefer a dedicated transfer queue
                device_.queue_family_indices().graphics_index,
