@@ -6,6 +6,8 @@
 
 #include <vulkan/vulkan.hpp>
 
+#include "graphics/physical_device.h"
+
 namespace gfx {
 
 struct QueueFamilyIndices {
@@ -22,14 +24,14 @@ public:
   [[nodiscard]] vk::Device operator*() const noexcept { return *device_; }
   [[nodiscard]] const vk::Device* operator->() const noexcept { return &(*device_); }
 
-  [[nodiscard]] vk::PhysicalDevice physical_device() const noexcept { return physical_device_; }
+  [[nodiscard]] const PhysicalDevice& physical_device() const noexcept { return physical_device_; }
   [[nodiscard]] const QueueFamilyIndices& queue_family_indices() const noexcept { return queue_family_indices_; }
   [[nodiscard]] vk::Queue graphics_queue() const noexcept { return graphics_queue_; }
   [[nodiscard]] vk::Queue present_queue() const noexcept { return present_queue_; }
   [[nodiscard]] vk::Queue transfer_queue() const noexcept { return transfer_queue_; }
 
 private:
-  vk::PhysicalDevice physical_device_;
+  PhysicalDevice physical_device_;
   QueueFamilyIndices queue_family_indices_;
   vk::UniqueDevice device_;
   vk::Queue graphics_queue_, present_queue_, transfer_queue_;

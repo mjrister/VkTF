@@ -11,18 +11,6 @@
 
 namespace {
 
-vk::PhysicalDevice SelectPhysicalDevice(const vk::Instance instance) {
-  const auto physical_devices = instance.enumeratePhysicalDevices();
-  if (physical_devices.empty()) {
-    throw std::runtime_error{"No physical device could be found"};
-  }
-  const auto iterator = std::ranges::find_if(physical_devices, [](const auto physical_device) {
-    const auto device_type = physical_device.getProperties().deviceType;
-    return device_type == vk::PhysicalDeviceType::eDiscreteGpu;
-  });
-  return iterator != std::ranges::cend(physical_devices) ? *iterator : physical_devices.front();
-}
-
 std::optional<std::uint32_t> FindQueueFamilyIndex(
     const std::vector<vk::QueueFamilyProperties>& all_queue_family_properties,
     std::predicate<const vk::QueueFamilyProperties&> auto&& find_fn) {
@@ -99,9 +87,9 @@ vk::UniqueDevice CreateDevice(const vk::PhysicalDevice physical_device,
 namespace gfx {
 
 Device::Device(const vk::Instance instance, const vk::SurfaceKHR surface)
-    : physical_device_{SelectPhysicalDevice(instance)},
-      queue_family_indices_{FindQueueFamilyIndices(physical_device_, surface)},
-      device_{CreateDevice(physical_device_, queue_family_indices_)},
+    : physical_device_{instance},
+      queue_family_indices_{FindQueueFamilyIndices(*physical_device_, surface)},
+      device_{CreateDevice(*physical_device_, queue_family_indices_)},
       graphics_queue_{device_->getQueue(queue_family_indices_.graphics_index, 0)},
       present_queue_{device_->getQueue(queue_family_indices_.present_index, 0)},
       transfer_queue_{device_->getQueue(queue_family_indices_.transfer_index, 0)} {}

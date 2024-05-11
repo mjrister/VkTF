@@ -15,10 +15,7 @@
 
 namespace {
 
-vk::SampleCountFlagBits GetMsaaSampleCount(const vk::PhysicalDevice physical_device) {
-  const auto& physical_device_properties = physical_device.getProperties();
-  const auto& physical_device_limits = physical_device_properties.limits;
-
+vk::SampleCountFlagBits GetMsaaSampleCount(const vk::PhysicalDeviceLimits& physical_device_limits) {
   const auto color_sample_count_flags = physical_device_limits.framebufferColorSampleCounts;
   const auto depth_sample_count_flags = physical_device_limits.framebufferDepthSampleCounts;
   const auto color_depth_sample_count_flags = color_sample_count_flags & depth_sample_count_flags;
@@ -164,13 +161,13 @@ namespace gfx {
 Engine::Engine(const Window& window)
     : surface_{window.CreateSurface(*instance_)},
       device_{*instance_, *surface_},
-      allocator_{*instance_, device_.physical_device(), *device_},
+      allocator_{*instance_, *device_.physical_device(), *device_},
       swapchain_{*device_,
-                 device_.physical_device(),
+                 *device_.physical_device(),
                  *surface_,
                  window.GetFramebufferExtent(),
                  device_.queue_family_indices()},
-      msaa_sample_count_{GetMsaaSampleCount(device_.physical_device())},
+      msaa_sample_count_{GetMsaaSampleCount(device_.physical_device().limits())},
       color_attachment_{*device_,
                         swapchain_.image_format(),
                         swapchain_.image_extent(),
