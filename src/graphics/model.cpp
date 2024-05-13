@@ -111,14 +111,14 @@ UniqueCgltfData ParseFile(const char* const gltf_filepath) {
 
   if (const auto result = cgltf_parse_file(&kOptions, gltf_filepath, std::out_ptr(data, cgltf_free));
       result != cgltf_result_success) {
-    throw std::runtime_error{std::format("Parse file failed with with error {}", result)};
+    throw std::runtime_error{std::format("Failed to parse {} with error {}", gltf_filepath, result)};
   }
   if (const auto result = cgltf_load_buffers(&kOptions, data.get(), gltf_filepath); result != cgltf_result_success) {
-    throw std::runtime_error{std::format("Load buffers failed with error {}", result)};
+    throw std::runtime_error{std::format("Failed to load buffers for {} with error {}", gltf_filepath, result)};
   }
 #ifndef NDEBUG
   if (const auto result = cgltf_validate(data.get()); result != cgltf_result_success) {
-    throw std::runtime_error{std::format("Validation failed with error {}", result)};
+    throw std::runtime_error{std::format("Failed to validate {} with error {}", gltf_filepath, result)};
   }
 #endif
 
@@ -145,6 +145,7 @@ std::vector<glm::vec<N, float>> UnpackFloats(const cgltf_accessor& accessor) {
   return data;
 }
 
+// TODO(matthew-rister): improve error logging for this method
 std::vector<Vertex> GetVertices(const cgltf_primitive& primitive) {
   std::optional<std::vector<glm::vec3>> positions, normals;
   std::optional<std::vector<glm::vec2>> texture_coordinates;
@@ -193,15 +194,25 @@ glm::mat4 GetTransform(const cgltf_node& node) {
 }
 
 StbImage LoadImage(const std::filesystem::path& image_filepath) {
-  static constexpr auto kRequiredChannels = STBI_rgb_alpha;  // require RGBA for improved device compatibility
+  static constexpr auto kRequiredChannels = 4;  // require RGBA for improved device compatibility
   int width = 0, height = 0, channels = 0;
 
   UniqueStbImageData data{stbi_load(image_filepath.string().c_str(), &width, &height, &channels, kRequiredChannels),
                           stbi_image_free};
   if (data == nullptr) {
     throw std::runtime_error{
-        std::format("Failed to load {} with error: {}", image_filepath.string(), stbi_failure_reason())};
+        std::format("Failed to load {} with error {}", image_filepath.string(), stbi_failure_reason())};
   }
+
+#ifndef NDEBUG
+  if (channels != kRequiredChannels) {
+    std::println(std::clog,
+                 "{} contains {} color channels but was requested to load with {}",
+                 image_filepath.filename().string(),
+                 channels,
+                 kRequiredChannels);
+  }
+#endif
 
   return StbImage{.width = width, .height = height, .channels = kRequiredChannels, .data = std::move(data)};
 }
