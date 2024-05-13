@@ -507,7 +507,7 @@ public:
 
 private:
   std::vector<Mesh> meshes_;
-  std::vector<std::unique_ptr<Node>> children_;
+  std::vector<std::unique_ptr<const Node>> children_;
   glm::mat4 transform_{1.0f};
 };
 
@@ -593,7 +593,7 @@ Model::Model(const std::filesystem::path& gltf_filepath,
   const auto fence = device.createFenceUnique(vk::FenceCreateInfo{});
   queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &command_buffer}, *fence);
 
-  root_node_ = std::make_unique<Node>(*data->scene, meshes);
+  root_node_ = std::make_unique<const Node>(*data->scene, meshes);
 
   static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
   const auto result = device.waitForFences(*fence, vk::True, kMaxTimeout);
@@ -614,15 +614,17 @@ void Model::Render(const Camera& camera, const vk::CommandBuffer command_buffer)
 
 Model::Node::Node(const cgltf_scene& scene, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes)
     : children_{std::span{scene.nodes, scene.nodes_count}
-                | std::views::transform(
-                    [&meshes](const auto* const scene_node) { return std::make_unique<Node>(*scene_node, meshes); })
+                | std::views::transform([&meshes](const auto* const scene_node) {
+                    return std::make_unique<const Node>(*scene_node, meshes);
+                  })
                 | std::ranges::to<std::vector>()} {}
 
 Model::Node::Node(const cgltf_node& node, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes)
     : meshes_{GetMeshes(node, meshes)},
       children_{std::span{node.children, node.children_count}
-                | std::views::transform(
-                    [&meshes](const auto* const child_node) { return std::make_unique<Node>(*child_node, meshes); })
+                | std::views::transform([&meshes](const auto* const child_node) {
+                    return std::make_unique<const Node>(*child_node, meshes);
+                  })
                 | std::ranges::to<std::vector>()},
       transform_{GetTransform(node)} {}
 

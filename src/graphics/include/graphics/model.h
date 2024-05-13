@@ -45,7 +45,7 @@ private:
   std::vector<Image> textures_;
   vk::UniquePipelineLayout pipeline_layout_;
   vk::UniquePipeline pipeline_;
-  std::unique_ptr<Node> root_node_;
+  std::unique_ptr<const Node> root_node_;
 };
 
 }  // namespace gfx
