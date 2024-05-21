@@ -171,6 +171,7 @@ Engine::Engine(const Window& window)
       color_attachment_{*device_,
                         swapchain_.image_format(),
                         swapchain_.image_extent(),
+                        1,
                         msaa_sample_count_,
                         vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransientAttachment,
                         vk::ImageAspectFlagBits::eColor,
@@ -181,6 +182,7 @@ Engine::Engine(const Window& window)
       depth_attachment_{*device_,
                         vk::Format::eD24UnormS8Uint,  // TODO(#54): check device support
                         swapchain_.image_extent(),
+                        1,
                         msaa_sample_count_,
                         vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eTransientAttachment,
                         vk::ImageAspectFlagBits::eDepth,

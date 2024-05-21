@@ -32,18 +32,19 @@ namespace gfx {
 Image::Image(const vk::Device device,
              const vk::Format format,
              const vk::Extent2D extent,
+             const std::uint32_t mip_levels,
              const vk::SampleCountFlagBits sample_count,
              const vk::ImageUsageFlags image_usage_flags,
              const vk::ImageAspectFlags image_aspect_flags,
              const VmaAllocator allocator,
              const VmaAllocationCreateInfo& allocation_create_info)
-    : format_{format}, extent_{extent}, image_aspect_flags_{image_aspect_flags}, allocator_{allocator} {
+    : format_{format}, mip_levels_{mip_levels}, image_aspect_flags_{image_aspect_flags}, allocator_{allocator} {
   const VkImageCreateInfo image_create_info{
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .imageType = VK_IMAGE_TYPE_2D,
       .format = static_cast<VkFormat>(format),
       .extent = VkExtent3D{.width = extent.width, .height = extent.height, .depth = 1},
-      .mipLevels = 1,
+      .mipLevels = mip_levels_,
       .arrayLayers = 1,
       .samples = static_cast<VkSampleCountFlagBits>(sample_count),
       .usage = static_cast<VkImageUsageFlags>(image_usage_flags)};
@@ -52,14 +53,14 @@ Image::Image(const vk::Device device,
   const auto result =
       vmaCreateImage(allocator_, &image_create_info, &allocation_create_info, &image, &allocation_, nullptr);
   vk::resultCheck(static_cast<vk::Result>(result), "Image creation failed");
-  image_ = image;
+  image_ = vk::Image{image};
 
   image_view_ = device.createImageViewUnique(vk::ImageViewCreateInfo{
       .image = image_,
       .viewType = vk::ImageViewType::e2D,
       .format = format,
       .subresourceRange =
-          vk::ImageSubresourceRange{.aspectMask = image_aspect_flags, .levelCount = 1, .layerCount = 1}});
+          vk::ImageSubresourceRange{.aspectMask = image_aspect_flags, .levelCount = mip_levels, .layerCount = 1}});
 }
 
 Image& Image::operator=(Image&& image) noexcept {
@@ -79,9 +80,11 @@ Image::~Image() noexcept {
   }
 }
 
-void Image::Copy(const vk::Buffer src_buffer, const vk::CommandBuffer command_buffer) const {
+void Image::Copy(const vk::Buffer src_buffer,
+                 const std::vector<vk::BufferImageCopy>& buffer_image_copies,
+                 const vk::CommandBuffer command_buffer) const {
   const vk::ImageSubresourceRange image_subresource_range{.aspectMask = image_aspect_flags_,
-                                                          .levelCount = 1,
+                                                          .levelCount = mip_levels_,
                                                           .layerCount = 1};
 
   TransitionImageLayout(image_,
@@ -91,13 +94,7 @@ void Image::Copy(const vk::Buffer src_buffer, const vk::CommandBuffer command_bu
                         std::pair{vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal},
                         command_buffer);
 
-  command_buffer.copyBufferToImage(
-      src_buffer,
-      image_,
-      vk::ImageLayout::eTransferDstOptimal,
-      vk::BufferImageCopy{
-          .imageSubresource = vk::ImageSubresourceLayers{.aspectMask = image_aspect_flags_, .layerCount = 1},
-          .imageExtent = vk::Extent3D{.width = extent_.width, .height = extent_.height, .depth = 1}});
+  command_buffer.copyBufferToImage(src_buffer, image_, vk::ImageLayout::eTransferDstOptimal, buffer_image_copies);
 
   TransitionImageLayout(image_,
                         image_subresource_range,

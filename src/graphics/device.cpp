@@ -57,7 +57,6 @@ vk::UniqueDevice CreateDevice(const gfx::PhysicalDevice& physical_device,
                               const gfx::QueueFamilyIndices& queue_family_indices) {
   static constexpr auto kHighestNormalizedQueuePriority = 1.0f;
   const auto [graphics_index, present_index, transfer_index] = queue_family_indices;
-
   const auto device_queue_create_info =
       std::unordered_set{graphics_index, present_index, transfer_index}
       | std::views::transform([](const auto queue_family_index) {
@@ -68,7 +67,13 @@ vk::UniqueDevice CreateDevice(const gfx::PhysicalDevice& physical_device,
       | std::ranges::to<std::vector>();
 
   static constexpr std::array kDeviceExtensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-  const vk::PhysicalDeviceFeatures enabled_features{.samplerAnisotropy = physical_device.features().samplerAnisotropy};
+
+  const auto& physical_device_features = physical_device.features();
+  const vk::PhysicalDeviceFeatures enabled_features{
+      .samplerAnisotropy = physical_device_features.samplerAnisotropy,
+      .textureCompressionETC2 = physical_device_features.textureCompressionETC2,
+      .textureCompressionASTC_LDR = physical_device_features.textureCompressionASTC_LDR,
+      .textureCompressionBC = physical_device_features.textureCompressionBC};
 
   auto device = physical_device->createDeviceUnique(
       vk::DeviceCreateInfo{.queueCreateInfoCount = static_cast<std::uint32_t>(device_queue_create_info.size()),

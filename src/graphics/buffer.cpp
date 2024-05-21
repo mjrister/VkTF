@@ -15,7 +15,7 @@ Buffer::Buffer(const vk::DeviceSize size,
   const auto result =
       vmaCreateBuffer(allocator_, &buffer_create_info, &allocation_create_info, &buffer, &allocation_, nullptr);
   vk::resultCheck(static_cast<vk::Result>(result), "Buffer creation failed");
-  buffer_ = buffer;
+  buffer_ = vk::Buffer{buffer};
 }
 
 Buffer& Buffer::operator=(Buffer&& buffer) noexcept {

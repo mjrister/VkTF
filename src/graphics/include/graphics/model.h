@@ -4,10 +4,12 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_hash.hpp>
 
 namespace gfx {
 class Camera;
@@ -38,13 +40,14 @@ public:
 
 private:
   class Node;
+  struct Material;
 
   vk::UniqueDescriptorPool descriptor_pool_;
   vk::UniqueDescriptorSetLayout descriptor_set_layout_;
-  vk::UniqueSampler sampler_;
-  std::vector<Image> textures_;
   vk::UniquePipelineLayout pipeline_layout_;
   vk::UniquePipeline pipeline_;
+  std::vector<Material> materials_;
+  std::unordered_map<vk::SamplerCreateInfo, vk::UniqueSampler> samplers_;
   std::unique_ptr<const Node> root_node_;
 };
 

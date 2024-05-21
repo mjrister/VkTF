@@ -12,6 +12,7 @@ add_library(graphics STATIC allocator.cpp
                             swapchain.cpp
                             window.cpp)
 
+find_package(Ktx CONFIG REQUIRED)
 find_package(VulkanHeaders CONFIG REQUIRED)
 find_package(VulkanMemoryAllocator CONFIG REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
@@ -25,6 +26,7 @@ target_link_libraries(graphics PUBLIC GPUOpen::VulkanMemoryAllocator
                                       glslang::glslang
                                       glslang::glslang-default-resource-limits
                                       glslang::SPIRV
+                                      KTX::ktx
                                       math)
 
 target_compile_definitions(graphics PUBLIC GLFW_INCLUDE_VULKAN
@@ -36,4 +38,4 @@ target_compile_definitions(graphics PUBLIC GLFW_INCLUDE_VULKAN
                                            VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
                                            VULKAN_HPP_NO_CONSTRUCTORS)
 
-target_include_directories(graphics PUBLIC ${CGLTF_INCLUDE_DIRS} {Stb_INCLUDE_DIR} include)
+target_include_directories(graphics PUBLIC ${CGLTF_INCLUDE_DIRS} include)

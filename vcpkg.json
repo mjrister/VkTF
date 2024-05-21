@@ -8,7 +8,7 @@
     "glm",
     "glslang",
     "gtest",
-    "stb",
+    "ktx",
     "vulkan-headers",
     "vulkan-memory-allocator"
   ]
