@@ -1,5 +1,5 @@
-#ifndef SRC_GRAPHICS_INCLUDE_GRAPHICS_MODEL_H_
-#define SRC_GRAPHICS_INCLUDE_GRAPHICS_MODEL_H_
+#ifndef SRC_GRAPHICS_INCLUDE_GRAPHICS_SCENE_H_
+#define SRC_GRAPHICS_INCLUDE_GRAPHICS_SCENE_H_
 
 #include <cstdint>
 #include <filesystem>
@@ -15,9 +15,9 @@ namespace gfx {
 class Camera;
 class Image;
 
-class Model {
+class Scene {
 public:
-  Model(const std::filesystem::path& gltf_filepath,
+  Scene(const std::filesystem::path& gltf_filepath,
         const vk::PhysicalDeviceFeatures& physical_device_features,
         const vk::PhysicalDeviceLimits& physical_device_limits,
         const vk::Device device,
@@ -28,13 +28,13 @@ public:
         const vk::RenderPass render_pass,
         const VmaAllocator allocator);
 
-  Model(const Model&) = delete;
-  Model(Model&&) noexcept = default;
+  Scene(const Scene&) = delete;
+  Scene(Scene&&) noexcept = default;
 
-  Model& operator=(const Model&) = delete;
-  Model& operator=(Model&&) noexcept = default;
+  Scene& operator=(const Scene&) = delete;
+  Scene& operator=(Scene&&) noexcept = default;
 
-  ~Model() noexcept;
+  ~Scene() noexcept;
 
   void Render(const Camera& camera, const vk::CommandBuffer command_buffer) const;
 
@@ -53,4 +53,4 @@ private:
 
 }  // namespace gfx
 
-#endif  // SRC_GRAPHICS_INCLUDE_GRAPHICS_MODEL_H_
+#endif  // SRC_GRAPHICS_INCLUDE_GRAPHICS_SCENE_H_

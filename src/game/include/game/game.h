@@ -3,7 +3,7 @@
 
 #include "graphics/camera.h"
 #include "graphics/engine.h"
-#include "graphics/model.h"
+#include "graphics/scene.h"
 #include "graphics/window.h"
 
 namespace gfx {
@@ -18,7 +18,7 @@ private:
   Window window_;
   Engine engine_;
   Camera camera_;
-  Model model_;
+  Scene scene_;
 };
 
 }  // namespace gfx

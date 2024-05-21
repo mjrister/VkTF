@@ -10,7 +10,7 @@
 #include <vulkan/vulkan.hpp>
 
 #include "graphics/camera.h"
-#include "graphics/model.h"
+#include "graphics/scene.h"
 #include "graphics/window.h"
 
 namespace {
@@ -203,9 +203,9 @@ Engine::Engine(const Window& window)
       present_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)},
       draw_fences_{CreateFences<kMaxRenderFrames>(*device_)} {}
 
-Model Engine::LoadModel(const std::filesystem::path& gltf_filepath) const {
+Scene Engine::LoadScene(const std::filesystem::path& gltf_filepath) const {
   const auto& physical_device = device_.physical_device();
-  return Model{gltf_filepath,
+  return Scene{gltf_filepath,
                physical_device.features(),
                physical_device.limits(),
                *device_,
@@ -217,7 +217,7 @@ Model Engine::LoadModel(const std::filesystem::path& gltf_filepath) const {
                *allocator_};
 }
 
-void Engine::Render(const Model& model, const Camera& camera) {
+void Engine::Render(const Scene& scene, const Camera& camera) {
   if (++current_frame_index_ == kMaxRenderFrames) {
     current_frame_index_ = 0;
   }
@@ -253,7 +253,7 @@ void Engine::Render(const Model& model, const Camera& camera) {
           .pClearValues = kClearValues.data()},
       vk::SubpassContents::eInline);
 
-  model.Render(camera, command_buffer);
+  scene.Render(camera, command_buffer);
 
   command_buffer.endRenderPass();
   command_buffer.end();

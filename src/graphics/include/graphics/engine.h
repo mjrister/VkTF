@@ -13,7 +13,7 @@
 
 namespace gfx {
 class Camera;
-class Model;
+class Scene;
 class Window;
 
 class Engine {
@@ -22,8 +22,8 @@ public:
 
   [[nodiscard]] vk::Device device() const noexcept { return *device_; }
 
-  [[nodiscard]] Model LoadModel(const std::filesystem::path& gltf_filepath) const;
-  void Render(const Model& model, const Camera& camera);
+  [[nodiscard]] Scene LoadScene(const std::filesystem::path& gltf_filepath) const;
+  void Render(const Scene& scene, const Camera& camera);
 
 private:
   static constexpr std::size_t kMaxRenderFrames = 2;

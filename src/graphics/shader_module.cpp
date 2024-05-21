@@ -61,8 +61,9 @@ namespace gfx {
 ShaderModule::ShaderModule(const vk::Device device,
                            const vk::ShaderStageFlagBits shader_stage,
                            const std::filesystem::path& glsl_filepath) {
-  const auto glsl = ReadFile(glsl_filepath);
-  const auto spirv = GlslangCompiler::Get().Compile(GetGlslangStage(shader_stage), glsl.c_str());
+  const auto glslang_stage = GetGlslangStage(shader_stage);
+  const auto glsl_source = ReadFile(glsl_filepath);
+  const auto spirv = GlslangCompiler::Get().Compile(glslang_stage, glsl_source.c_str());
 
   shader_module_ = device.createShaderModuleUnique(
       vk::ShaderModuleCreateInfo{.codeSize = spirv.size() * sizeof(decltype(spirv)::value_type),
