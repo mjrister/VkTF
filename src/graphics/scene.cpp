@@ -160,8 +160,7 @@ std::string_view GetName(const T& gltf_element) {
 template <glm::length_t N>
 std::vector<glm::vec<N, float>> UnpackFloats(const cgltf_accessor& gltf_accessor) {
   if (const auto components = cgltf_num_components(gltf_accessor.type); components != N) {
-    throw std::runtime_error{
-        std::format("Failed to unpack floats for {} with {} components", GetName(gltf_accessor), components)};
+    throw std::runtime_error{std::format("Failed to unpack floats for {}", GetName(gltf_accessor))};
   }
   std::vector<glm::vec<N, float>> data(gltf_accessor.count);
   cgltf_accessor_unpack_floats(&gltf_accessor, glm::value_ptr(data.front()), N * gltf_accessor.count);
@@ -226,17 +225,17 @@ std::vector<Vertex> GetVertices(const cgltf_primitive& gltf_primitive) {
          | std::ranges::to<std::vector>();
 }
 
+// TODO(matthew-rister): add support for 32-bit indices
 std::vector<std::uint16_t> GetIndices(const cgltf_primitive& gltf_primitive) {
   const auto* const gltf_accessor = gltf_primitive.indices;
   if (gltf_accessor == nullptr || gltf_accessor->count == 0) {
     throw std::runtime_error{"Primitive must represent an indexed triangle mesh"};
   }
-  return std::views::iota(0u, gltf_accessor->count)  //
-         | std::views::transform([gltf_accessor](const auto gltf_accessor_index) {
-             const auto vertex_index = cgltf_accessor_read_index(gltf_accessor, gltf_accessor_index);
-             return static_cast<std::uint16_t>(vertex_index);
-           })
-         | std::ranges::to<std::vector>();
+  std::vector<std::uint16_t> indices(gltf_accessor->count);
+  if (cgltf_accessor_unpack_indices(gltf_accessor, indices.data(), sizeof(std::uint16_t), indices.size()) == 0) {
+    throw std::runtime_error{std::format("Failed to unpack indices for {}", GetName(*gltf_accessor))};
+  }
+  return indices;
 }
 
 glm::mat4 GetTransform(const cgltf_node& gltf_node) {
