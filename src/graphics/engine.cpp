@@ -31,6 +31,18 @@ vk::SampleCountFlagBits GetMsaaSampleCount(const vk::PhysicalDeviceLimits& physi
   return e1;
 }
 
+vk::Format GetDepthAttachmentFormat(const vk::PhysicalDevice physical_device) {
+  using enum vk::Format;
+  static constexpr std::array kTargetFormats{eD32Sfloat, eD32SfloatS8Uint, eD24UnormS8Uint, eD16Unorm, eD16UnormS8Uint};
+  for (const auto format : kTargetFormats) {
+    if (const auto format_properties = physical_device.getFormatProperties(format);
+        format_properties.optimalTilingFeatures & vk::FormatFeatureFlagBits::eDepthStencilAttachment) {
+      return format;
+    }
+  }
+  throw std::runtime_error{"No supported depth attachment format"};
+}
+
 vk::UniqueRenderPass CreateRenderPass(const vk::Device device,
                                       const vk::SampleCountFlagBits msaa_sample_count,
                                       const vk::Format color_attachment_format,
@@ -180,7 +192,7 @@ Engine::Engine(const Window& window)
                                                 .usage = VMA_MEMORY_USAGE_AUTO,
                                                 .priority = 1.0f}},
       depth_attachment_{*device_,
-                        vk::Format::eD24UnormS8Uint,  // TODO(#54): check device support
+                        GetDepthAttachmentFormat(*device_.physical_device()),
                         swapchain_.image_extent(),
                         1,
                         msaa_sample_count_,
