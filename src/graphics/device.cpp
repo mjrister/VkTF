@@ -46,7 +46,7 @@ gfx::QueueFamilyIndices FindQueueFamilyIndices(const vk::PhysicalDevice physical
   if (maybe_graphics_index.has_value() && maybe_present_index.has_value()) {
     return gfx::QueueFamilyIndices{.graphics_index = *maybe_graphics_index,
                                    .present_index = *maybe_present_index,
-                                   // graphics queue family always implicitly accept transfer commands
+                                   // graphics queue family always implicitly accepts transfer commands
                                    .transfer_index = maybe_transfer_index.value_or(*maybe_graphics_index)};
   }
 

@@ -11,14 +11,14 @@ namespace gfx {
 
 class Image {
 public:
-  Image(const vk::Device device,
-        const vk::Format format,
-        const vk::Extent2D extent,
-        const std::uint32_t mip_levels,
-        const vk::SampleCountFlagBits sample_count,
-        const vk::ImageUsageFlags image_usage_flags,
-        const vk::ImageAspectFlags image_aspect_flags,
-        const VmaAllocator allocator,
+  Image(vk::Device device,
+        vk::Format format,
+        vk::Extent2D extent,
+        std::uint32_t mip_levels,
+        vk::SampleCountFlagBits sample_count,
+        vk::ImageUsageFlags image_usage_flags,
+        vk::ImageAspectFlags image_aspect_flags,
+        VmaAllocator allocator,
         const VmaAllocationCreateInfo& allocation_create_info);
 
   Image(const Image&) = delete;
@@ -32,9 +32,9 @@ public:
   [[nodiscard]] vk::ImageView image_view() const noexcept { return *image_view_; }
   [[nodiscard]] vk::Format format() const noexcept { return format_; }
 
-  void Copy(const vk::Buffer src_buffer,
-            const std::vector<vk::BufferImageCopy>& buffer_image_copies,
-            const vk::CommandBuffer command_buffer) const;
+  void Copy(vk::Buffer src_buffer,
+            vk::CommandBuffer command_buffer,
+            const std::vector<vk::BufferImageCopy>& buffer_image_copies) const;
 
 private:
   vk::Image image_;

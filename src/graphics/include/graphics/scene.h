@@ -20,13 +20,13 @@ public:
   Scene(const std::filesystem::path& gltf_filepath,
         const vk::PhysicalDeviceFeatures& physical_device_features,
         const vk::PhysicalDeviceLimits& physical_device_limits,
-        const vk::Device device,
-        const vk::Queue queue,
-        const std::uint32_t queue_family_index,
-        const vk::Extent2D viewport_extent,
-        const vk::SampleCountFlagBits msaa_sample_count,
-        const vk::RenderPass render_pass,
-        const VmaAllocator allocator);
+        vk::Device device,
+        vk::Queue queue,
+        std::uint32_t queue_family_index,
+        vk::Extent2D viewport_extent,
+        vk::SampleCountFlagBits msaa_sample_count,
+        vk::RenderPass render_pass,
+        VmaAllocator allocator);
 
   Scene(const Scene&) = delete;
   Scene(Scene&&) noexcept = default;
@@ -36,7 +36,7 @@ public:
 
   ~Scene() noexcept;
 
-  void Render(const Camera& camera, const vk::CommandBuffer command_buffer) const;
+  void Render(const Camera& camera, vk::CommandBuffer command_buffer) const;
 
 private:
   class Node;

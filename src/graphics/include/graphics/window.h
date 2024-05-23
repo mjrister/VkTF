@@ -11,7 +11,7 @@ namespace gfx {
 
 class Window {
 public:
-  Window(const char* const title, const int width, const int height);
+  Window(const char* title, int width, int height);
 
   [[nodiscard]] vk::Extent2D GetExtent() const noexcept;
   [[nodiscard]] vk::Extent2D GetFramebufferExtent() const noexcept;

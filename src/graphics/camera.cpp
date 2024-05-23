@@ -27,9 +27,9 @@ glm::mat4 Camera::GetProjectionTransform() const {
   return projection_transform;
 }
 
-void Camera::Translate(const float dx, const float dy, const float dz) {
+void Camera::Translate(const float x, const float y, const float z) {
   const glm::mat3 view_transform = GetViewTransform();
-  position_ += glm::vec3{dx, dy, dz} * view_transform;
+  position_ += glm::vec3{x, y, z} * view_transform;
 }
 
 void Camera::Rotate(const float theta, const float phi) {

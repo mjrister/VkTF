@@ -168,7 +168,8 @@ std::vector<glm::vec<N, float>> UnpackFloats(const cgltf_accessor& gltf_accessor
 }
 
 std::vector<Vertex> GetVertices(const cgltf_primitive& gltf_primitive) {
-  std::optional<std::vector<glm::vec3>> maybe_positions, maybe_normals;
+  std::optional<std::vector<glm::vec3>> maybe_positions;
+  std::optional<std::vector<glm::vec3>> maybe_normals;
   std::optional<std::vector<glm::vec2>> maybe_texture_coordinates;
 
   for (const auto& gltf_attribute : std::span{gltf_primitive.attributes, gltf_primitive.attributes_count}) {
@@ -369,10 +370,10 @@ UniqueKtxTexture2 LoadBaseColorTexture(const cgltf_material& gltf_material,
   return ktx_texture2;
 }
 
-gfx::Image CreateImage(ktxTexture2& ktx_texture2,
-                       const vk::Device device,
+gfx::Image CreateImage(const vk::Device device,
                        const vk::CommandBuffer command_buffer,
                        const VmaAllocator allocator,
+                       ktxTexture2& ktx_texture2,
                        std::vector<gfx::Buffer>& staging_buffers) {
   static constexpr VmaAllocationCreateInfo kStagingBufferAllocationCreateInfo{
       .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
@@ -415,7 +416,7 @@ gfx::Image CreateImage(ktxTexture2& ktx_texture2,
                                           .depth = 1}};
         })
       | std::ranges::to<std::vector>();
-  image.Copy(*staging_buffer, buffer_image_copies, command_buffer);
+  image.Copy(*staging_buffer, command_buffer, buffer_image_copies);
 
   return image;
 }
@@ -618,8 +619,8 @@ public:
   void Render(const glm::mat4& model_transform,
               const glm::mat4& view_transform,
               const glm::mat4& projection_transform,
-              const vk::PipelineLayout pipeline_layout,
-              const vk::CommandBuffer command_buffer) const;
+              vk::PipelineLayout pipeline_layout,
+              vk::CommandBuffer command_buffer) const;
 
 private:
   std::vector<Mesh> meshes_;
@@ -683,7 +684,7 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
       continue;
     }
     materials_.emplace_back(gltf_material,
-                            CreateImage(*base_color_texture, device, command_buffer, allocator, staging_buffers),
+                            CreateImage(device, command_buffer, allocator, *base_color_texture, staging_buffers),
                             CreateSampler(device,
                                           base_color_texture->numLevels,
                                           physical_device_features,

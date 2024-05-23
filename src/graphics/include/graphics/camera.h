@@ -22,8 +22,8 @@ public:
   [[nodiscard]] glm::mat4 GetViewTransform() const;
   [[nodiscard]] glm::mat4 GetProjectionTransform() const;
 
-  void Translate(const float dx, const float dy, const float dz);
-  void Rotate(const float theta, const float phi);
+  void Translate(float x, float y, float z);
+  void Rotate(float theta, float phi);
 
 private:
   glm::vec3 position_;

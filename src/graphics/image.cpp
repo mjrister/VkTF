@@ -81,8 +81,8 @@ Image::~Image() noexcept {
 }
 
 void Image::Copy(const vk::Buffer src_buffer,
-                 const std::vector<vk::BufferImageCopy>& buffer_image_copies,
-                 const vk::CommandBuffer command_buffer) const {
+                 const vk::CommandBuffer command_buffer,
+                 const std::vector<vk::BufferImageCopy>& buffer_image_copies) const {
   const vk::ImageSubresourceRange image_subresource_range{.aspectMask = image_aspect_flags_,
                                                           .levelCount = mip_levels_,
                                                           .layerCount = 1};

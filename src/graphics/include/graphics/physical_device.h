@@ -7,7 +7,7 @@ namespace gfx {
 
 class PhysicalDevice {
 public:
-  explicit PhysicalDevice(const vk::Instance instance);
+  explicit PhysicalDevice(vk::Instance instance);
 
   [[nodiscard]] vk::PhysicalDevice operator*() const noexcept { return physical_device_; }
   [[nodiscard]] const vk::PhysicalDevice* operator->() const noexcept { return &physical_device_; }

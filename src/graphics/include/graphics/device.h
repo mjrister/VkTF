@@ -19,7 +19,7 @@ struct QueueFamilyIndices {
 
 class Device {
 public:
-  Device(const vk::Instance instance, const vk::SurfaceKHR surface);
+  Device(vk::Instance instance, vk::SurfaceKHR surface);
 
   [[nodiscard]] vk::Device operator*() const noexcept { return *device_; }
   [[nodiscard]] const vk::Device* operator->() const noexcept { return &(*device_); }
@@ -34,7 +34,9 @@ private:
   PhysicalDevice physical_device_;
   QueueFamilyIndices queue_family_indices_;
   vk::UniqueDevice device_;
-  vk::Queue graphics_queue_, present_queue_, transfer_queue_;
+  vk::Queue graphics_queue_;
+  vk::Queue present_queue_;
+  vk::Queue transfer_queue_;
 };
 
 }  // namespace gfx
