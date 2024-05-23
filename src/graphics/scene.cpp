@@ -168,26 +168,26 @@ std::vector<glm::vec<N, float>> UnpackFloats(const cgltf_accessor& gltf_accessor
 }
 
 std::vector<Vertex> GetVertices(const cgltf_primitive& gltf_primitive) {
-  std::optional<std::vector<glm::vec3>> positions, normals;
-  std::optional<std::vector<glm::vec2>> texture_coordinates;
+  std::optional<std::vector<glm::vec3>> maybe_positions, maybe_normals;
+  std::optional<std::vector<glm::vec2>> maybe_texture_coordinates;
 
   for (const auto& gltf_attribute : std::span{gltf_primitive.attributes, gltf_primitive.attributes_count}) {
     switch (const auto& gltf_accessor = *gltf_attribute.data; gltf_attribute.type) {
       case cgltf_attribute_type_position:
-        if (!positions.has_value()) {
-          positions = UnpackFloats<3>(gltf_accessor);
+        if (!maybe_positions.has_value()) {
+          maybe_positions = UnpackFloats<3>(gltf_accessor);
           break;
         }
         [[fallthrough]];
       case cgltf_attribute_type_normal:
-        if (!normals.has_value()) {
-          normals = UnpackFloats<3>(gltf_accessor);
+        if (!maybe_normals.has_value()) {
+          maybe_normals = UnpackFloats<3>(gltf_accessor);
           break;
         }
         [[fallthrough]];
       case cgltf_attribute_type_texcoord:
-        if (!texture_coordinates.has_value()) {
-          texture_coordinates = UnpackFloats<2>(gltf_accessor);
+        if (!maybe_texture_coordinates.has_value()) {
+          maybe_texture_coordinates = UnpackFloats<2>(gltf_accessor);
           break;
         }
         [[fallthrough]];
@@ -197,31 +197,31 @@ std::vector<Vertex> GetVertices(const cgltf_primitive& gltf_primitive) {
     }
   }
 
-  if (!positions.has_value()) throw std::runtime_error{"No vertex positions"};
-  if (!normals.has_value()) throw std::runtime_error{"No vertex normals"};
-  if (!texture_coordinates.has_value()) throw std::runtime_error{"No vertex texture coordinates"};
+  if (!maybe_positions.has_value()) throw std::runtime_error{"No vertex positions"};
+  if (!maybe_normals.has_value()) throw std::runtime_error{"No vertex normals"};
+  if (!maybe_texture_coordinates.has_value()) throw std::runtime_error{"No vertex texture coordinates"};
 
   // primitives are expected to represent an indexed triangle mesh with a matching number of vertex attributes
-  if (positions->size() != normals->size()) {
+  if (maybe_positions->size() != maybe_normals->size()) {
     throw std::runtime_error{
         std::format("The number of vertex positions {} does not match the number of vertex normals {}",
-                    positions->size(),
-                    normals->size())};
+                    maybe_positions->size(),
+                    maybe_normals->size())};
   }
-  if (positions->size() != texture_coordinates->size()) {
+  if (maybe_positions->size() != maybe_texture_coordinates->size()) {
     throw std::runtime_error{
         std::format("The number of vertex positions {} does not match the number of vertex texture coordinates {}",
-                    positions->size(),
-                    texture_coordinates->size())};
+                    maybe_positions->size(),
+                    maybe_texture_coordinates->size())};
   }
 
   return std::views::zip_transform(
-             [](const auto& position, const auto& normal, const auto& texture_coords) {
-               return Vertex{.position = position, .normal = normal, .texture_coordinates = texture_coords};
+             [](const auto& position, const auto& normal, const auto& texture_coordinates) {
+               return Vertex{.position = position, .normal = normal, .texture_coordinates = texture_coordinates};
              },
-             *positions,
-             *normals,
-             *texture_coordinates)
+             *maybe_positions,
+             *maybe_normals,
+             *maybe_texture_coordinates)
          | std::ranges::to<std::vector>();
 }
 

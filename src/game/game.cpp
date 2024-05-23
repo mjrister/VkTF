@@ -40,18 +40,18 @@ void HandleKeyEvents(const gfx::Window& window, gfx::Camera& camera, const gfx::
 }
 
 void HandleMouseEvents(const gfx::Window& window, gfx::Camera& camera) {
-  static std::optional<glm::vec2> previous_cursor_position;
-  if (window.IsMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT)) {
+  if (static std::optional<glm::vec2> maybe_previous_cursor_position;
+      window.IsMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT)) {
     const auto cursor_position = window.GetCursorPosition();
-    if (previous_cursor_position.has_value()) {
+    if (maybe_previous_cursor_position.has_value()) {
       static constexpr auto kCursorSpeed = 0.00390625f;
-      const auto delta_cursor_position = cursor_position - *previous_cursor_position;
+      const auto delta_cursor_position = cursor_position - *maybe_previous_cursor_position;
       const auto rotation = kCursorSpeed * -delta_cursor_position;
       camera.Rotate(rotation.x, rotation.y);
     }
-    previous_cursor_position = cursor_position;
-  } else if (previous_cursor_position.has_value()) {
-    previous_cursor_position = std::nullopt;
+    maybe_previous_cursor_position = cursor_position;
+  } else if (maybe_previous_cursor_position.has_value()) {
+    maybe_previous_cursor_position = std::nullopt;
   }
 }
 

@@ -25,29 +25,29 @@ std::optional<std::uint32_t> FindQueueFamilyIndex(
 gfx::QueueFamilyIndices FindQueueFamilyIndices(const vk::PhysicalDevice physical_device, const vk::SurfaceKHR surface) {
   const auto all_queue_family_properties = physical_device.getQueueFamilyProperties();
 
-  const auto graphics_index =
+  const auto maybe_graphics_index =
       FindQueueFamilyIndex(all_queue_family_properties, [](const auto& queue_family_properties) {
         return static_cast<bool>(queue_family_properties.queueFlags & vk::QueueFlagBits::eGraphics);
       });
 
-  const auto present_index =
+  const auto maybe_present_index =
       FindQueueFamilyIndex(all_queue_family_properties,
                            [physical_device, surface, index = 0u](const auto& /*queue_family_properties*/) mutable {
                              return physical_device.getSurfaceSupportKHR(index++, surface) == vk::True;
                            });
 
-  const auto transfer_index =
+  const auto maybe_transfer_index =
       FindQueueFamilyIndex(all_queue_family_properties, [](const auto& queue_family_properties) {
         // prefer a dedicated transfer queue family to enable asynchronous transfers to device memory
         return static_cast<bool>(queue_family_properties.queueFlags & vk::QueueFlagBits::eTransfer)
                && !static_cast<bool>(queue_family_properties.queueFlags & vk::QueueFlagBits::eGraphics);
       });
 
-  if (graphics_index.has_value() && present_index.has_value()) {
-    return gfx::QueueFamilyIndices{.graphics_index = *graphics_index,
-                                   .present_index = *present_index,
+  if (maybe_graphics_index.has_value() && maybe_present_index.has_value()) {
+    return gfx::QueueFamilyIndices{.graphics_index = *maybe_graphics_index,
+                                   .present_index = *maybe_present_index,
                                    // graphics queue family always implicitly accept transfer commands
-                                   .transfer_index = transfer_index.value_or(*graphics_index)};
+                                   .transfer_index = maybe_transfer_index.value_or(*maybe_graphics_index)};
   }
 
   throw std::runtime_error{"Physical device does not support required queue families"};
