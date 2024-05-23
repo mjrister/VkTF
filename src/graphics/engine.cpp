@@ -15,6 +15,11 @@
 
 namespace {
 
+vk::Extent2D GetFrameBufferExtent(const gfx::Window& window) {
+  const auto& [width, height] = window.GetSize();
+  return vk::Extent2D{.width = static_cast<std::uint32_t>(width), .height = static_cast<std::uint32_t>(height)};
+}
+
 vk::SampleCountFlagBits GetMsaaSampleCount(const vk::PhysicalDeviceLimits& physical_device_limits) {
   const auto color_sample_count_flags = physical_device_limits.framebufferColorSampleCounts;
   const auto depth_sample_count_flags = physical_device_limits.framebufferDepthSampleCounts;
@@ -177,7 +182,7 @@ Engine::Engine(const Window& window)
       swapchain_{*device_,
                  *device_.physical_device(),
                  *surface_,
-                 window.GetFramebufferExtent(),
+                 GetFrameBufferExtent(window),
                  device_.queue_family_indices()},
       msaa_sample_count_{GetMsaaSampleCount(device_.physical_device().limits())},
       color_attachment_{*device_,

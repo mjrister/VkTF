@@ -2,10 +2,12 @@
 #define SRC_GRAPHICS_INCLUDE_GRAPHICS_WINDOW_H_
 
 #include <memory>
+#include <utility>
 
 #include <GLFW/glfw3.h>
-#include <glm/vec2.hpp>
+#ifdef GLFW_INCLUDE_VULKAN
 #include <vulkan/vulkan.hpp>
+#endif
 
 namespace gfx {
 
@@ -13,10 +15,10 @@ class Window {
 public:
   Window(const char* title, int width, int height);
 
-  [[nodiscard]] vk::Extent2D GetExtent() const noexcept;
-  [[nodiscard]] vk::Extent2D GetFramebufferExtent() const noexcept;
+  [[nodiscard]] std::pair<int, int> GetSize() const noexcept;
+  [[nodiscard]] std::pair<int, int> GetFramebufferSize() const noexcept;
   [[nodiscard]] float GetAspectRatio() const noexcept;
-  [[nodiscard]] glm::vec2 GetCursorPosition() const noexcept;
+  [[nodiscard]] std::pair<float, float> GetCursorPosition() const noexcept;
 
   [[nodiscard]] bool IsKeyPressed(const int key) const noexcept { return glfwGetKey(window_.get(), key) == GLFW_PRESS; }
   [[nodiscard]] bool IsMouseButtonPressed(const int button) const noexcept {
@@ -28,8 +30,10 @@ public:
 
   static void Update() noexcept { glfwPollEvents(); }
 
+#ifdef GLFW_INCLUDE_VULKAN
   [[nodiscard]] static std::span<const char* const> GetInstanceExtensions();
   [[nodiscard]] vk::UniqueSurfaceKHR CreateSurface(const vk::Instance instance) const;
+#endif
 
 private:
   std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)> window_;
