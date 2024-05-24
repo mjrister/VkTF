@@ -336,7 +336,7 @@ std::vector<gfx::Mesh> GetSubmeshes(
 ktx_transcode_fmt_e GetTranscodeFormat(ktxTexture2& ktx_texture2,
                                        const vk::PhysicalDeviceFeatures& physical_device_features) {
   // format selection based on https://github.com/KhronosGroup/3D-Formats-Guidelines/blob/main/KTXDeveloperGuide.md
-  // TODO(matthew-rister): check corresponding vk::Format support
+  // TODO(matthew-rister): check corresponding vulkan format physical device support
   switch (ktxTexture2_GetColorModel_e(&ktx_texture2)) {
     case KHR_DF_MODEL_UASTC:
       if (physical_device_features.textureCompressionASTC_LDR == vk::True) return KTX_TTF_ASTC_4x4_RGBA;
@@ -358,37 +358,42 @@ ktx_transcode_fmt_e GetTranscodeFormat(ktxTexture2& ktx_texture2,
   return kDecompressionFallback;
 }
 
+// TODO(matthew-rister): add support for KTX textures without Basis Universal supercompression
 UniqueKtxTexture2 LoadBaseColorTexture(const cgltf_material& gltf_material,
                                        const std::filesystem::path& gltf_parent_filepath,
                                        const vk::PhysicalDeviceFeatures& physical_device_features) {
   UniqueKtxTexture2 ktx_texture2{nullptr, nullptr};
-  if (gltf_material.has_pbr_metallic_roughness != 0) {
-    const auto& gltf_pbr_metallic_roughness = gltf_material.pbr_metallic_roughness;
-    const auto& gltf_base_color_texture = gltf_pbr_metallic_roughness.base_color_texture.texture;
+  if (gltf_material.has_pbr_metallic_roughness == 0) return ktx_texture2;
 
-    if (gltf_base_color_texture != nullptr) {
-      const auto ktx_filepath = gltf_parent_filepath / gltf_base_color_texture->image->uri;
-      if (const auto ktx_error_code = ktxTexture2_CreateFromNamedFile(ktx_filepath.string().c_str(),
-                                                                      KTX_TEXTURE_CREATE_CHECK_GLTF_BASISU_BIT,
-                                                                      std::out_ptr(ktx_texture2, DestroyKtxTexture2));
-          ktx_error_code != KTX_SUCCESS) {
-        throw std::runtime_error{std::format("Failed to create KTX texture for {} with error {}",
-                                             ktx_filepath.string(),
-                                             ktxErrorString(ktx_error_code))};
-      }
+  const auto& gltf_pbr_metallic_roughness = gltf_material.pbr_metallic_roughness;
+  const auto& gltf_base_color_texture = gltf_pbr_metallic_roughness.base_color_texture.texture;
+  if (gltf_base_color_texture == nullptr) return ktx_texture2;
 
-      if (ktxTexture2_NeedsTranscoding(ktx_texture2.get())) {
-        const auto ktx_transcode_format = GetTranscodeFormat(*ktx_texture2, physical_device_features);
-        if (const auto ktx_error_code = ktxTexture2_TranscodeBasis(ktx_texture2.get(), ktx_transcode_format, 0);
-            ktx_error_code != KTX_SUCCESS) {
-          throw std::runtime_error{std::format("Failed to transcode {} to {} with error {}",
-                                               ktx_filepath.string(),
-                                               ktxTranscodeFormatString(ktx_transcode_format),
-                                               ktxErrorString(ktx_error_code))};
-        }
-      }
-    }
+  if (gltf_base_color_texture->has_basisu == 0) {
+    throw std::runtime_error{std::format(
+        "Failed to create KTX texture for {} because Basis Universal supercompressed texture support is required",
+        GetName(*gltf_base_color_texture))};
   }
+
+  const auto ktx_filepath = gltf_parent_filepath / gltf_base_color_texture->basisu_image->uri;
+  if (const auto ktx_error_code = ktxTexture2_CreateFromNamedFile(ktx_filepath.string().c_str(),
+                                                                  KTX_TEXTURE_CREATE_CHECK_GLTF_BASISU_BIT,
+                                                                  std::out_ptr(ktx_texture2, DestroyKtxTexture2));
+      ktx_error_code != KTX_SUCCESS) {
+    throw std::runtime_error{std::format("Failed to create KTX texture for {} with error {}",
+                                         ktx_filepath.string(),
+                                         ktxErrorString(ktx_error_code))};
+  }
+
+  const auto ktx_transcode_format = GetTranscodeFormat(*ktx_texture2, physical_device_features);
+  if (const auto ktx_error_code = ktxTexture2_TranscodeBasis(ktx_texture2.get(), ktx_transcode_format, 0);
+      ktx_error_code != KTX_SUCCESS) {
+    throw std::runtime_error{std::format("Failed to transcode {} to {} with error {}",
+                                         ktx_filepath.string(),
+                                         ktxTranscodeFormatString(ktx_transcode_format),
+                                         ktxErrorString(ktx_error_code))};
+  }
+
   return ktx_texture2;
 }
 
