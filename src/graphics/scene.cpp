@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cassert>
+#include <concepts>
 #include <cstring>
 #include <format>
 #include <future>
@@ -226,15 +227,12 @@ std::vector<Vertex> GetVertices(const cgltf_primitive& gltf_primitive) {
          | std::ranges::to<std::vector>();
 }
 
-// TODO(matthew-rister): add support for 32-bit indices
-std::vector<std::uint16_t> GetIndices(const cgltf_primitive& gltf_primitive) {
-  const auto* const gltf_accessor = gltf_primitive.indices;
-  if (gltf_accessor == nullptr || gltf_accessor->count == 0) {
-    throw std::runtime_error{"Primitive must represent an indexed triangle mesh"};
-  }
-  std::vector<std::uint16_t> indices(gltf_accessor->count);
-  if (cgltf_accessor_unpack_indices(gltf_accessor, indices.data(), sizeof(std::uint16_t), indices.size()) == 0) {
-    throw std::runtime_error{std::format("Failed to unpack indices for {}", GetName(*gltf_accessor))};
+template <typename T>
+  requires std::same_as<T, std::uint16_t> || std::same_as<T, std::uint32_t>
+std::vector<T> GetIndices(const cgltf_accessor& indices_gltf_accessor) {
+  std::vector<T> indices(indices_gltf_accessor.count);
+  if (cgltf_accessor_unpack_indices(&indices_gltf_accessor, indices.data(), sizeof(T), indices.size()) == 0) {
+    throw std::runtime_error{std::format("Failed to unpack indices for {}", GetName(indices_gltf_accessor))};
   }
   return indices;
 }
@@ -291,13 +289,37 @@ std::vector<gfx::Mesh> CreateSubmeshes(
            })
          | std::views::transform([command_buffer, allocator, &staging_buffers, &descriptor_sets_by_gltf_material](
                                      const auto& gltf_primitive) {
-             using enum vk::BufferUsageFlagBits;
              const auto vertices = GetVertices(gltf_primitive);
-             const auto indices = GetIndices(gltf_primitive);
-             return gfx::Mesh{CreateBuffer(vertices, eVertexBuffer, command_buffer, allocator, staging_buffers),
-                              CreateBuffer(indices, eIndexBuffer, command_buffer, allocator, staging_buffers),
-                              static_cast<std::uint32_t>(indices.size()),
-                              descriptor_sets_by_gltf_material.find(gltf_primitive.material)->second};
+             switch (const auto indices_gltf_accessor = gltf_primitive.indices;
+                     const auto component_size = indices_gltf_accessor == nullptr || indices_gltf_accessor->count == 0
+                                                     ? 0
+                                                     : cgltf_component_size(indices_gltf_accessor->component_type)) {
+               using enum vk::BufferUsageFlagBits;
+               case 0: {
+                 // TODO(matthew-rister): add support for non-indexed triangle meshes
+                 throw std::runtime_error{"Primitive must represent a valid indexed triangle mesh"};
+               }
+               case 2: {
+                 const auto indices = GetIndices<std::uint16_t>(*indices_gltf_accessor);
+                 return gfx::Mesh{CreateBuffer(vertices, eVertexBuffer, command_buffer, allocator, staging_buffers),
+                                  CreateBuffer(indices, eIndexBuffer, command_buffer, allocator, staging_buffers),
+                                  static_cast<std::uint32_t>(indices.size()),
+                                  vk::IndexType::eUint16,
+                                  descriptor_sets_by_gltf_material.find(gltf_primitive.material)->second};
+               }
+               case 4: {
+                 const auto indices = GetIndices<std::uint32_t>(*indices_gltf_accessor);
+                 return gfx::Mesh{CreateBuffer(vertices, eVertexBuffer, command_buffer, allocator, staging_buffers),
+                                  CreateBuffer(indices, eIndexBuffer, command_buffer, allocator, staging_buffers),
+                                  static_cast<std::uint32_t>(indices.size()),
+                                  vk::IndexType::eUint32,
+                                  descriptor_sets_by_gltf_material.find(gltf_primitive.material)->second};
+               }
+               default: {
+                 static constexpr auto kBitsPerByte = 8;
+                 throw std::runtime_error{std::format("Unsupported {}-bit index type", component_size * kBitsPerByte)};
+               }
+             }
            })
          | std::ranges::to<std::vector>();
 }
