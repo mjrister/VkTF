@@ -137,25 +137,38 @@ struct StbImage {
   int channels;
 };
 
-UniqueGltfData ParseFile(const char* const gltf_filepath) {
+UniqueGltfData ParseFile(const std::filesystem::path& gltf_filepath) {
   static constexpr cgltf_options kGltfOptions{};
   UniqueGltfData gltf_data{nullptr, nullptr};
+  const auto gltf_filepath_string = gltf_filepath.string();
 
-  if (const auto gltf_result = cgltf_parse_file(&kGltfOptions, gltf_filepath, std::out_ptr(gltf_data, cgltf_free));
+  if (const auto gltf_result =
+          cgltf_parse_file(&kGltfOptions, gltf_filepath_string.c_str(), std::out_ptr(gltf_data, cgltf_free));
       gltf_result != cgltf_result_success) {
-    throw std::runtime_error{std::format("Failed to parse {} with error {}", gltf_filepath, gltf_result)};
+    throw std::runtime_error{std::format("Failed to parse {} with error {}", gltf_filepath_string, gltf_result)};
   }
-  if (const auto gltf_result = cgltf_load_buffers(&kGltfOptions, gltf_data.get(), gltf_filepath);
+  if (const auto gltf_result = cgltf_load_buffers(&kGltfOptions, gltf_data.get(), gltf_filepath_string.c_str());
       gltf_result != cgltf_result_success) {
-    throw std::runtime_error{std::format("Failed to load buffers for {} with error {}", gltf_filepath, gltf_result)};
+    throw std::runtime_error{
+        std::format("Failed to load buffers for {} with error {}", gltf_filepath_string, gltf_result)};
   }
 #ifndef NDEBUG
   if (const auto gltf_result = cgltf_validate(gltf_data.get()); gltf_result != cgltf_result_success) {
-    throw std::runtime_error{std::format("Failed to validate {} with error {}", gltf_filepath, gltf_result)};
+    throw std::runtime_error{std::format("Failed to validate {} with error {}", gltf_filepath_string, gltf_result)};
   }
 #endif
 
   return gltf_data;
+}
+
+const cgltf_scene& GetDefaultScene(const cgltf_data& gltf_data, const std::filesystem::path& gltf_filepath) {
+  if (const auto* gltf_default_scene = gltf_data.scene; gltf_default_scene != nullptr) {
+    return *gltf_default_scene;
+  }
+  if (const std::span gltf_scenes{gltf_data.scenes, gltf_data.scenes_count}; !gltf_scenes.empty()) {
+    return gltf_scenes.front();
+  }
+  throw std::runtime_error{std::format("No scene data found for {}", gltf_filepath.string())};
 }
 
 template <typename T>
@@ -183,6 +196,7 @@ std::vector<Vertex> GetVertices(const cgltf_primitive& gltf_primitive) {
   std::optional<std::vector<glm::vec2>> maybe_texture_coordinates;
 
   for (const auto& gltf_attribute : std::span{gltf_primitive.attributes, gltf_primitive.attributes_count}) {
+    assert(gltf_attribute.data != nullptr);  // valid glTF files should not contain null attribute data
     switch (const auto& gltf_accessor = *gltf_attribute.data; gltf_attribute.type) {
       case cgltf_attribute_type_position:
         if (!maybe_positions.has_value()) {
@@ -228,6 +242,7 @@ std::vector<Vertex> GetVertices(const cgltf_primitive& gltf_primitive) {
 
   return std::views::zip_transform(
              [](const auto& position, const auto& normal, const auto& texture_coordinates) {
+               // TODO(matthew-rister): verify normal has unit length
                return Vertex{.position = position, .normal = normal, .texture_coordinates = texture_coordinates};
              },
              *maybe_positions,
@@ -345,7 +360,6 @@ std::vector<gfx::Mesh> GetSubmeshes(
 ktx_transcode_fmt_e GetKtxTranscodeFormat(const vk::PhysicalDeviceFeatures& physical_device_features,
                                           ktxTexture2& ktx_texture2) {
   // format selection based on https://github.com/KhronosGroup/3D-Formats-Guidelines/blob/main/KTXDeveloperGuide.md
-  // TODO(matthew-rister): check corresponding vulkan format physical device support
   switch (ktxTexture2_GetColorModel_e(&ktx_texture2)) {
     case KHR_DF_MODEL_UASTC:
       if (physical_device_features.textureCompressionASTC_LDR == vk::True) return KTX_TTF_ASTC_4x4_RGBA;
@@ -361,9 +375,11 @@ ktx_transcode_fmt_e GetKtxTranscodeFormat(const vk::PhysicalDeviceFeatures& phys
   }
 
   static constexpr auto kDecompressionFallback = KTX_TTF_RGBA32;
-  std::println(std::cerr,
+#ifndef NDEBUG
+  std::println(std::clog,
                "No supported texture compression format could be found. Decompressing to {}",
                ktxTranscodeFormatString(kDecompressionFallback));
+#endif
   return kDecompressionFallback;
 }
 
@@ -755,7 +771,7 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
              const vk::SampleCountFlagBits msaa_sample_count,
              const vk::RenderPass render_pass,
              const VmaAllocator allocator) {
-  const auto gltf_data = ParseFile(gltf_filepath.string().c_str());
+  const auto gltf_data = ParseFile(gltf_filepath);
   const auto gltf_parent_filepath = gltf_filepath.parent_path();
 
   auto material_futures =
@@ -829,7 +845,8 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
   const auto fence = device.createFenceUnique(vk::FenceCreateInfo{});
   queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &command_buffer}, *fence);
 
-  root_node_ = std::make_unique<const Node>(*gltf_data->scene, submeshes_by_gltf_mesh);
+  const auto gltf_default_scene = GetDefaultScene(*gltf_data, gltf_filepath);
+  root_node_ = std::make_unique<const Node>(gltf_default_scene, submeshes_by_gltf_mesh);
 
   static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
   const auto result = device.waitForFences(*fence, vk::True, kMaxTimeout);
@@ -851,8 +868,9 @@ void Scene::Render(const Camera& camera, const vk::CommandBuffer command_buffer)
 Scene::Node::Node(const cgltf_scene& gltf_scene,
                   std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& submeshes_by_gltf_mesh)
     : children_{std::span{gltf_scene.nodes, gltf_scene.nodes_count}
-                | std::views::transform([&submeshes_by_gltf_mesh](const auto* const scene_gltf_node) {
-                    return std::make_unique<const Node>(*scene_gltf_node, submeshes_by_gltf_mesh);
+                | std::views::transform([&submeshes_by_gltf_mesh](const auto* const gltf_scene_node) {
+                    assert(gltf_scene_node != nullptr);  // valid glTF files should not contain null scene nodes
+                    return std::make_unique<const Node>(*gltf_scene_node, submeshes_by_gltf_mesh);
                   })
                 | std::ranges::to<std::vector>()} {}
 
@@ -860,8 +878,9 @@ Scene::Node::Node(const cgltf_node& gltf_node,
                   std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& submeshes_by_gltf_mesh)
     : meshes_{GetSubmeshes(gltf_node.mesh, submeshes_by_gltf_mesh)},
       children_{std::span{gltf_node.children, gltf_node.children_count}
-                | std::views::transform([&submeshes_by_gltf_mesh](const auto* const child_gltf_node) {
-                    return std::make_unique<const Node>(*child_gltf_node, submeshes_by_gltf_mesh);
+                | std::views::transform([&submeshes_by_gltf_mesh](const auto* const gltf_child_node) {
+                    assert(gltf_child_node != nullptr);  // valid glTF files should not contain null child nodes
+                    return std::make_unique<const Node>(*gltf_child_node, submeshes_by_gltf_mesh);
                   })
                 | std::ranges::to<std::vector>()},
       transform_{GetTransform(gltf_node)} {}
