@@ -18,6 +18,7 @@
 
 #include <cgltf.h>
 #include <ktx.h>
+#include <stb_image.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
@@ -123,10 +124,18 @@ struct PushConstants {
 };
 
 using UniqueGltfData = std::unique_ptr<cgltf_data, decltype(&cgltf_free)>;
+using UniqueStbImageData = std::unique_ptr<stbi_uc, decltype(&stbi_image_free)>;
 
 // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast) }
 void DestroyKtxTexture2(ktxTexture2* const ktx_texture2) noexcept { ktxTexture_Destroy(ktxTexture(ktx_texture2)); }
 using UniqueKtxTexture2 = std::unique_ptr<ktxTexture2, decltype(&DestroyKtxTexture2)>;
+
+struct StbImage {
+  UniqueStbImageData data;
+  int width;
+  int height;
+  int channels;
+};
 
 UniqueGltfData ParseFile(const char* const gltf_filepath) {
   static constexpr cgltf_options kGltfOptions{};
@@ -333,8 +342,8 @@ std::vector<gfx::Mesh> GetSubmeshes(
   return std::move(iterator->second);
 }
 
-ktx_transcode_fmt_e GetTranscodeFormat(ktxTexture2& ktx_texture2,
-                                       const vk::PhysicalDeviceFeatures& physical_device_features) {
+ktx_transcode_fmt_e GetKtxTranscodeFormat(const vk::PhysicalDeviceFeatures& physical_device_features,
+                                          ktxTexture2& ktx_texture2) {
   // format selection based on https://github.com/KhronosGroup/3D-Formats-Guidelines/blob/main/KTXDeveloperGuide.md
   // TODO(matthew-rister): check corresponding vulkan format physical device support
   switch (ktxTexture2_GetColorModel_e(&ktx_texture2)) {
@@ -358,24 +367,9 @@ ktx_transcode_fmt_e GetTranscodeFormat(ktxTexture2& ktx_texture2,
   return kDecompressionFallback;
 }
 
-// TODO(matthew-rister): add support for KTX textures without Basis Universal supercompression
-UniqueKtxTexture2 LoadBaseColorTexture(const cgltf_material& gltf_material,
-                                       const std::filesystem::path& gltf_parent_filepath,
-                                       const vk::PhysicalDeviceFeatures& physical_device_features) {
+UniqueKtxTexture2 CreateKtxTexture2FromKtxFile(const std::filesystem::path& ktx_filepath,
+                                               const vk::PhysicalDeviceFeatures& physical_device_features) {
   UniqueKtxTexture2 ktx_texture2{nullptr, nullptr};
-  if (gltf_material.has_pbr_metallic_roughness == 0) return ktx_texture2;
-
-  const auto& gltf_pbr_metallic_roughness = gltf_material.pbr_metallic_roughness;
-  const auto& gltf_base_color_texture = gltf_pbr_metallic_roughness.base_color_texture.texture;
-  if (gltf_base_color_texture == nullptr) return ktx_texture2;
-
-  if (gltf_base_color_texture->has_basisu == 0) {
-    throw std::runtime_error{std::format(
-        "Failed to create KTX texture for {} because Basis Universal supercompressed texture support is required",
-        GetName(*gltf_base_color_texture))};
-  }
-
-  const auto ktx_filepath = gltf_parent_filepath / gltf_base_color_texture->basisu_image->uri;
   if (const auto ktx_error_code = ktxTexture2_CreateFromNamedFile(ktx_filepath.string().c_str(),
                                                                   KTX_TEXTURE_CREATE_CHECK_GLTF_BASISU_BIT,
                                                                   std::out_ptr(ktx_texture2, DestroyKtxTexture2));
@@ -385,16 +379,106 @@ UniqueKtxTexture2 LoadBaseColorTexture(const cgltf_material& gltf_material,
                                          ktxErrorString(ktx_error_code))};
   }
 
-  const auto ktx_transcode_format = GetTranscodeFormat(*ktx_texture2, physical_device_features);
-  if (const auto ktx_error_code = ktxTexture2_TranscodeBasis(ktx_texture2.get(), ktx_transcode_format, 0);
-      ktx_error_code != KTX_SUCCESS) {
-    throw std::runtime_error{std::format("Failed to transcode {} to {} with error {}",
-                                         ktx_filepath.string(),
-                                         ktxTranscodeFormatString(ktx_transcode_format),
-                                         ktxErrorString(ktx_error_code))};
+  if (ktxTexture2_NeedsTranscoding(ktx_texture2.get())) {
+    const auto ktx_transcode_format = GetKtxTranscodeFormat(physical_device_features, *ktx_texture2);
+    if (const auto ktx_error_code = ktxTexture2_TranscodeBasis(ktx_texture2.get(), ktx_transcode_format, 0);
+        ktx_error_code != KTX_SUCCESS) {
+      throw std::runtime_error{std::format("Failed to transcode {} to {} with error {}",
+                                           ktx_filepath.string(),
+                                           ktxTranscodeFormatString(ktx_transcode_format),
+                                           ktxErrorString(ktx_error_code))};
+    }
   }
 
   return ktx_texture2;
+}
+
+StbImage LoadStbImage(const std::filesystem::path& image_filepath) {
+  static constexpr auto kRequiredChannels = 4;  // require RGBA for improved device compatibility
+  int width = 0;
+  int height = 0;
+  int channels = 0;
+
+  UniqueStbImageData data{stbi_load(image_filepath.string().c_str(), &width, &height, &channels, kRequiredChannels),
+                          stbi_image_free};
+  if (data == nullptr) {
+    throw std::runtime_error{
+        std::format("Failed to load {} with error {}", image_filepath.string(), stbi_failure_reason())};
+  }
+
+#ifndef NDEBUG
+  if (channels != kRequiredChannels) {
+    std::println(std::clog,
+                 "{} contains {} color channels but was requested to load with {}",
+                 image_filepath.string(),
+                 channels,
+                 kRequiredChannels);
+  }
+#endif
+
+  return StbImage{.data = std::move(data), .width = width, .height = height, .channels = kRequiredChannels};
+}
+
+UniqueKtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::path& image_filepath) {
+  const auto& [data, width, height, channels] = LoadStbImage(image_filepath);
+  ktxTextureCreateInfo ktx_texture_create_info{.vkFormat = VK_FORMAT_R8G8B8A8_SRGB,
+                                               .baseWidth = static_cast<ktx_uint32_t>(width),
+                                               .baseHeight = static_cast<ktx_uint32_t>(height),
+                                               .baseDepth = 1,
+                                               .numDimensions = 2,
+                                               .numLevels = 1,
+                                               .numLayers = 1,
+                                               .numFaces = 1};
+
+  UniqueKtxTexture2 ktx_texture2{nullptr, nullptr};
+  if (const auto result = ktxTexture2_Create(&ktx_texture_create_info,
+                                             KTX_TEXTURE_CREATE_ALLOC_STORAGE,
+                                             std::out_ptr(ktx_texture2, DestroyKtxTexture2));
+      result != KTX_SUCCESS) {
+    throw std::runtime_error{std::format("Failed to create KTX texture for {} with error {}",
+                                         image_filepath.string(),
+                                         ktxErrorString(result))};
+  }
+
+  // TODO(matthew-rister): implement runtime mipmap generation for raw images
+  const auto data_size_bytes = static_cast<ktx_size_t>(width) * height * channels;
+  if (const auto result = ktxTexture_SetImageFromMemory(
+          ktxTexture(ktx_texture2.get()),  // NOLINT(cppcoreguidelines-pro-type-cstyle-cast)
+          0,
+          0,
+          KTX_FACESLICE_WHOLE_LEVEL,
+          data.get(),  // image data is copied so ownership does not need to be transferred
+          data_size_bytes);
+      result != KTX_SUCCESS) {
+    throw std::runtime_error{std::format("Failed to set KTX texture image for {} with error {}",
+                                         image_filepath.string(),
+                                         ktxErrorString(result))};
+  }
+
+  return ktx_texture2;
+}
+
+UniqueKtxTexture2 CreateKtxTexture2(const cgltf_texture& texture,
+                                    const std::filesystem::path& gltf_parent_filepath,
+                                    const vk::PhysicalDeviceFeatures& physical_device_features) {
+  const auto* image = texture.has_basisu == 0 ? texture.image : texture.basisu_image;
+  if (image == nullptr) throw std::runtime_error{std::format("No image source for texture {}", GetName(texture))};
+
+  const auto texture_filepath = gltf_parent_filepath / image->uri;
+  return texture_filepath.extension() == ".ktx2"
+             ? CreateKtxTexture2FromKtxFile(texture_filepath, physical_device_features)
+             : CreateKtxTexture2FromImageFile(texture_filepath);
+}
+
+UniqueKtxTexture2 CreateKtxBaseColorTexture(const cgltf_material& gltf_material,
+                                            const std::filesystem::path& gltf_parent_filepath,
+                                            const vk::PhysicalDeviceFeatures& physical_device_features) {
+  if (gltf_material.has_pbr_metallic_roughness != 0) {
+    if (const auto* gltf_base_color_texture = gltf_material.pbr_metallic_roughness.base_color_texture.texture) {
+      return CreateKtxTexture2(*gltf_base_color_texture, gltf_parent_filepath, physical_device_features);
+    }
+  }
+  return UniqueKtxTexture2{nullptr, nullptr};
 }
 
 gfx::Image CreateImage(const vk::Device device,
@@ -679,7 +763,7 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
       | std::views::transform([&gltf_parent_filepath, &physical_device_features](const auto& gltf_material) {
           return std::async(std::launch::async, [&gltf_material, &gltf_parent_filepath, &physical_device_features] {
             return std::pair{&gltf_material,
-                             LoadBaseColorTexture(gltf_material, gltf_parent_filepath, physical_device_features)};
+                             CreateKtxBaseColorTexture(gltf_material, gltf_parent_filepath, physical_device_features)};
           });
         })
       | std::ranges::to<std::vector>();
@@ -705,15 +789,15 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
 
   materials_.reserve(material_count);
   for (auto& material_future : material_futures) {
-    const auto [gltf_material, base_color_texture] = material_future.get();
-    if (base_color_texture == nullptr) {
+    const auto [gltf_material, ktx_base_color_texture] = material_future.get();
+    if (ktx_base_color_texture == nullptr) {
       std::println(std::cerr, "Unsupported material {}", GetName(*gltf_material));
       continue;
     }
     materials_.emplace_back(gltf_material,
-                            CreateImage(device, command_buffer, allocator, *base_color_texture, staging_buffers),
+                            CreateImage(device, command_buffer, allocator, *ktx_base_color_texture, staging_buffers),
                             CreateSampler(device,
-                                          base_color_texture->numLevels,
+                                          ktx_base_color_texture->numLevels,
                                           physical_device_features,
                                           physical_device_limits,
                                           samplers_));
