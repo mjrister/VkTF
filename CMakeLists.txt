@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.29)
-project(vkrender VERSION 0.0.2 LANGUAGES CXX)
+project(vkrender VERSION 0.0.3 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
