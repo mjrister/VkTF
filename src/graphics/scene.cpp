@@ -14,6 +14,7 @@
 #include <span>
 #include <stdexcept>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 
 #include <cgltf.h>
@@ -123,19 +124,39 @@ struct PushConstants {
   glm::mat4 projection_transform{1.0f};
 };
 
-using UniqueGltfData = std::unique_ptr<cgltf_data, decltype(&cgltf_free)>;
-using UniqueStbImageData = std::unique_ptr<stbi_uc, decltype(&stbi_image_free)>;
+struct TranscodeFormat {
+  vk::Format srgb_format = vk::Format::eUndefined;
+  vk::Format unorm_format = vk::Format::eUndefined;
+  ktx_transcode_fmt_e ktx_transcode_format = KTX_TTF_NOSELECTION;
+};
 
-// NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast) }
+using UniqueGltfData = std::unique_ptr<cgltf_data, decltype(&cgltf_free)>;
+
+// NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
 void DestroyKtxTexture2(ktxTexture2* const ktx_texture2) noexcept { ktxTexture_Destroy(ktxTexture(ktx_texture2)); }
 using UniqueKtxTexture2 = std::unique_ptr<ktxTexture2, decltype(&DestroyKtxTexture2)>;
 
-struct StbImage {
-  UniqueStbImageData data;
-  int width;
-  int height;
-  int channels;
-};
+constexpr TranscodeFormat kBc1TranscodeFormat{.srgb_format = vk::Format::eBc1RgbSrgbBlock,
+                                              .unorm_format = vk::Format::eBc1RgbUnormBlock,
+                                              .ktx_transcode_format = KTX_TTF_BC1_RGB};
+constexpr TranscodeFormat kBc3TranscodeFormat{.srgb_format = vk::Format::eBc3SrgbBlock,
+                                              .unorm_format = vk::Format::eBc3UnormBlock,
+                                              .ktx_transcode_format = KTX_TTF_BC3_RGBA};
+constexpr TranscodeFormat kBc7TranscodeFormat{.srgb_format = vk::Format::eBc7SrgbBlock,
+                                              .unorm_format = vk::Format::eBc7UnormBlock,
+                                              .ktx_transcode_format = KTX_TTF_BC7_RGBA};
+constexpr TranscodeFormat kEtc1TranscodeFormat{.srgb_format = vk::Format::eEtc2R8G8B8SrgbBlock,
+                                               .unorm_format = vk::Format::eEtc2R8G8B8UnormBlock,
+                                               .ktx_transcode_format = KTX_TTF_ETC1_RGB};
+constexpr TranscodeFormat kEtc2TranscodeFormat{.srgb_format = vk::Format::eEtc2R8G8B8A8SrgbBlock,
+                                               .unorm_format = vk::Format::eEtc2R8G8B8A8UnormBlock,
+                                               .ktx_transcode_format = KTX_TTF_ETC2_RGBA};
+constexpr TranscodeFormat kAstc4x4TranscodeFormat{.srgb_format = vk::Format::eAstc4x4SrgbBlock,
+                                                  .unorm_format = vk::Format::eAstc4x4UnormBlock,
+                                                  .ktx_transcode_format = KTX_TTF_ASTC_4x4_RGBA};
+constexpr TranscodeFormat kRgba32TranscodeFormat{.srgb_format = vk::Format::eR8G8B8A8Srgb,
+                                                 .unorm_format = vk::Format::eR8G8B8A8Unorm,
+                                                 .ktx_transcode_format = KTX_TTF_RGBA32};
 
 UniqueGltfData ParseFile(const std::filesystem::path& gltf_filepath) {
   static constexpr cgltf_options kGltfOptions{};
@@ -181,12 +202,12 @@ std::string_view GetName(const T& gltf_element) {
 }
 
 template <glm::length_t N>
-std::vector<glm::vec<N, float>> UnpackFloats(const cgltf_accessor& gltf_accessor) {
-  if (const auto components = cgltf_num_components(gltf_accessor.type); components != N) {
-    throw std::runtime_error{std::format("Failed to unpack floats for {}", GetName(gltf_accessor))};
+std::vector<glm::vec<N, float>> UnpackFloats(const cgltf_accessor& gltf_floats_accessor) {
+  if (const auto components = cgltf_num_components(gltf_floats_accessor.type); components != N) {
+    throw std::runtime_error{std::format("Failed to unpack floats for {}", GetName(gltf_floats_accessor))};
   }
-  std::vector<glm::vec<N, float>> data(gltf_accessor.count);
-  cgltf_accessor_unpack_floats(&gltf_accessor, glm::value_ptr(data.front()), N * gltf_accessor.count);
+  std::vector<glm::vec<N, float>> data(gltf_floats_accessor.count);
+  cgltf_accessor_unpack_floats(&gltf_floats_accessor, glm::value_ptr(data.front()), N * gltf_floats_accessor.count);
   return data;
 }
 
@@ -253,10 +274,10 @@ std::vector<Vertex> GetVertices(const cgltf_primitive& gltf_primitive) {
 
 template <typename T>
   requires std::same_as<T, std::uint16_t> || std::same_as<T, std::uint32_t>
-std::vector<T> GetIndices(const cgltf_accessor& indices_gltf_accessor) {
-  std::vector<T> indices(indices_gltf_accessor.count);
-  if (cgltf_accessor_unpack_indices(&indices_gltf_accessor, indices.data(), sizeof(T), indices.size()) == 0) {
-    throw std::runtime_error{std::format("Failed to unpack indices for {}", GetName(indices_gltf_accessor))};
+std::vector<T> GetIndices(const cgltf_accessor& gltf_indices_accessor) {
+  std::vector<T> indices(gltf_indices_accessor.count);
+  if (cgltf_accessor_unpack_indices(&gltf_indices_accessor, indices.data(), sizeof(T), indices.size()) == 0) {
+    throw std::runtime_error{std::format("Failed to unpack indices for {}", GetName(gltf_indices_accessor))};
   }
   return indices;
 }
@@ -357,34 +378,86 @@ std::vector<gfx::Mesh> GetSubmeshes(
   return std::move(iterator->second);
 }
 
-ktx_transcode_fmt_e GetKtxTranscodeFormat(const vk::PhysicalDeviceFeatures& physical_device_features,
-                                          ktxTexture2& ktx_texture2) {
+std::unordered_set<vk::Format> GetSupportedTranscodeFormats(const vk::PhysicalDevice& physical_device) {
+  static constexpr std::array kTranscodeFormats{
+      // clang-format off
+    kBc1TranscodeFormat.srgb_format, kBc1TranscodeFormat.unorm_format,
+    kBc3TranscodeFormat.srgb_format, kBc3TranscodeFormat.unorm_format,
+    kBc7TranscodeFormat.srgb_format, kBc7TranscodeFormat.unorm_format,
+    kEtc1TranscodeFormat.srgb_format, kEtc1TranscodeFormat.unorm_format,
+    kEtc2TranscodeFormat.srgb_format, kEtc2TranscodeFormat.unorm_format,
+    kAstc4x4TranscodeFormat.srgb_format, kAstc4x4TranscodeFormat.unorm_format,
+    kRgba32TranscodeFormat.srgb_format, kRgba32TranscodeFormat.unorm_format
+      // clang-format on
+  };
+  return kTranscodeFormats  //
+         | std::views::filter([physical_device](const auto transcode_format) {
+             using enum vk::FormatFeatureFlagBits;
+             const auto format_properties = physical_device.getFormatProperties(transcode_format);
+             return static_cast<bool>(format_properties.optimalTilingFeatures & eSampledImage);
+           })
+         | std::ranges::to<std::unordered_set>();
+}
+
+ktx_transcode_fmt_e GetKtxTranscodeFormatForColorModel(
+    const std::span<const TranscodeFormat> target_transcode_formats,
+    const bool has_unorm_format,
+    const std::unordered_set<vk::Format>& supported_transcode_formats) {
+  for (const auto [srgb_format, unorm_format, ktx_transcode_format] : target_transcode_formats) {
+    if (const auto target_transcode_format = has_unorm_format ? unorm_format : srgb_format;
+        supported_transcode_formats.contains(target_transcode_format)) {
+      return ktx_transcode_format;
+    }
+  }
+  const auto [rgba32_srgb_format, rgba32_unorm_format, rgba32_ktx_transcode_format] = kRgba32TranscodeFormat;
+  if (const auto rgba32_transcode_format = has_unorm_format ? rgba32_unorm_format : rgba32_srgb_format;
+      supported_transcode_formats.contains(rgba32_transcode_format)) {
+#ifndef NDEBUG
+    std::println(std::clog,
+                 "No supported texture compression format could be found. Decompressing to {}",
+                 ktxTranscodeFormatString(rgba32_ktx_transcode_format));
+#endif
+    return rgba32_ktx_transcode_format;
+  }
+  throw std::runtime_error{"No supported KTX transcode formats could be found"};
+}
+
+ktx_transcode_fmt_e GetKtxTranscodeFormat(ktxTexture2& ktx_texture2,
+                                          const bool has_unorm_format,
+                                          const std::unordered_set<vk::Format>& supported_transcode_formats) {
   // format selection based on https://github.com/KhronosGroup/3D-Formats-Guidelines/blob/main/KTXDeveloperGuide.md
-  switch (ktxTexture2_GetColorModel_e(&ktx_texture2)) {
-    case KHR_DF_MODEL_UASTC:
-      if (physical_device_features.textureCompressionASTC_LDR == vk::True) return KTX_TTF_ASTC_4x4_RGBA;
-      if (physical_device_features.textureCompressionBC == vk::True) return KTX_TTF_BC7_RGBA;
-      if (physical_device_features.textureCompressionETC2 == vk::True) return KTX_TTF_ETC;
-      break;
-    case KHR_DF_MODEL_ETC1S:
-      if (physical_device_features.textureCompressionETC2 == vk::True) return KTX_TTF_ETC;
-      if (physical_device_features.textureCompressionBC == vk::True) return KTX_TTF_BC7_RGBA;
-      break;
+  switch (const auto has_alpha = ktxTexture2_GetNumComponents(&ktx_texture2) == 4;
+          ktxTexture2_GetColorModel_e(&ktx_texture2)) {
+    case KHR_DF_MODEL_ETC1S: {
+      static constexpr std::array kEtc1sRgbTranscodeFormats{kEtc1TranscodeFormat,
+                                                            kBc7TranscodeFormat,
+                                                            kBc1TranscodeFormat};
+      static constexpr std::array kEtc1sRgbaTranscodeFormats{kEtc2TranscodeFormat,
+                                                             kBc7TranscodeFormat,
+                                                             kBc3TranscodeFormat};
+      const auto& etc1s_transcode_formats = has_alpha ? kEtc1sRgbaTranscodeFormats : kEtc1sRgbTranscodeFormats;
+      return GetKtxTranscodeFormatForColorModel(etc1s_transcode_formats, has_unorm_format, supported_transcode_formats);
+    }
+    case KHR_DF_MODEL_UASTC: {
+      static constexpr std::array kUastcRgbTranscodeFormats{kAstc4x4TranscodeFormat,
+                                                            kBc7TranscodeFormat,
+                                                            kEtc1TranscodeFormat,
+                                                            kBc1TranscodeFormat};
+      static constexpr std::array kUastcRgbaTranscodeFormats{kAstc4x4TranscodeFormat,
+                                                             kBc7TranscodeFormat,
+                                                             kEtc2TranscodeFormat,
+                                                             kBc3TranscodeFormat};
+      const auto& uastc_transcode_formats = has_alpha ? kUastcRgbaTranscodeFormats : kUastcRgbTranscodeFormats;
+      return GetKtxTranscodeFormatForColorModel(uastc_transcode_formats, has_unorm_format, supported_transcode_formats);
+    }
     default:
       std::unreachable();  // basis universal only supports UASTC/ETC1S transmission formats
   }
-
-  static constexpr auto kDecompressionFallback = KTX_TTF_RGBA32;
-#ifndef NDEBUG
-  std::println(std::clog,
-               "No supported texture compression format could be found. Decompressing to {}",
-               ktxTranscodeFormatString(kDecompressionFallback));
-#endif
-  return kDecompressionFallback;
 }
 
 UniqueKtxTexture2 CreateKtxTexture2FromKtxFile(const std::filesystem::path& ktx_filepath,
-                                               const vk::PhysicalDeviceFeatures& physical_device_features) {
+                                               const bool has_unorm_format,
+                                               const std::unordered_set<vk::Format>& supported_transcode_formats) {
   UniqueKtxTexture2 ktx_texture2{nullptr, nullptr};
   if (const auto ktx_error_code = ktxTexture2_CreateFromNamedFile(ktx_filepath.string().c_str(),
                                                                   KTX_TEXTURE_CREATE_CHECK_GLTF_BASISU_BIT,
@@ -396,7 +469,8 @@ UniqueKtxTexture2 CreateKtxTexture2FromKtxFile(const std::filesystem::path& ktx_
   }
 
   if (ktxTexture2_NeedsTranscoding(ktx_texture2.get())) {
-    const auto ktx_transcode_format = GetKtxTranscodeFormat(physical_device_features, *ktx_texture2);
+    const auto ktx_transcode_format =
+        GetKtxTranscodeFormat(*ktx_texture2, has_unorm_format, supported_transcode_formats);
     if (const auto ktx_error_code = ktxTexture2_TranscodeBasis(ktx_texture2.get(), ktx_transcode_format, 0);
         ktx_error_code != KTX_SUCCESS) {
       throw std::runtime_error{std::format("Failed to transcode {} to {} with error {}",
@@ -409,37 +483,27 @@ UniqueKtxTexture2 CreateKtxTexture2FromKtxFile(const std::filesystem::path& ktx_
   return ktx_texture2;
 }
 
-StbImage LoadStbImage(const std::filesystem::path& image_filepath) {
-  static constexpr auto kRequiredChannels = 4;  // require RGBA for improved device compatibility
-  int width = 0;
-  int height = 0;
-  int channels = 0;
+UniqueKtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::path& image_filepath,
+                                                 const bool has_unorm_format) {
+  static constexpr auto kRequiredImageChannels = 4;  // require RGBA for improved device compatibility
+  const auto image_filepath_string = image_filepath.string();
+  int image_width = 0;
+  int image_height = 0;
+  int image_channels = 0;
 
-  UniqueStbImageData data{stbi_load(image_filepath.string().c_str(), &width, &height, &channels, kRequiredChannels),
-                          stbi_image_free};
-  if (data == nullptr) {
+  const std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> image_data{
+      stbi_load(image_filepath_string.c_str(), &image_width, &image_height, &image_channels, kRequiredImageChannels),
+      stbi_image_free};
+  if (image_data == nullptr) {
     throw std::runtime_error{
-        std::format("Failed to load {} with error {}", image_filepath.string(), stbi_failure_reason())};
+        std::format("Failed to load {} with error {}", image_filepath_string, stbi_failure_reason())};
   }
 
-#ifndef NDEBUG
-  if (channels != kRequiredChannels) {
-    std::println(std::clog,
-                 "{} contains {} color channels but was requested to load with {}",
-                 image_filepath.string(),
-                 channels,
-                 kRequiredChannels);
-  }
-#endif
-
-  return StbImage{.data = std::move(data), .width = width, .height = height, .channels = kRequiredChannels};
-}
-
-UniqueKtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::path& image_filepath) {
-  const auto& [data, width, height, channels] = LoadStbImage(image_filepath);
-  ktxTextureCreateInfo ktx_texture_create_info{.vkFormat = VK_FORMAT_R8G8B8A8_SRGB,
-                                               .baseWidth = static_cast<ktx_uint32_t>(width),
-                                               .baseHeight = static_cast<ktx_uint32_t>(height),
+  // R8G8B8A8 format support for images with VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT is mandated by the Vulkan specification
+  const auto image_format = has_unorm_format ? vk::Format::eR8G8B8A8Unorm : vk::Format::eR8G8B8A8Srgb;
+  ktxTextureCreateInfo ktx_texture_create_info{.vkFormat = static_cast<ktx_uint32_t>(image_format),
+                                               .baseWidth = static_cast<ktx_uint32_t>(image_width),
+                                               .baseHeight = static_cast<ktx_uint32_t>(image_height),
                                                .baseDepth = 1,
                                                .numDimensions = 2,
                                                .numLevels = 1,
@@ -452,22 +516,22 @@ UniqueKtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::path& im
                                              std::out_ptr(ktx_texture2, DestroyKtxTexture2));
       result != KTX_SUCCESS) {
     throw std::runtime_error{std::format("Failed to create KTX texture for {} with error {}",
-                                         image_filepath.string(),
+                                         image_filepath_string,
                                          ktxErrorString(result))};
   }
 
   // TODO(matthew-rister): implement runtime mipmap generation for raw images
-  const auto data_size_bytes = static_cast<ktx_size_t>(width) * height * channels;
+  const auto image_size_bytes = static_cast<ktx_size_t>(image_width) * image_height * kRequiredImageChannels;
   if (const auto result = ktxTexture_SetImageFromMemory(
           ktxTexture(ktx_texture2.get()),  // NOLINT(cppcoreguidelines-pro-type-cstyle-cast)
           0,
           0,
           KTX_FACESLICE_WHOLE_LEVEL,
-          data.get(),  // image data is copied so ownership does not need to be transferred
-          data_size_bytes);
+          image_data.get(),  // image data is copied so ownership does not need to be transferred
+          image_size_bytes);
       result != KTX_SUCCESS) {
     throw std::runtime_error{std::format("Failed to set KTX texture image for {} with error {}",
-                                         image_filepath.string(),
+                                         image_filepath_string,
                                          ktxErrorString(result))};
   }
 
@@ -476,22 +540,23 @@ UniqueKtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::path& im
 
 UniqueKtxTexture2 CreateKtxTexture2(const cgltf_texture& texture,
                                     const std::filesystem::path& gltf_parent_filepath,
-                                    const vk::PhysicalDeviceFeatures& physical_device_features) {
+                                    const bool has_unorm_format,
+                                    const std::unordered_set<vk::Format>& supported_transcode_formats) {
   const auto* image = texture.has_basisu == 0 ? texture.image : texture.basisu_image;
   if (image == nullptr) throw std::runtime_error{std::format("No image source for texture {}", GetName(texture))};
 
   const auto texture_filepath = gltf_parent_filepath / image->uri;
   return texture_filepath.extension() == ".ktx2"
-             ? CreateKtxTexture2FromKtxFile(texture_filepath, physical_device_features)
-             : CreateKtxTexture2FromImageFile(texture_filepath);
+             ? CreateKtxTexture2FromKtxFile(texture_filepath, has_unorm_format, supported_transcode_formats)
+             : CreateKtxTexture2FromImageFile(texture_filepath, has_unorm_format);
 }
 
 UniqueKtxTexture2 CreateKtxBaseColorTexture(const cgltf_material& gltf_material,
                                             const std::filesystem::path& gltf_parent_filepath,
-                                            const vk::PhysicalDeviceFeatures& physical_device_features) {
+                                            const std::unordered_set<vk::Format>& supported_transcode_formats) {
   if (gltf_material.has_pbr_metallic_roughness != 0) {
     if (const auto* gltf_base_color_texture = gltf_material.pbr_metallic_roughness.base_color_texture.texture) {
-      return CreateKtxTexture2(*gltf_base_color_texture, gltf_parent_filepath, physical_device_features);
+      return CreateKtxTexture2(*gltf_base_color_texture, gltf_parent_filepath, false, supported_transcode_formats);
     }
   }
   return UniqueKtxTexture2{nullptr, nullptr};
@@ -525,16 +590,16 @@ gfx::Image CreateImage(const vk::Device device,
   const auto buffer_image_copies =
       std::views::iota(0u, ktx_texture2.numLevels)  //
       | std::views::transform([&ktx_texture2](const auto mip_level) {
-          ktx_size_t buffer_offset = 0;
-          if (const auto ktx_error_code =  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast) }
-              ktxTexture_GetImageOffset(ktxTexture(&ktx_texture2), mip_level, 0, 0, &buffer_offset);
+          ktx_size_t image_offset = 0;
+          if (const auto ktx_error_code =  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
+              ktxTexture_GetImageOffset(ktxTexture(&ktx_texture2), mip_level, 0, 0, &image_offset);
               ktx_error_code != KTX_SUCCESS) {
             throw std::runtime_error{std::format("Failed to get image offset for mip level {} with error {}",
                                                  mip_level,
                                                  ktxErrorString(ktx_error_code))};
           }
           return vk::BufferImageCopy{
-              .bufferOffset = buffer_offset,
+              .bufferOffset = image_offset,
               .imageSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor,
                                                              .mipLevel = mip_level,
                                                              .layerCount = 1},
@@ -585,6 +650,7 @@ void UpdateDescriptorSet(const vk::Device device,
   const vk::DescriptorImageInfo descriptor_image_info{.sampler = sampler,
                                                       .imageView = image_view,
                                                       .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal};
+
   device.updateDescriptorSets(vk::WriteDescriptorSet{.dstSet = descriptor_set,
                                                      .dstBinding = 0,
                                                      .dstArrayElement = 0,
@@ -764,6 +830,7 @@ struct Scene::Material {
 Scene::Scene(const std::filesystem::path& gltf_filepath,
              const vk::PhysicalDeviceFeatures& physical_device_features,
              const vk::PhysicalDeviceLimits& physical_device_limits,
+             const vk::PhysicalDevice physical_device,
              const vk::Device device,
              const vk::Queue queue,
              const std::uint32_t queue_family_index,
@@ -774,12 +841,14 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
   const auto gltf_data = ParseFile(gltf_filepath);
   const auto gltf_parent_filepath = gltf_filepath.parent_path();
 
+  const auto supported_transcode_formats = GetSupportedTranscodeFormats(physical_device);
   auto material_futures =
       std::span{gltf_data->materials, gltf_data->materials_count}
-      | std::views::transform([&gltf_parent_filepath, &physical_device_features](const auto& gltf_material) {
-          return std::async(std::launch::async, [&gltf_material, &gltf_parent_filepath, &physical_device_features] {
-            return std::pair{&gltf_material,
-                             CreateKtxBaseColorTexture(gltf_material, gltf_parent_filepath, physical_device_features)};
+      | std::views::transform([&gltf_parent_filepath, &supported_transcode_formats](const auto& gltf_material) {
+          return std::async(std::launch::async, [&gltf_material, &gltf_parent_filepath, &supported_transcode_formats] {
+            return std::pair{
+                &gltf_material,
+                CreateKtxBaseColorTexture(gltf_material, gltf_parent_filepath, supported_transcode_formats)};
           });
         })
       | std::ranges::to<std::vector>();

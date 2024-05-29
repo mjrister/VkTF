@@ -20,6 +20,7 @@ public:
   Scene(const std::filesystem::path& gltf_filepath,
         const vk::PhysicalDeviceFeatures& physical_device_features,
         const vk::PhysicalDeviceLimits& physical_device_limits,
+        vk::PhysicalDevice physical_device,
         vk::Device device,
         vk::Queue queue,
         std::uint32_t queue_family_index,

@@ -225,6 +225,7 @@ Scene Engine::LoadScene(const std::filesystem::path& gltf_filepath) const {
   return Scene{gltf_filepath,
                physical_device.features(),
                physical_device.limits(),
+               *physical_device,
                *device_,
                device_.graphics_queue(),  // TODO(matthew-rister): prefer a dedicated transfer queue
                device_.queue_family_indices().graphics_index,
