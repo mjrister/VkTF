@@ -21,6 +21,7 @@
 #include <ktx.h>
 #include <stb_image.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/epsilon.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 #include "graphics/buffer.h"
@@ -84,39 +85,13 @@ private:
   }
 };
 
-template <>
-struct std::formatter<cgltf_attribute_type> : std::formatter<std::string_view> {
-  [[nodiscard]] auto format(const cgltf_attribute_type gltf_attribute_type, auto& format_context) const {
-    return std::formatter<std::string_view>::format(to_string(gltf_attribute_type), format_context);
-  }
-
-private:
-  static std::string_view to_string(const cgltf_attribute_type gltf_attribute_type) noexcept {
-    switch (gltf_attribute_type) {
-      // clang-format off
-#define CASE(kValue) case kValue: return #kValue;  // NOLINT(cppcoreguidelines-macro-usage)
-      CASE(cgltf_attribute_type_position)
-      CASE(cgltf_attribute_type_normal)
-      CASE(cgltf_attribute_type_tangent)
-      CASE(cgltf_attribute_type_texcoord)
-      CASE(cgltf_attribute_type_color)
-      CASE(cgltf_attribute_type_joints)
-      CASE(cgltf_attribute_type_weights)
-      CASE(cgltf_attribute_type_custom)
-#undef CASE
-      // clang-format on
-      default:
-        std::unreachable();
-    }
-  }
-};
-
 namespace {
 
 struct Vertex {
   glm::vec3 position{0.0f};
   glm::vec3 normal{0.0f};
-  glm::vec2 texture_coordinates{0.0f};
+  glm::vec4 tangent{0.0f};  // w-component indicates the signed handedness of the tangent basis
+  glm::vec2 texture_coordinates0{0.0f};
 };
 
 struct PushConstants {
@@ -183,7 +158,7 @@ UniqueGltfData ParseFile(const std::filesystem::path& gltf_filepath) {
 }
 
 const cgltf_scene& GetDefaultScene(const cgltf_data& gltf_data, const std::filesystem::path& gltf_filepath) {
-  if (const auto* gltf_default_scene = gltf_data.scene; gltf_default_scene != nullptr) {
+  if (const auto* const gltf_default_scene = gltf_data.scene; gltf_default_scene != nullptr) {
     return *gltf_default_scene;
   }
   if (const std::span gltf_scenes{gltf_data.scenes, gltf_data.scenes_count}; !gltf_scenes.empty()) {
@@ -230,63 +205,90 @@ std::vector<T> UnpackIndices(const cgltf_accessor& gltf_indices_accessor) {
 }
 
 std::vector<Vertex> GetVertices(const cgltf_primitive& gltf_primitive) {
+  static constexpr std::string_view kPositionAttributeName = "POSITION";
+  static constexpr std::string_view kNormalAttributeName = "NORMAL";
+  static constexpr std::string_view kTangentAttributeName = "TANGENT";
+  static constexpr std::string_view kTextureCoordinates0AttributeName = "TEXCOORD_0";
   std::optional<std::vector<glm::vec3>> maybe_positions;
   std::optional<std::vector<glm::vec3>> maybe_normals;
-  std::optional<std::vector<glm::vec2>> maybe_texture_coordinates;
+  std::optional<std::vector<glm::vec4>> maybe_tangents;
+  std::optional<std::vector<glm::vec2>> maybe_texture_coordinates0;
+
+  static constexpr auto kUnpackAttributeData =
+      []<glm::length_t N>(const auto* const gltf_accessor,
+                          std::optional<std::vector<glm::vec<N, float>>>& maybe_attribute_data) {
+        assert(gltf_accessor != nullptr);           // valid glTF primitives should not have null attribute data
+        assert(!maybe_attribute_data.has_value());  // valid glTF primitives should not have duplicate attributes
+        maybe_attribute_data = UnpackFloats<N>(*gltf_accessor);
+      };  // NOLINT(readability/braces)
 
   for (const auto& gltf_attribute : std::span{gltf_primitive.attributes, gltf_primitive.attributes_count}) {
-    assert(gltf_attribute.data != nullptr);  // valid glTF files should not contain null attribute data
-    switch (const auto& gltf_accessor = *gltf_attribute.data; gltf_attribute.type) {
+    switch (const auto* const gltf_accessor = gltf_attribute.data; gltf_attribute.type) {
       case cgltf_attribute_type_position:
-        if (!maybe_positions.has_value()) {
-          maybe_positions = UnpackFloats<3>(gltf_accessor);
-          break;
-        }
-        [[fallthrough]];
+        kUnpackAttributeData(gltf_accessor, maybe_positions);
+        break;
       case cgltf_attribute_type_normal:
-        if (!maybe_normals.has_value()) {
-          maybe_normals = UnpackFloats<3>(gltf_accessor);
-          break;
-        }
-        [[fallthrough]];
+        kUnpackAttributeData(gltf_accessor, maybe_normals);
+        break;
+      case cgltf_attribute_type_tangent:
+        kUnpackAttributeData(gltf_accessor, maybe_tangents);
+        break;
       case cgltf_attribute_type_texcoord:
-        if (!maybe_texture_coordinates.has_value()) {
-          maybe_texture_coordinates = UnpackFloats<2>(gltf_accessor);
+        if (GetName(gltf_attribute) == kTextureCoordinates0AttributeName) {
+          kUnpackAttributeData(gltf_accessor, maybe_texture_coordinates0);
           break;
         }
         [[fallthrough]];
       default:
-        std::println(std::cerr, "Unsupported primitive attribute {}", gltf_attribute.type);
+        std::println(std::cerr, "Unsupported primitive attribute {}", GetName(gltf_attribute));
         break;
     }
   }
 
-  if (!maybe_positions.has_value()) throw std::runtime_error{"No vertex positions"};
-  if (!maybe_normals.has_value()) throw std::runtime_error{"No vertex normals"};
-  if (!maybe_texture_coordinates.has_value()) throw std::runtime_error{"No vertex texture coordinates"};
+  // unfortunately need to iterate this way because vertex attribute data types are not homogeneous
+  for (const auto [attribute_name, has_attribute_data] :
+       std::array{std::pair{kPositionAttributeName, maybe_positions.has_value()},
+                  std::pair{kNormalAttributeName, maybe_normals.has_value()},
+                  std::pair{kTangentAttributeName, maybe_tangents.has_value()},
+                  std::pair{kTextureCoordinates0AttributeName, maybe_texture_coordinates0.has_value()}}) {
+    if (!has_attribute_data) {
+      throw std::runtime_error{std::format("Missing required vertex attribute {}", attribute_name)};
+    }
+  }
 
   // primitives are expected to represent an indexed triangle mesh with a matching number of vertex attributes
-  if (maybe_positions->size() != maybe_normals->size()) {
-    throw std::runtime_error{
-        std::format("The number of vertex positions {} does not match the number of vertex normals {}",
-                    maybe_positions->size(),
-                    maybe_normals->size())};
-  }
-  if (maybe_positions->size() != maybe_texture_coordinates->size()) {
-    throw std::runtime_error{
-        std::format("The number of vertex positions {} does not match the number of vertex texture coordinates {}",
-                    maybe_positions->size(),
-                    maybe_texture_coordinates->size())};
+  for (const auto positions_count = maybe_positions->size();
+       const auto [attribute_name, attribute_count] :
+       std::array{std::pair{kNormalAttributeName, maybe_normals->size()},
+                  std::pair{kTangentAttributeName, maybe_tangents->size()},
+                  std::pair{kTextureCoordinates0AttributeName, maybe_texture_coordinates0->size()}}) {
+    if (attribute_count != positions_count) {
+      throw std::runtime_error{
+          std::format("The number of {} attributes {} does not match the number of {} attributes {}",
+                      kPositionAttributeName,
+                      positions_count,
+                      attribute_name,
+                      attribute_count)};
+    }
   }
 
   return std::views::zip_transform(
-             [](const auto& position, const auto& normal, const auto& texture_coordinates) {
-               // TODO(matthew-rister): verify normal has unit length
-               return Vertex{.position = position, .normal = normal, .texture_coordinates = texture_coordinates};
+             [](const auto& position, const auto& normal, const auto& tangent, const auto& texture_coordinates0) {
+#ifndef NDEBUG
+               // valid glTF primitives should have unit length normal and tangent vectors
+               static constexpr auto kEpsilon = 1.0e-6f;
+               assert(glm::epsilonEqual(glm::length(normal), 1.0f, kEpsilon));
+               assert(glm::epsilonEqual(glm::length(glm::vec3{tangent}), 1.0f, kEpsilon));
+#endif
+               return Vertex{.position = position,
+                             .normal = normal,
+                             .tangent = tangent,
+                             .texture_coordinates0 = texture_coordinates0};
              },
              *maybe_positions,
              *maybe_normals,
-             *maybe_texture_coordinates)
+             *maybe_tangents,
+             *maybe_texture_coordinates0)
          | std::ranges::to<std::vector>();
 }
 
@@ -359,7 +361,7 @@ std::vector<gfx::Mesh> CreateMeshes(const cgltf_mesh& gltf_mesh,
       continue;
     }
 
-    const auto* gltf_indices_accessor = gltf_primitive.indices;
+    const auto* const gltf_indices_accessor = gltf_primitive.indices;
     if (gltf_indices_accessor == nullptr || gltf_indices_accessor->count == 0) {
       // TODO(matthew-rister): add support for non-indexed triangle meshes
       throw std::runtime_error{"Primitive must represent a valid indexed triangle mesh"};
@@ -559,7 +561,7 @@ UniqueKtxTexture2 CreateKtxTexture2(const cgltf_texture& texture,
                                     const std::filesystem::path& gltf_parent_filepath,
                                     const bool has_unorm_format,
                                     const std::unordered_set<vk::Format>& supported_transcode_formats) {
-  const auto* image = texture.has_basisu == 0 ? texture.image : texture.basisu_image;
+  const auto* const image = texture.has_basisu == 0 ? texture.image : texture.basisu_image;
   if (image == nullptr) throw std::runtime_error{std::format("No image source for texture {}", GetName(texture))};
 
   const auto texture_filepath = gltf_parent_filepath / image->uri;
@@ -572,7 +574,7 @@ UniqueKtxTexture2 CreateKtxBaseColorTexture(const cgltf_material& gltf_material,
                                             const std::filesystem::path& gltf_parent_filepath,
                                             const std::unordered_set<vk::Format>& supported_transcode_formats) {
   if (gltf_material.has_pbr_metallic_roughness != 0) {
-    if (const auto* gltf_base_color_texture = gltf_material.pbr_metallic_roughness.base_color_texture.texture) {
+    if (const auto* const gltf_base_color_texture = gltf_material.pbr_metallic_roughness.base_color_texture.texture) {
       return CreateKtxTexture2(*gltf_base_color_texture, gltf_parent_filepath, false, supported_transcode_formats);
     }
   }
@@ -724,8 +726,12 @@ vk::UniquePipeline CreatePipeline(const vk::Device device,
                                           .offset = offsetof(Vertex, normal)},
       vk::VertexInputAttributeDescription{.location = 2,
                                           .binding = 0,
+                                          .format = vk::Format::eR32G32B32A32Sfloat,
+                                          .offset = offsetof(Vertex, tangent)},
+      vk::VertexInputAttributeDescription{.location = 3,
+                                          .binding = 0,
                                           .format = vk::Format::eR32G32Sfloat,
-                                          .offset = offsetof(Vertex, texture_coordinates)}};
+                                          .offset = offsetof(Vertex, texture_coordinates0)}};
 
   static constexpr vk::PipelineVertexInputStateCreateInfo kVertexInputStateCreateInfo{
       .vertexBindingDescriptionCount = 1,
@@ -908,7 +914,7 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
 
   const auto descriptor_sets =
       std::views::zip_transform(
-          [device](const auto& material, auto& descriptor_set) {
+          [device](const auto& material, const auto& descriptor_set) {
             const auto& [gltf_material, base_color_image, base_color_sampler] = material;
             UpdateDescriptorSet(device, base_color_image.image_view(), base_color_sampler, descriptor_set);
             return std::pair{gltf_material, descriptor_set};
@@ -953,7 +959,7 @@ void Scene::Render(const Camera& camera, const vk::CommandBuffer command_buffer)
 Scene::Node::Node(const cgltf_scene& gltf_scene, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes)
     : children_{std::span{gltf_scene.nodes, gltf_scene.nodes_count}
                 | std::views::transform([&meshes](const auto* const gltf_scene_node) {
-                    assert(gltf_scene_node != nullptr);  // valid glTF files should not contain null scene nodes
+                    assert(gltf_scene_node != nullptr);  // valid glTF scenes should not contain null scene nodes
                     return std::make_unique<const Node>(*gltf_scene_node, meshes);
                   })
                 | std::ranges::to<std::vector>()} {}
@@ -962,7 +968,7 @@ Scene::Node::Node(const cgltf_node& gltf_node, std::unordered_map<const cgltf_me
     : meshes_{GetMeshes(gltf_node, meshes)},
       children_{std::span{gltf_node.children, gltf_node.children_count}
                 | std::views::transform([&meshes](const auto* const gltf_child_node) {
-                    assert(gltf_child_node != nullptr);  // valid glTF files should not contain null child nodes
+                    assert(gltf_child_node != nullptr);  // valid glTF nodes should not contain null child nodes
                     return std::make_unique<const Node>(*gltf_child_node, meshes);
                   })
                 | std::ranges::to<std::vector>()},
