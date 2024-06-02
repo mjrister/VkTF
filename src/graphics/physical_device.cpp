@@ -11,6 +11,7 @@ struct RankedPhysicalDevice {
   int rank = kInvalidRank;
 };
 
+// TODO(matthew-rister): implement a better ranking system based on physical device features, limits, and format support
 RankedPhysicalDevice GetMaxRankPhysicalDevice(const vk::Instance instance) {
   const auto ranked_physical_devices =
       instance.enumeratePhysicalDevices() | std::views::transform([](const auto physical_device) {

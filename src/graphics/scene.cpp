@@ -203,12 +203,30 @@ std::string_view GetName(const T& gltf_element) {
 
 template <glm::length_t N>
 std::vector<glm::vec<N, float>> UnpackFloats(const cgltf_accessor& gltf_floats_accessor) {
-  if (const auto components = cgltf_num_components(gltf_floats_accessor.type); components != N) {
-    throw std::runtime_error{std::format("Failed to unpack floats for {}", GetName(gltf_floats_accessor))};
+  if (const auto components_count = cgltf_num_components(gltf_floats_accessor.type); components_count != N) {
+    throw std::runtime_error{std::format(
+        "The number of expected components {} does not match the number of actual components {} for accessor {}",
+        N,
+        components_count,
+        GetName(gltf_floats_accessor))};
   }
-  std::vector<glm::vec<N, float>> data(gltf_floats_accessor.count);
-  cgltf_accessor_unpack_floats(&gltf_floats_accessor, glm::value_ptr(data.front()), N * gltf_floats_accessor.count);
-  return data;
+  std::vector<glm::vec<N, float>> floats(gltf_floats_accessor.count);
+  if (const auto float_count = N * gltf_floats_accessor.count;
+      cgltf_accessor_unpack_floats(&gltf_floats_accessor, glm::value_ptr(floats.front()), float_count) == 0) {
+    throw std::runtime_error{std::format("Failed to unpack floats for accessor {}", GetName(gltf_floats_accessor))};
+  }
+  return floats;
+}
+
+template <typename T>
+  requires std::same_as<T, std::uint16_t> || std::same_as<T, std::uint32_t>
+std::vector<T> UnpackIndices(const cgltf_accessor& gltf_indices_accessor) {
+  std::vector<T> indices(gltf_indices_accessor.count);
+  if (const auto index_size_bytes = sizeof(T);
+      cgltf_accessor_unpack_indices(&gltf_indices_accessor, indices.data(), index_size_bytes, indices.size()) == 0) {
+    throw std::runtime_error{std::format("Failed to unpack indices for accessor {}", GetName(gltf_indices_accessor))};
+  }
+  return indices;
 }
 
 std::vector<Vertex> GetVertices(const cgltf_primitive& gltf_primitive) {
@@ -273,25 +291,6 @@ std::vector<Vertex> GetVertices(const cgltf_primitive& gltf_primitive) {
 }
 
 template <typename T>
-  requires std::same_as<T, std::uint16_t> || std::same_as<T, std::uint32_t>
-std::vector<T> GetIndices(const cgltf_accessor& gltf_indices_accessor) {
-  std::vector<T> indices(gltf_indices_accessor.count);
-  if (cgltf_accessor_unpack_indices(&gltf_indices_accessor, indices.data(), sizeof(T), indices.size()) == 0) {
-    throw std::runtime_error{std::format("Failed to unpack indices for {}", GetName(gltf_indices_accessor))};
-  }
-  return indices;
-}
-
-glm::mat4 GetTransform(const cgltf_node& gltf_node) {
-  glm::mat4 transform{1.0f};
-  if (gltf_node.has_matrix != 0 || gltf_node.has_translation != 0 || gltf_node.has_rotation != 0
-      || gltf_node.has_scale != 0) {
-    cgltf_node_transform_local(&gltf_node, glm::value_ptr(transform));
-  }
-  return transform;
-}
-
-template <typename T>
 gfx::Buffer CreateBuffer(const std::vector<T>& buffer_data,
                          const vk::BufferUsageFlags buffer_usage_flags,
                          const vk::CommandBuffer command_buffer,
@@ -318,68 +317,86 @@ gfx::Buffer CreateBuffer(const std::vector<T>& buffer_data,
   return buffer;
 }
 
-std::vector<gfx::Mesh> CreateSubmeshes(
-    const cgltf_mesh& gltf_mesh,
-    const vk::CommandBuffer command_buffer,
-    const VmaAllocator allocator,
-    const std::unordered_map<const cgltf_material*, vk::DescriptorSet>& descriptor_sets_by_gltf_material,
-    std::vector<gfx::Buffer>& staging_buffers) {
-  return std::span{gltf_mesh.primitives, gltf_mesh.primitives_count}
-         | std::views::filter([&descriptor_sets_by_gltf_material](const auto& gltf_primitive) {
-             if (gltf_primitive.type != cgltf_primitive_type_triangles) {
-               std::println(std::cerr, "Unsupported primitive type {}", gltf_primitive.type);
-               return false;
-             }
-             return descriptor_sets_by_gltf_material.contains(gltf_primitive.material);  // exclude unsupported material
-           })
-         | std::views::transform([command_buffer, allocator, &staging_buffers, &descriptor_sets_by_gltf_material](
-                                     const auto& gltf_primitive) {
-             const auto vertices = GetVertices(gltf_primitive);
-             switch (const auto indices_gltf_accessor = gltf_primitive.indices;
-                     const auto component_size = indices_gltf_accessor == nullptr || indices_gltf_accessor->count == 0
-                                                     ? 0
-                                                     : cgltf_component_size(indices_gltf_accessor->component_type)) {
-               using enum vk::BufferUsageFlagBits;
-               case 0: {
-                 // TODO(matthew-rister): add support for non-indexed triangle meshes
-                 throw std::runtime_error{"Primitive must represent a valid indexed triangle mesh"};
-               }
-               case 2: {
-                 const auto indices = GetIndices<std::uint16_t>(*indices_gltf_accessor);
-                 return gfx::Mesh{CreateBuffer(vertices, eVertexBuffer, command_buffer, allocator, staging_buffers),
-                                  CreateBuffer(indices, eIndexBuffer, command_buffer, allocator, staging_buffers),
-                                  static_cast<std::uint32_t>(indices.size()),
-                                  vk::IndexType::eUint16,
-                                  descriptor_sets_by_gltf_material.find(gltf_primitive.material)->second};
-               }
-               case 4: {
-                 const auto indices = GetIndices<std::uint32_t>(*indices_gltf_accessor);
-                 return gfx::Mesh{CreateBuffer(vertices, eVertexBuffer, command_buffer, allocator, staging_buffers),
-                                  CreateBuffer(indices, eIndexBuffer, command_buffer, allocator, staging_buffers),
-                                  static_cast<std::uint32_t>(indices.size()),
-                                  vk::IndexType::eUint32,
-                                  descriptor_sets_by_gltf_material.find(gltf_primitive.material)->second};
-               }
-               default: {
-                 static constexpr auto kBitsPerByte = 8;
-                 throw std::runtime_error{std::format("Unsupported {}-bit index type", component_size * kBitsPerByte)};
-               }
-             }
-           })
-         | std::ranges::to<std::vector>();
+gfx::IndexBuffer CreateIndexBuffer(const cgltf_accessor& gltf_indices_accessor,
+                                   const vk::CommandBuffer command_buffer,
+                                   const VmaAllocator allocator,
+                                   std::vector<gfx::Buffer>& staging_buffers) {
+  switch (const auto component_size = cgltf_component_size(gltf_indices_accessor.component_type)) {
+    using enum vk::BufferUsageFlagBits;
+    case 2: {
+      const auto indices = UnpackIndices<std::uint16_t>(gltf_indices_accessor);
+      return gfx::IndexBuffer{
+          .index_count = static_cast<std::uint32_t>(indices.size()),
+          .index_type = vk::IndexType::eUint16,
+          .buffer = CreateBuffer(indices, eIndexBuffer, command_buffer, allocator, staging_buffers)};
+    }
+    case 4: {
+      const auto indices = UnpackIndices<std::uint32_t>(gltf_indices_accessor);
+      return gfx::IndexBuffer{
+          .index_count = static_cast<std::uint32_t>(indices.size()),
+          .index_type = vk::IndexType::eUint32,
+          .buffer = CreateBuffer(indices, eIndexBuffer, command_buffer, allocator, staging_buffers)};
+    }
+    default: {
+      static constexpr auto kBitsPerByte = 8;
+      throw std::runtime_error{std::format("Unsupported {}-bit index type", component_size * kBitsPerByte)};
+    }
+  }
 }
 
-std::vector<gfx::Mesh> GetSubmeshes(
-    const cgltf_mesh* const gltf_mesh,
-    std::unordered_map<const cgltf_mesh*, std::vector<gfx::Mesh>>& submeshes_by_gltf_mesh) {
-  if (gltf_mesh == nullptr) return {};
-  const auto iterator = submeshes_by_gltf_mesh.find(gltf_mesh);
-  assert(iterator != submeshes_by_gltf_mesh.cend());
+std::vector<gfx::Mesh> CreateMeshes(const cgltf_mesh& gltf_mesh,
+                                    const vk::CommandBuffer command_buffer,
+                                    const VmaAllocator allocator,
+                                    const std::unordered_map<const cgltf_material*, vk::DescriptorSet>& descriptor_sets,
+                                    std::vector<gfx::Buffer>& staging_buffers) {
+  std::vector<gfx::Mesh> meshes;
+  meshes.reserve(gltf_mesh.primitives_count);
+
+  for (const auto& gltf_primitive : std::span{gltf_mesh.primitives, gltf_mesh.primitives_count}) {
+    if (gltf_primitive.type != cgltf_primitive_type_triangles) {
+      // TODO(matthew-rister): add support for other primitive types
+      std::println(std::cerr, "Unsupported primitive {}", GetName(gltf_mesh), gltf_primitive.type);
+      continue;
+    }
+
+    const auto* gltf_indices_accessor = gltf_primitive.indices;
+    if (gltf_indices_accessor == nullptr || gltf_indices_accessor->count == 0) {
+      // TODO(matthew-rister): add support for non-indexed triangle meshes
+      throw std::runtime_error{"Primitive must represent a valid indexed triangle mesh"};
+    }
+
+    const auto iterator = descriptor_sets.find(gltf_primitive.material);
+    if (iterator == descriptor_sets.cend()) continue;  // exclude primitive with unsupported material
+
+    const auto vertices = GetVertices(gltf_primitive);
+    meshes.emplace_back(
+        CreateBuffer(vertices, vk::BufferUsageFlagBits::eVertexBuffer, command_buffer, allocator, staging_buffers),
+        CreateIndexBuffer(*gltf_indices_accessor, command_buffer, allocator, staging_buffers),
+        iterator->second);
+  }
+
+  return meshes;
+}
+
+std::vector<gfx::Mesh> GetMeshes(const cgltf_node& gltf_node,
+                                 std::unordered_map<const cgltf_mesh*, std::vector<gfx::Mesh>>& meshes) {
+  if (gltf_node.mesh == nullptr) return {};
+  const auto iterator = meshes.find(gltf_node.mesh);
+  assert(iterator != meshes.cend());  // all glTF meshes should have been processed by here
   return std::move(iterator->second);
 }
 
+glm::mat4 GetTransform(const cgltf_node& gltf_node) {
+  glm::mat4 transform{1.0f};
+  if (gltf_node.has_matrix != 0 || gltf_node.has_translation != 0 || gltf_node.has_rotation != 0
+      || gltf_node.has_scale != 0) {
+    cgltf_node_transform_local(&gltf_node, glm::value_ptr(transform));
+  }
+  return transform;
+}
+
 std::unordered_set<vk::Format> GetSupportedTranscodeFormats(const vk::PhysicalDevice& physical_device) {
-  static constexpr std::array kTranscodeFormats{
+  static constexpr std::array kTargetTranscodeFormats{
       // clang-format off
     kBc1TranscodeFormat.srgb_format, kBc1TranscodeFormat.unorm_format,
     kBc3TranscodeFormat.srgb_format, kBc3TranscodeFormat.unorm_format,
@@ -390,34 +407,34 @@ std::unordered_set<vk::Format> GetSupportedTranscodeFormats(const vk::PhysicalDe
     kRgba32TranscodeFormat.srgb_format, kRgba32TranscodeFormat.unorm_format
       // clang-format on
   };
-  return kTranscodeFormats  //
+  return kTargetTranscodeFormats  //
          | std::views::filter([physical_device](const auto transcode_format) {
-             using enum vk::FormatFeatureFlagBits;
              const auto format_properties = physical_device.getFormatProperties(transcode_format);
-             return static_cast<bool>(format_properties.optimalTilingFeatures & eSampledImage);
+             return static_cast<bool>(format_properties.optimalTilingFeatures
+                                      & vk::FormatFeatureFlagBits::eSampledImage);
            })
          | std::ranges::to<std::unordered_set>();
 }
 
 ktx_transcode_fmt_e GetKtxTranscodeFormatForColorModel(
-    const std::span<const TranscodeFormat> target_transcode_formats,
+    const std::span<const TranscodeFormat> color_model_transcode_formats,
     const bool has_unorm_format,
     const std::unordered_set<vk::Format>& supported_transcode_formats) {
-  for (const auto [srgb_format, unorm_format, ktx_transcode_format] : target_transcode_formats) {
-    if (const auto target_transcode_format = has_unorm_format ? unorm_format : srgb_format;
-        supported_transcode_formats.contains(target_transcode_format)) {
+  for (const auto [srgb_format, unorm_format, ktx_transcode_format] : color_model_transcode_formats) {
+    if (const auto color_model_transcode_format = has_unorm_format ? unorm_format : srgb_format;
+        supported_transcode_formats.contains(color_model_transcode_format)) {
       return ktx_transcode_format;
     }
   }
-  const auto [rgba32_srgb_format, rgba32_unorm_format, rgba32_ktx_transcode_format] = kRgba32TranscodeFormat;
-  if (const auto rgba32_transcode_format = has_unorm_format ? rgba32_unorm_format : rgba32_srgb_format;
+  const auto [srgb_format, unorm_format, ktx_transcode_format] = kRgba32TranscodeFormat;
+  if (const auto rgba32_transcode_format = has_unorm_format ? unorm_format : srgb_format;
       supported_transcode_formats.contains(rgba32_transcode_format)) {
 #ifndef NDEBUG
     std::println(std::clog,
                  "No supported texture compression format could be found. Decompressing to {}",
-                 ktxTranscodeFormatString(rgba32_ktx_transcode_format));
+                 ktxTranscodeFormatString(ktx_transcode_format));
 #endif
-    return rgba32_ktx_transcode_format;
+    return ktx_transcode_format;
   }
   throw std::runtime_error{"No supported KTX transcode formats could be found"};
 }
@@ -806,8 +823,8 @@ namespace gfx {
 
 class Scene::Node {
 public:
-  Node(const cgltf_scene& gltf_scene, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& submeshes_by_gltf_mesh);
-  Node(const cgltf_node& gltf_node, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& submeshes_by_gltf_mesh);
+  Node(const cgltf_scene& gltf_scene, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes);
+  Node(const cgltf_node& gltf_node, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes);
 
   void Render(const glm::mat4& model_transform,
               const glm::mat4& view_transform,
@@ -876,6 +893,7 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
   for (auto& material_future : material_futures) {
     const auto [gltf_material, ktx_base_color_texture] = material_future.get();
     if (ktx_base_color_texture == nullptr) {
+      // TODO(matthew-rister): add support for other material types
       std::println(std::cerr, "Unsupported material {}", GetName(*gltf_material));
       continue;
     }
@@ -888,7 +906,7 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
                                           samplers_));
   }
 
-  const auto descriptor_sets_by_gltf_material =
+  const auto descriptor_sets =
       std::views::zip_transform(
           [device](const auto& material, auto& descriptor_set) {
             const auto& [gltf_material, base_color_image, base_color_sampler] = material;
@@ -899,13 +917,11 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
           AllocateDescriptorSets(device, *descriptor_pool_, *descriptor_set_layout_, material_count))
       | std::ranges::to<std::unordered_map>();
 
-  auto submeshes_by_gltf_mesh =
+  auto meshes =
       std::span{gltf_data->meshes, gltf_data->meshes_count}
-      | std::views::transform([command_buffer, allocator, &staging_buffers, &descriptor_sets_by_gltf_material](
-                                  const auto& gltf_mesh) {
-          return std::pair{
-              &gltf_mesh,
-              CreateSubmeshes(gltf_mesh, command_buffer, allocator, descriptor_sets_by_gltf_material, staging_buffers)};
+      | std::views::transform([command_buffer, allocator, &staging_buffers, &descriptor_sets](const auto& gltf_mesh) {
+          return std::pair{&gltf_mesh,
+                           CreateMeshes(gltf_mesh, command_buffer, allocator, descriptor_sets, staging_buffers)};
         })
       | std::ranges::to<std::unordered_map>();
 
@@ -915,7 +931,7 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
   queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &command_buffer}, *fence);
 
   const auto gltf_default_scene = GetDefaultScene(*gltf_data, gltf_filepath);
-  root_node_ = std::make_unique<const Node>(gltf_default_scene, submeshes_by_gltf_mesh);
+  root_node_ = std::make_unique<const Node>(gltf_default_scene, meshes);
 
   static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
   const auto result = device.waitForFences(*fence, vk::True, kMaxTimeout);
@@ -934,22 +950,20 @@ void Scene::Render(const Camera& camera, const vk::CommandBuffer command_buffer)
                      command_buffer);
 }
 
-Scene::Node::Node(const cgltf_scene& gltf_scene,
-                  std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& submeshes_by_gltf_mesh)
+Scene::Node::Node(const cgltf_scene& gltf_scene, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes)
     : children_{std::span{gltf_scene.nodes, gltf_scene.nodes_count}
-                | std::views::transform([&submeshes_by_gltf_mesh](const auto* const gltf_scene_node) {
+                | std::views::transform([&meshes](const auto* const gltf_scene_node) {
                     assert(gltf_scene_node != nullptr);  // valid glTF files should not contain null scene nodes
-                    return std::make_unique<const Node>(*gltf_scene_node, submeshes_by_gltf_mesh);
+                    return std::make_unique<const Node>(*gltf_scene_node, meshes);
                   })
                 | std::ranges::to<std::vector>()} {}
 
-Scene::Node::Node(const cgltf_node& gltf_node,
-                  std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& submeshes_by_gltf_mesh)
-    : meshes_{GetSubmeshes(gltf_node.mesh, submeshes_by_gltf_mesh)},
+Scene::Node::Node(const cgltf_node& gltf_node, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes)
+    : meshes_{GetMeshes(gltf_node, meshes)},
       children_{std::span{gltf_node.children, gltf_node.children_count}
-                | std::views::transform([&submeshes_by_gltf_mesh](const auto* const gltf_child_node) {
+                | std::views::transform([&meshes](const auto* const gltf_child_node) {
                     assert(gltf_child_node != nullptr);  // valid glTF files should not contain null child nodes
-                    return std::make_unique<const Node>(*gltf_child_node, submeshes_by_gltf_mesh);
+                    return std::make_unique<const Node>(*gltf_child_node, meshes);
                   })
                 | std::ranges::to<std::vector>()},
       transform_{GetTransform(gltf_node)} {}
