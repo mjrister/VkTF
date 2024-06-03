@@ -1,9 +1,11 @@
 ---
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v4.6.0
     hooks:
       - id: check-json
+        types: [file]
+        files: \.(json|gltf)$
       - id: check-yaml
       - id: end-of-file-fixer
       - id: fix-byte-order-marker
