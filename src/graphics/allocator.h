@@ -1,5 +1,5 @@
-#ifndef SRC_GRAPHICS_INCLUDE_GRAPHICS_ALLOCATOR_H_
-#define SRC_GRAPHICS_INCLUDE_GRAPHICS_ALLOCATOR_H_
+#ifndef GRAPHICS_ALLOCATOR_H_
+#define GRAPHICS_ALLOCATOR_H_
 
 #include <utility>
 
@@ -28,4 +28,4 @@ private:
 
 }  // namespace gfx
 
-#endif  // SRC_GRAPHICS_INCLUDE_GRAPHICS_ALLOCATOR_H_
+#endif  // GRAPHICS_ALLOCATOR_H_

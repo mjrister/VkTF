@@ -1,9 +1,9 @@
-#ifndef SRC_GAME_INCLUDE_GAME_GAME_H_
-#define SRC_GAME_INCLUDE_GAME_GAME_H_
+#ifndef GAME_GAME_H_
+#define GAME_GAME_H_
 
 #include "graphics/camera.h"
 #include "graphics/engine.h"
-#include "graphics/scene.h"
+#include "graphics/model.h"
 #include "graphics/window.h"
 
 namespace gfx {
@@ -18,9 +18,9 @@ private:
   Window window_;
   Engine engine_;
   Camera camera_;
-  Scene scene_;
+  Model model_;
 };
 
 }  // namespace gfx
 
-#endif  // SRC_GAME_INCLUDE_GAME_GAME_H_
+#endif  // GAME_GAME_H_

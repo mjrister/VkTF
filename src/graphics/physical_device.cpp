@@ -4,6 +4,8 @@
 #include <ranges>
 #include <stdexcept>
 
+namespace {
+
 struct RankedPhysicalDevice {
   static constexpr auto kInvalidRank = -1;
   vk::PhysicalDevice physical_device;
@@ -11,7 +13,7 @@ struct RankedPhysicalDevice {
   int rank = kInvalidRank;
 };
 
-// TODO(matthew-rister): implement a better ranking system based on physical device features, limits, and format support
+// TODO(matthew-rister): implement a better ranking system based on required device features, limits, and format support
 RankedPhysicalDevice GetMaxRankPhysicalDevice(const vk::Instance instance) {
   const auto ranked_physical_devices =
       instance.enumeratePhysicalDevices() | std::views::transform([](const auto physical_device) {
@@ -27,7 +29,11 @@ RankedPhysicalDevice GetMaxRankPhysicalDevice(const vk::Instance instance) {
              : *std::ranges::max_element(ranked_physical_devices, {}, &RankedPhysicalDevice::rank);
 }
 
-gfx::PhysicalDevice::PhysicalDevice(const vk::Instance instance) {
+}  // namespace
+
+namespace gfx {
+
+PhysicalDevice::PhysicalDevice(const vk::Instance instance) {
   const auto& [physical_device, physical_device_limits, _] = GetMaxRankPhysicalDevice(instance);
   // NOLINTBEGIN(cppcoreguidelines-prefer-member-initializer)
   physical_device_ = physical_device;
@@ -35,3 +41,5 @@ gfx::PhysicalDevice::PhysicalDevice(const vk::Instance instance) {
   physical_device_features_ = physical_device.getFeatures();
   // NOLINTEND(cppcoreguidelines-prefer-member-initializer)
 }
+
+}  // namespace gfx

@@ -1,5 +1,5 @@
-#ifndef SRC_GAME_INCLUDE_GAME_DELTA_TIME_H_
-#define SRC_GAME_INCLUDE_GAME_DELTA_TIME_H_
+#ifndef GRAPHICS_DELTA_TIME_H_
+#define GRAPHICS_DELTA_TIME_H_
 
 #include <chrono>
 
@@ -27,4 +27,4 @@ private:
 
 }  // namespace gfx
 
-#endif  // SRC_GAME_INCLUDE_GAME_DELTA_TIME_H_
+#endif  // GRAPHICS_DELTA_TIME_H_

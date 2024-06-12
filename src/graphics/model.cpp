@@ -1,5 +1,6 @@
-#include "graphics/scene.h"
+#include "graphics/model.h"
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <concepts>
@@ -13,6 +14,7 @@
 #include <ranges>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <unordered_set>
 #include <utility>
@@ -87,6 +89,11 @@ private:
 
 namespace {
 
+struct PushConstants {
+  glm::mat4 model_view_transform{1.0f};
+  glm::mat4 projection_transform{1.0f};
+};
+
 struct Vertex {
   glm::vec3 position{0.0f};
   glm::vec3 normal{0.0f};
@@ -94,9 +101,10 @@ struct Vertex {
   glm::vec2 texture_coordinates0{0.0f};
 };
 
-struct PushConstants {
-  glm::mat4 model_view_transform{1.0f};
-  glm::mat4 projection_transform{1.0f};
+template <typename T, glm::length_t N>
+struct VertexAttribute {
+  std::string_view name;
+  std::optional<std::vector<glm::vec<N, T>>> maybe_data;
 };
 
 struct TranscodeFormat {
@@ -133,7 +141,7 @@ constexpr TranscodeFormat kRgba32TranscodeFormat{.srgb_format = vk::Format::eR8G
                                                  .unorm_format = vk::Format::eR8G8B8A8Unorm,
                                                  .ktx_transcode_format = KTX_TTF_RGBA32};
 
-UniqueGltfData ParseFile(const std::filesystem::path& gltf_filepath) {
+UniqueGltfData ReadFile(const std::filesystem::path& gltf_filepath) {
   static constexpr cgltf_options kGltfOptions{};
   UniqueGltfData gltf_data{nullptr, nullptr};
   const auto gltf_filepath_string = gltf_filepath.string();
@@ -158,8 +166,8 @@ UniqueGltfData ParseFile(const std::filesystem::path& gltf_filepath) {
 }
 
 const cgltf_scene& GetDefaultScene(const cgltf_data& gltf_data, const std::filesystem::path& gltf_filepath) {
-  if (const auto* const gltf_default_scene = gltf_data.scene; gltf_default_scene != nullptr) {
-    return *gltf_default_scene;
+  if (const auto* const gltf_scene = gltf_data.scene; gltf_scene != nullptr) {
+    return *gltf_scene;
   }
   if (const std::span gltf_scenes{gltf_data.scenes, gltf_data.scenes_count}; !gltf_scenes.empty()) {
     return gltf_scenes.front();
@@ -177,65 +185,60 @@ std::string_view GetName(const T& gltf_element) {
 }
 
 template <glm::length_t N>
-std::vector<glm::vec<N, float>> UnpackFloats(const cgltf_accessor& gltf_floats_accessor) {
-  if (const auto components_count = cgltf_num_components(gltf_floats_accessor.type); components_count != N) {
+std::vector<glm::vec<N, float>> UnpackFloats(const cgltf_accessor& gltf_accessor) {
+  if (const auto components_count = cgltf_num_components(gltf_accessor.type); components_count != N) {
     throw std::runtime_error{std::format(
         "The number of expected components {} does not match the number of actual components {} for accessor {}",
         N,
         components_count,
-        GetName(gltf_floats_accessor))};
+        GetName(gltf_accessor))};
   }
-  std::vector<glm::vec<N, float>> floats(gltf_floats_accessor.count);
-  if (const auto float_count = N * gltf_floats_accessor.count;
-      cgltf_accessor_unpack_floats(&gltf_floats_accessor, glm::value_ptr(floats.front()), float_count) == 0) {
-    throw std::runtime_error{std::format("Failed to unpack floats for accessor {}", GetName(gltf_floats_accessor))};
+  std::vector<glm::vec<N, float>> floats(gltf_accessor.count);
+  if (const auto float_count = N * gltf_accessor.count;
+      cgltf_accessor_unpack_floats(&gltf_accessor, glm::value_ptr(floats.front()), float_count) == 0) {
+    throw std::runtime_error{std::format("Failed to unpack floats for accessor {}", GetName(gltf_accessor))};
   }
   return floats;
 }
 
 template <typename T>
   requires std::same_as<T, std::uint16_t> || std::same_as<T, std::uint32_t>
-std::vector<T> UnpackIndices(const cgltf_accessor& gltf_indices_accessor) {
-  std::vector<T> indices(gltf_indices_accessor.count);
+std::vector<T> UnpackIndices(const cgltf_accessor& gltf_accessor) {
+  std::vector<T> indices(gltf_accessor.count);
   if (const auto index_size_bytes = sizeof(T);
-      cgltf_accessor_unpack_indices(&gltf_indices_accessor, indices.data(), index_size_bytes, indices.size()) == 0) {
-    throw std::runtime_error{std::format("Failed to unpack indices for accessor {}", GetName(gltf_indices_accessor))};
+      cgltf_accessor_unpack_indices(&gltf_accessor, indices.data(), index_size_bytes, indices.size()) == 0) {
+    throw std::runtime_error{std::format("Failed to unpack indices for accessor {}", GetName(gltf_accessor))};
   }
   return indices;
 }
 
 std::vector<Vertex> GetVertices(const cgltf_primitive& gltf_primitive) {
-  static constexpr std::string_view kPositionAttributeName = "POSITION";
-  static constexpr std::string_view kNormalAttributeName = "NORMAL";
-  static constexpr std::string_view kTangentAttributeName = "TANGENT";
-  static constexpr std::string_view kTextureCoordinates0AttributeName = "TEXCOORD_0";
-  std::optional<std::vector<glm::vec3>> maybe_positions;
-  std::optional<std::vector<glm::vec3>> maybe_normals;
-  std::optional<std::vector<glm::vec4>> maybe_tangents;
-  std::optional<std::vector<glm::vec2>> maybe_texture_coordinates0;
+  VertexAttribute<float, 3> positions_attribute{.name = "POSITION"};
+  VertexAttribute<float, 3> normals_attribute{.name = "NORMAL"};
+  VertexAttribute<float, 4> tangents_attribute{.name = "TANGENT"};
+  VertexAttribute<float, 2> texture_coordinates0_attribute{.name = "TEXCOORD_0"};
 
-  static constexpr auto kUnpackAttributeData =
-      []<glm::length_t N>(const auto* const gltf_accessor,
-                          std::optional<std::vector<glm::vec<N, float>>>& maybe_attribute_data) {
-        assert(gltf_accessor != nullptr);           // valid glTF primitives should not have null attribute data
-        assert(!maybe_attribute_data.has_value());  // valid glTF primitives should not have duplicate attributes
-        maybe_attribute_data = UnpackFloats<N>(*gltf_accessor);
-      };  // NOLINT(readability/braces)
+  static constexpr auto kUnpackAttributeData = []<glm::length_t N>(const auto* const gltf_accessor,
+                                                                   VertexAttribute<float, N>& vertex_attribute) {
+    assert(gltf_accessor != nullptr);                  // valid glTF primitives should not have null attribute data
+    assert(!vertex_attribute.maybe_data.has_value());  // valid glTF primitives should not have duplicate attributes
+    vertex_attribute.maybe_data = UnpackFloats<N>(*gltf_accessor);
+  };
 
   for (const auto& gltf_attribute : std::span{gltf_primitive.attributes, gltf_primitive.attributes_count}) {
     switch (const auto* const gltf_accessor = gltf_attribute.data; gltf_attribute.type) {
       case cgltf_attribute_type_position:
-        kUnpackAttributeData(gltf_accessor, maybe_positions);
+        kUnpackAttributeData(gltf_accessor, positions_attribute);
         break;
       case cgltf_attribute_type_normal:
-        kUnpackAttributeData(gltf_accessor, maybe_normals);
+        kUnpackAttributeData(gltf_accessor, normals_attribute);
         break;
       case cgltf_attribute_type_tangent:
-        kUnpackAttributeData(gltf_accessor, maybe_tangents);
+        kUnpackAttributeData(gltf_accessor, tangents_attribute);
         break;
       case cgltf_attribute_type_texcoord:
-        if (GetName(gltf_attribute) == kTextureCoordinates0AttributeName) {
-          kUnpackAttributeData(gltf_accessor, maybe_texture_coordinates0);
+        if (texture_coordinates0_attribute.name == GetName(gltf_attribute)) {
+          kUnpackAttributeData(gltf_accessor, texture_coordinates0_attribute);
           break;
         }
         [[fallthrough]];
@@ -245,12 +248,16 @@ std::vector<Vertex> GetVertices(const cgltf_primitive& gltf_primitive) {
     }
   }
 
-  // unfortunately need to iterate this way because vertex attribute data types are not homogeneous
+  const auto& [positions_attribute_name, maybe_positions] = positions_attribute;
+  const auto& [normals_attribute_name, maybe_normals] = normals_attribute;
+  const auto& [tangents_attribute_name, maybe_tangents] = tangents_attribute;
+  const auto& [texture_coordinates0_attribute_name, maybe_texture_coordinates0] = texture_coordinates0_attribute;
+
   for (const auto [attribute_name, has_attribute_data] :
-       std::array{std::pair{kPositionAttributeName, maybe_positions.has_value()},
-                  std::pair{kNormalAttributeName, maybe_normals.has_value()},
-                  std::pair{kTangentAttributeName, maybe_tangents.has_value()},
-                  std::pair{kTextureCoordinates0AttributeName, maybe_texture_coordinates0.has_value()}}) {
+       std::array{std::pair{positions_attribute_name, maybe_positions.has_value()},
+                  std::pair{normals_attribute_name, maybe_normals.has_value()},
+                  std::pair{tangents_attribute_name, maybe_tangents.has_value()},
+                  std::pair{texture_coordinates0_attribute_name, maybe_texture_coordinates0.has_value()}}) {
     if (!has_attribute_data) {
       throw std::runtime_error{std::format("Missing required vertex attribute {}", attribute_name)};
     }
@@ -259,13 +266,13 @@ std::vector<Vertex> GetVertices(const cgltf_primitive& gltf_primitive) {
   // primitives are expected to represent an indexed triangle mesh with a matching number of vertex attributes
   for (const auto positions_count = maybe_positions->size();
        const auto [attribute_name, attribute_count] :
-       std::array{std::pair{kNormalAttributeName, maybe_normals->size()},
-                  std::pair{kTangentAttributeName, maybe_tangents->size()},
-                  std::pair{kTextureCoordinates0AttributeName, maybe_texture_coordinates0->size()}}) {
+       std::array{std::pair{normals_attribute_name, maybe_normals->size()},
+                  std::pair{tangents_attribute_name, maybe_tangents->size()},
+                  std::pair{texture_coordinates0_attribute_name, maybe_texture_coordinates0->size()}}) {
     if (attribute_count != positions_count) {
       throw std::runtime_error{
           std::format("The number of {} attributes {} does not match the number of {} attributes {}",
-                      kPositionAttributeName,
+                      positions_attribute_name,
                       positions_count,
                       attribute_name,
                       attribute_count)};
@@ -319,21 +326,21 @@ gfx::Buffer CreateBuffer(const std::vector<T>& buffer_data,
   return buffer;
 }
 
-gfx::IndexBuffer CreateIndexBuffer(const cgltf_accessor& gltf_indices_accessor,
+gfx::IndexBuffer CreateIndexBuffer(const cgltf_accessor& gltf_accessor,
                                    const vk::CommandBuffer command_buffer,
                                    const VmaAllocator allocator,
                                    std::vector<gfx::Buffer>& staging_buffers) {
-  switch (const auto component_size = cgltf_component_size(gltf_indices_accessor.component_type)) {
+  switch (const auto component_size = cgltf_component_size(gltf_accessor.component_type)) {
     using enum vk::BufferUsageFlagBits;
     case 2: {
-      const auto indices = UnpackIndices<std::uint16_t>(gltf_indices_accessor);
+      const auto indices = UnpackIndices<std::uint16_t>(gltf_accessor);
       return gfx::IndexBuffer{
           .index_count = static_cast<std::uint32_t>(indices.size()),
           .index_type = vk::IndexType::eUint16,
           .buffer = CreateBuffer(indices, eIndexBuffer, command_buffer, allocator, staging_buffers)};
     }
     case 4: {
-      const auto indices = UnpackIndices<std::uint32_t>(gltf_indices_accessor);
+      const auto indices = UnpackIndices<std::uint32_t>(gltf_accessor);
       return gfx::IndexBuffer{
           .index_count = static_cast<std::uint32_t>(indices.size()),
           .index_type = vk::IndexType::eUint32,
@@ -356,24 +363,20 @@ std::vector<gfx::Mesh> CreateMeshes(const cgltf_mesh& gltf_mesh,
 
   for (const auto& gltf_primitive : std::span{gltf_mesh.primitives, gltf_mesh.primitives_count}) {
     if (gltf_primitive.type != cgltf_primitive_type_triangles) {
-      // TODO(matthew-rister): add support for other primitive types
       std::println(std::cerr, "Unsupported primitive {}", GetName(gltf_mesh), gltf_primitive.type);
-      continue;
+      continue;  // TODO(matthew-rister): add support for other primitive types
     }
-
-    const auto* const gltf_indices_accessor = gltf_primitive.indices;
-    if (gltf_indices_accessor == nullptr || gltf_indices_accessor->count == 0) {
+    if (gltf_primitive.indices == nullptr || gltf_primitive.indices->count == 0) {
       // TODO(matthew-rister): add support for non-indexed triangle meshes
       throw std::runtime_error{"Primitive must represent a valid indexed triangle mesh"};
     }
-
     const auto iterator = descriptor_sets.find(gltf_primitive.material);
     if (iterator == descriptor_sets.cend()) continue;  // exclude primitive with unsupported material
 
     const auto vertices = GetVertices(gltf_primitive);
     meshes.emplace_back(
         CreateBuffer(vertices, vk::BufferUsageFlagBits::eVertexBuffer, command_buffer, allocator, staging_buffers),
-        CreateIndexBuffer(*gltf_indices_accessor, command_buffer, allocator, staging_buffers),
+        CreateIndexBuffer(*gltf_primitive.indices, command_buffer, allocator, staging_buffers),
         iterator->second);
   }
 
@@ -557,12 +560,12 @@ UniqueKtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::path& im
   return ktx_texture2;
 }
 
-UniqueKtxTexture2 CreateKtxTexture2(const cgltf_texture& texture,
+UniqueKtxTexture2 CreateKtxTexture2(const cgltf_texture& gltf_texture,
                                     const std::filesystem::path& gltf_parent_filepath,
                                     const bool has_unorm_format,
                                     const std::unordered_set<vk::Format>& supported_transcode_formats) {
-  const auto* const image = texture.has_basisu == 0 ? texture.image : texture.basisu_image;
-  if (image == nullptr) throw std::runtime_error{std::format("No image source for texture {}", GetName(texture))};
+  const auto* const image = gltf_texture.has_basisu == 0 ? gltf_texture.image : gltf_texture.basisu_image;
+  if (image == nullptr) throw std::runtime_error{std::format("No image source for texture {}", GetName(gltf_texture))};
 
   const auto texture_filepath = gltf_parent_filepath / image->uri;
   return texture_filepath.extension() == ".ktx2"
@@ -570,12 +573,12 @@ UniqueKtxTexture2 CreateKtxTexture2(const cgltf_texture& texture,
              : CreateKtxTexture2FromImageFile(texture_filepath, has_unorm_format);
 }
 
-UniqueKtxTexture2 CreateKtxBaseColorTexture(const cgltf_material& gltf_material,
+UniqueKtxTexture2 CreateBaseColorKtxTexture(const cgltf_material& gltf_material,
                                             const std::filesystem::path& gltf_parent_filepath,
                                             const std::unordered_set<vk::Format>& supported_transcode_formats) {
   if (gltf_material.has_pbr_metallic_roughness != 0) {
-    if (const auto* const gltf_base_color_texture = gltf_material.pbr_metallic_roughness.base_color_texture.texture) {
-      return CreateKtxTexture2(*gltf_base_color_texture, gltf_parent_filepath, false, supported_transcode_formats);
+    if (const auto* const base_color_gltf_texture = gltf_material.pbr_metallic_roughness.base_color_texture.texture) {
+      return CreateKtxTexture2(*base_color_gltf_texture, gltf_parent_filepath, false, supported_transcode_formats);
     }
   }
   return UniqueKtxTexture2{nullptr, nullptr};
@@ -827,7 +830,7 @@ vk::Sampler CreateSampler(const vk::Device device,
 
 namespace gfx {
 
-class Scene::Node {
+class Model::Node {
 public:
   Node(const cgltf_scene& gltf_scene, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes);
   Node(const cgltf_node& gltf_node, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes);
@@ -844,13 +847,13 @@ private:
   glm::mat4 transform_{1.0f};
 };
 
-struct Scene::Material {
+struct Model::Material {
   const cgltf_material* gltf_material = nullptr;
   Image base_color_image;
   vk::Sampler base_color_sampler;
 };
 
-Scene::Scene(const std::filesystem::path& gltf_filepath,
+Model::Model(const std::filesystem::path& gltf_filepath,
              const vk::PhysicalDeviceFeatures& physical_device_features,
              const vk::PhysicalDeviceLimits& physical_device_limits,
              const vk::PhysicalDevice physical_device,
@@ -861,7 +864,7 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
              const vk::SampleCountFlagBits msaa_sample_count,
              const vk::RenderPass render_pass,
              const VmaAllocator allocator) {
-  const auto gltf_data = ParseFile(gltf_filepath);
+  const auto gltf_data = ReadFile(gltf_filepath);
   const auto gltf_parent_filepath = gltf_filepath.parent_path();
 
   const auto supported_transcode_formats = GetSupportedTranscodeFormats(physical_device);
@@ -871,7 +874,7 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
           return std::async(std::launch::async, [&gltf_material, &gltf_parent_filepath, &supported_transcode_formats] {
             return std::pair{
                 &gltf_material,
-                CreateKtxBaseColorTexture(gltf_material, gltf_parent_filepath, supported_transcode_formats)};
+                CreateBaseColorKtxTexture(gltf_material, gltf_parent_filepath, supported_transcode_formats)};
           });
         })
       | std::ranges::to<std::vector>();
@@ -897,16 +900,15 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
 
   materials_.reserve(material_count);
   for (auto& material_future : material_futures) {
-    const auto [gltf_material, ktx_base_color_texture] = material_future.get();
-    if (ktx_base_color_texture == nullptr) {
-      // TODO(matthew-rister): add support for other material types
+    const auto [gltf_material, base_color_ktx_texture] = material_future.get();
+    if (base_color_ktx_texture == nullptr) {
       std::println(std::cerr, "Unsupported material {}", GetName(*gltf_material));
-      continue;
+      continue;  // TODO(matthew-rister): add support for other material types
     }
     materials_.emplace_back(gltf_material,
-                            CreateImage(device, command_buffer, allocator, *ktx_base_color_texture, staging_buffers),
+                            CreateImage(device, command_buffer, allocator, *base_color_ktx_texture, staging_buffers),
                             CreateSampler(device,
-                                          ktx_base_color_texture->numLevels,
+                                          base_color_ktx_texture->numLevels,
                                           physical_device_features,
                                           physical_device_limits,
                                           samplers_));
@@ -936,17 +938,17 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
   const auto fence = device.createFenceUnique(vk::FenceCreateInfo{});
   queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &command_buffer}, *fence);
 
-  const auto gltf_default_scene = GetDefaultScene(*gltf_data, gltf_filepath);
-  root_node_ = std::make_unique<const Node>(gltf_default_scene, meshes);
+  const auto gltf_scene = GetDefaultScene(*gltf_data, gltf_filepath);
+  root_node_ = std::make_unique<const Node>(gltf_scene, meshes);
 
   static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
   const auto result = device.waitForFences(*fence, vk::True, kMaxTimeout);
   vk::resultCheck(result, "Fence failed to enter a signaled state");
 }
 
-Scene::~Scene() noexcept = default;  // this is necessary to enable forward declaring Scene::Node with std::unique_ptr
+Model::~Model() noexcept = default;  // this is necessary to enable forward declaring Model::Node with std::unique_ptr
 
-void Scene::Render(const Camera& camera, const vk::CommandBuffer command_buffer) const {
+void Model::Render(const Camera& camera, const vk::CommandBuffer command_buffer) const {
   static constexpr glm::mat4 kModelTransform{1.0f};
   command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_);
   root_node_->Render(kModelTransform,
@@ -956,25 +958,25 @@ void Scene::Render(const Camera& camera, const vk::CommandBuffer command_buffer)
                      command_buffer);
 }
 
-Scene::Node::Node(const cgltf_scene& gltf_scene, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes)
+Model::Node::Node(const cgltf_scene& gltf_scene, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes)
     : children_{std::span{gltf_scene.nodes, gltf_scene.nodes_count}
-                | std::views::transform([&meshes](const auto* const gltf_scene_node) {
-                    assert(gltf_scene_node != nullptr);  // valid glTF scenes should not contain null scene nodes
-                    return std::make_unique<const Node>(*gltf_scene_node, meshes);
+                | std::views::transform([&meshes](const auto* const gltf_node) {
+                    assert(gltf_node != nullptr);  // valid glTF scenes should not contain null scene nodes
+                    return std::make_unique<const Node>(*gltf_node, meshes);
                   })
                 | std::ranges::to<std::vector>()} {}
 
-Scene::Node::Node(const cgltf_node& gltf_node, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes)
+Model::Node::Node(const cgltf_node& gltf_node, std::unordered_map<const cgltf_mesh*, std::vector<Mesh>>& meshes)
     : meshes_{GetMeshes(gltf_node, meshes)},
       children_{std::span{gltf_node.children, gltf_node.children_count}
-                | std::views::transform([&meshes](const auto* const gltf_child_node) {
-                    assert(gltf_child_node != nullptr);  // valid glTF nodes should not contain null child nodes
-                    return std::make_unique<const Node>(*gltf_child_node, meshes);
+                | std::views::transform([&meshes](const auto* const child_gltf_node) {
+                    assert(child_gltf_node != nullptr);  // valid glTF nodes should not contain null child nodes
+                    return std::make_unique<const Node>(*child_gltf_node, meshes);
                   })
                 | std::ranges::to<std::vector>()},
       transform_{GetTransform(gltf_node)} {}
 
-void Scene::Node::Render(const glm::mat4& model_transform,
+void Model::Node::Render(const glm::mat4& model_transform,
                          const glm::mat4& view_transform,
                          const glm::mat4& projection_transform,
                          const vk::PipelineLayout pipeline_layout,

@@ -1,5 +1,5 @@
-#ifndef SRC_GRAPHICS_INCLUDE_GRAPHICS_WINDOW_H_
-#define SRC_GRAPHICS_INCLUDE_GRAPHICS_WINDOW_H_
+#ifndef GRAPHICS_WINDOW_H_
+#define GRAPHICS_WINDOW_H_
 
 #include <memory>
 #include <utility>
@@ -32,7 +32,7 @@ public:
 
 #ifdef GLFW_INCLUDE_VULKAN
   [[nodiscard]] static std::span<const char* const> GetInstanceExtensions();
-  [[nodiscard]] vk::UniqueSurfaceKHR CreateSurface(const vk::Instance instance) const;
+  [[nodiscard]] vk::UniqueSurfaceKHR CreateSurface(vk::Instance instance) const;
 #endif
 
 private:
@@ -41,4 +41,4 @@ private:
 
 }  // namespace gfx
 
-#endif  // SRC_GRAPHICS_INCLUDE_GRAPHICS_WINDOW_H_
+#endif  // GRAPHICS_WINDOW_H_

@@ -5,7 +5,7 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 
-#include "game/delta_time.h"
+#include "graphics/delta_time.h"
 
 namespace {
 constexpr auto kWindowWidth4k = 3840;
@@ -64,7 +64,7 @@ Game::Game()
     : window_{"VkRender", kWindowWidth4k, kWindowHeight4k},
       engine_{window_},
       camera_{CreateCamera(window_.GetAspectRatio())},
-      scene_{engine_.LoadScene("assets/models/sponza/Main.1_Sponza/NewSponza_Main_glTF_002.gltf")} {}
+      model_{engine_.LoadModel("assets/models/sponza/Main.1_Sponza/NewSponza_Main_glTF_002.gltf")} {}
 
 void Game::Run() {
   for (DeltaTime delta_time; !window_.IsClosed();) {
@@ -72,7 +72,7 @@ void Game::Run() {
     Window::Update();
     HandleKeyEvents(window_, camera_, delta_time);
     HandleMouseEvents(window_, camera_);
-    engine_.Render(scene_, camera_);
+    engine_.Render(model_, camera_);
   }
   engine_.device().waitIdle();
 }

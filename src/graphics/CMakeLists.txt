@@ -6,8 +6,8 @@ add_library(graphics STATIC allocator.cpp
                             glslang_compiler.cpp
                             image.cpp
                             instance.cpp
+                            model.cpp
                             physical_device.cpp
-                            scene.cpp
                             shader_module.cpp
                             swapchain.cpp
                             window.cpp)
@@ -38,4 +38,4 @@ target_compile_definitions(graphics PUBLIC GLFW_INCLUDE_VULKAN
                                            VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
                                            VULKAN_HPP_NO_CONSTRUCTORS)
 
-target_include_directories(graphics PUBLIC ${CGLTF_INCLUDE_DIRS} include)
+target_include_directories(graphics PUBLIC ${CGLTF_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR}/src)

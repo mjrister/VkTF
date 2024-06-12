@@ -1,5 +1,5 @@
-#ifndef SRC_GRAPHICS_INCLUDE_GRAPHICS_ENGINE_H_
-#define SRC_GRAPHICS_INCLUDE_GRAPHICS_ENGINE_H_
+#ifndef GRAPHICS_ENGINE_H_
+#define GRAPHICS_ENGINE_H_
 
 #include <array>
 #include <filesystem>
@@ -13,7 +13,7 @@
 
 namespace gfx {
 class Camera;
-class Scene;
+class Model;
 class Window;
 
 class Engine {
@@ -22,8 +22,8 @@ public:
 
   [[nodiscard]] vk::Device device() const noexcept { return *device_; }
 
-  [[nodiscard]] Scene LoadScene(const std::filesystem::path& gltf_filepath) const;
-  void Render(const Scene& scene, const Camera& camera);
+  [[nodiscard]] Model LoadModel(const std::filesystem::path& gltf_filepath) const;
+  void Render(const Model& model, const Camera& camera);
 
 private:
   static constexpr std::size_t kMaxRenderFrames = 2;
@@ -47,4 +47,4 @@ private:
 
 }  // namespace gfx
 
-#endif  // SRC_GRAPHICS_INCLUDE_GRAPHICS_ENGINE_H_
+#endif  // GRAPHICS_ENGINE_H_
