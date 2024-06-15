@@ -1,18 +1,39 @@
-add_library(
-  graphics STATIC
-  allocator.cpp
-  buffer.cpp
-  camera.cpp
-  device.cpp
-  engine.cpp
-  glslang_compiler.cpp
-  image.cpp
-  instance.cpp
-  model.cpp
-  physical_device.cpp
-  shader_module.cpp
-  swapchain.cpp
-  window.cpp)
+add_library(graphics STATIC)
+
+target_sources(
+  graphics
+  # cmake-format: off
+  PUBLIC FILE_SET HEADERS
+         BASE_DIRS ${SRC_DIR}
+         FILES allocator.h
+               buffer.h
+               camera.h
+               delta_time.h
+               device.h
+               engine.h
+               glslang_compiler.h
+               image.h
+               instance.h
+               mesh.h
+               model.h
+               physical_device.h
+               shader_module.h
+               swapchain.h
+               window.h
+  # cmake-format: on
+  PRIVATE allocator.cpp
+          buffer.cpp
+          camera.cpp
+          device.cpp
+          engine.cpp
+          glslang_compiler.cpp
+          image.cpp
+          instance.cpp
+          model.cpp
+          physical_device.cpp
+          shader_module.cpp
+          swapchain.cpp
+          window.cpp)
 
 find_package(Ktx CONFIG REQUIRED)
 find_package(VulkanHeaders CONFIG REQUIRED)
@@ -43,5 +64,3 @@ target_compile_definitions(
          VMA_DYNAMIC_VULKAN_FUNCTIONS=0
          VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
          VULKAN_HPP_NO_CONSTRUCTORS)
-
-target_include_directories(graphics PUBLIC ${CGLTF_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR}/src)
