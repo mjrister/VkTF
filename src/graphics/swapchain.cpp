@@ -7,7 +7,7 @@
 #include <limits>
 #include <tuple>
 
-#include "graphics/device.h"
+#include "graphics/physical_device.h"
 
 namespace {
 
@@ -72,7 +72,7 @@ std::tuple<vk::UniqueSwapchainKHR, vk::Format, vk::Extent2D> CreateSwapchain(
                                                    .presentMode = GetSwapchainPresentMode(physical_device, surface),
                                                    .clipped = vk::True};
 
-  const auto [graphics_index, present_index, _] = queue_family_indices;
+  const auto [graphics_index, present_index] = queue_family_indices;
   const std::array graphics_and_present_index{graphics_index, present_index};
   if (graphics_index != present_index) {
     swapchain_create_info.imageSharingMode = vk::SharingMode::eConcurrent;

@@ -9,6 +9,7 @@
 #include "graphics/device.h"
 #include "graphics/image.h"
 #include "graphics/instance.h"
+#include "graphics/physical_device.h"
 #include "graphics/swapchain.h"
 
 namespace gfx {
@@ -30,6 +31,7 @@ private:
   std::size_t current_frame_index_ = 0;
   Instance instance_;
   vk::UniqueSurfaceKHR surface_;
+  PhysicalDevice physical_device_;
   Device device_;
   Allocator allocator_;
   Swapchain swapchain_;
@@ -38,6 +40,8 @@ private:
   Image depth_attachment_;
   vk::UniqueRenderPass render_pass_;
   std::vector<vk::UniqueFramebuffer> framebuffers_;
+  vk::Queue graphics_queue_;
+  vk::Queue present_queue_;
   vk::UniqueCommandPool command_pool_;
   std::vector<vk::UniqueCommandBuffer> command_buffers_;
   std::array<vk::UniqueSemaphore, kMaxRenderFrames> acquire_next_image_semaphores_;

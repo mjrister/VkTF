@@ -139,10 +139,10 @@ std::vector<vk::UniqueFramebuffer> CreateFramebuffers(const vk::Device device,
          | std::ranges::to<std::vector>();
 }
 
-vk::UniqueCommandPool CreateCommandPool(const gfx::Device& device) {
-  return device->createCommandPoolUnique(
+vk::UniqueCommandPool CreateCommandPool(const vk::Device& device, const gfx::QueueFamilyIndices& queue_family_indices) {
+  return device.createCommandPoolUnique(
       vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-                                .queueFamilyIndex = device.queue_family_indices().graphics_index});
+                                .queueFamilyIndex = queue_family_indices.graphics_index});
 }
 
 template <std::size_t N>
@@ -177,14 +177,15 @@ namespace gfx {
 
 Engine::Engine(const Window& window)
     : surface_{window.CreateSurface(*instance_)},
-      device_{*instance_, *surface_},
-      allocator_{*instance_, *device_.physical_device(), *device_},
+      physical_device_{*instance_, *surface_},
+      device_{physical_device_},
+      allocator_{*instance_, *physical_device_, *device_},
       swapchain_{*device_,
-                 *device_.physical_device(),
+                 *physical_device_,
                  *surface_,
                  GetFrameBufferExtent(window),
-                 device_.queue_family_indices()},
-      msaa_sample_count_{GetMsaaSampleCount(device_.physical_device().limits())},
+                 physical_device_.queue_family_indices()},
+      msaa_sample_count_{GetMsaaSampleCount(physical_device_.limits())},
       color_attachment_{*device_,
                         swapchain_.image_format(),
                         swapchain_.image_extent(),
@@ -197,7 +198,7 @@ Engine::Engine(const Window& window)
                                                 .usage = VMA_MEMORY_USAGE_AUTO,
                                                 .priority = 1.0f}},
       depth_attachment_{*device_,
-                        GetDepthAttachmentFormat(*device_.physical_device()),
+                        GetDepthAttachmentFormat(*physical_device_),
                         swapchain_.image_extent(),
                         1,
                         msaa_sample_count_,
@@ -214,21 +215,22 @@ Engine::Engine(const Window& window)
                                        *render_pass_,
                                        color_attachment_.image_view(),
                                        depth_attachment_.image_view())},
-      command_pool_{CreateCommandPool(device_)},
+      graphics_queue_{device_->getQueue(physical_device_.queue_family_indices().graphics_index, 0)},
+      present_queue_{device_->getQueue(physical_device_.queue_family_indices().present_index, 0)},
+      command_pool_{CreateCommandPool(*device_, physical_device_.queue_family_indices())},
       command_buffers_{AllocateCommandBuffers<kMaxRenderFrames>(*device_, *command_pool_)},
       acquire_next_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)},
       present_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)},
       draw_fences_{CreateFences<kMaxRenderFrames>(*device_)} {}
 
 Model Engine::LoadModel(const std::filesystem::path& gltf_filepath) const {
-  const auto& physical_device = device_.physical_device();
   return Model{gltf_filepath,
-               physical_device.features(),
-               physical_device.limits(),
-               *physical_device,
+               physical_device_.features(),
+               physical_device_.limits(),
+               *physical_device_,
                *device_,
-               device_.graphics_queue(),  // TODO(matthew-rister): prefer a dedicated transfer queue
-               device_.queue_family_indices().graphics_index,
+               graphics_queue_,  // TODO(matthew-rister): prefer a dedicated transfer queue
+               physical_device_.queue_family_indices().graphics_index,
                swapchain_.image_extent(),
                msaa_sample_count_,
                *render_pass_,
@@ -277,21 +279,21 @@ void Engine::Render(const Model& model, const Camera& camera) {
   command_buffer.end();
 
   static constexpr vk::PipelineStageFlags kPipelineWaitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-  device_.graphics_queue().submit(vk::SubmitInfo{.waitSemaphoreCount = 1,
-                                                 .pWaitSemaphores = &acquire_next_image_semaphore,
-                                                 .pWaitDstStageMask = &kPipelineWaitStage,
-                                                 .commandBufferCount = 1,
-                                                 .pCommandBuffers = &command_buffer,
-                                                 .signalSemaphoreCount = 1,
-                                                 .pSignalSemaphores = &present_image_semaphore},
-                                  draw_fence);
+  graphics_queue_.submit(vk::SubmitInfo{.waitSemaphoreCount = 1,
+                                        .pWaitSemaphores = &acquire_next_image_semaphore,
+                                        .pWaitDstStageMask = &kPipelineWaitStage,
+                                        .commandBufferCount = 1,
+                                        .pCommandBuffers = &command_buffer,
+                                        .signalSemaphoreCount = 1,
+                                        .pSignalSemaphores = &present_image_semaphore},
+                         draw_fence);
 
   const auto swapchain = *swapchain_;
-  result = device_.present_queue().presentKHR(vk::PresentInfoKHR{.waitSemaphoreCount = 1,
-                                                                 .pWaitSemaphores = &present_image_semaphore,
-                                                                 .swapchainCount = 1,
-                                                                 .pSwapchains = &swapchain,
-                                                                 .pImageIndices = &image_index});
+  result = present_queue_.presentKHR(vk::PresentInfoKHR{.waitSemaphoreCount = 1,
+                                                        .pWaitSemaphores = &present_image_semaphore,
+                                                        .swapchainCount = 1,
+                                                        .pSwapchains = &swapchain,
+                                                        .pImageIndices = &image_index});
   vk::resultCheck(result, "Present swapchain image failed");
 }
 
