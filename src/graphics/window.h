@@ -36,7 +36,7 @@ public:
 #endif
 
 private:
-  std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)> window_;
+  std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)> window_{nullptr, nullptr};
 };
 
 }  // namespace gfx

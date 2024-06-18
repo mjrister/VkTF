@@ -42,40 +42,43 @@ private:
   }
 };
 
-using UniqueGlfwWindow = std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)>;
+const GLFWvidmode* GetGlfwVideoMode() {
+  auto* const primary_monitor = glfwGetPrimaryMonitor();
+  if (primary_monitor == nullptr) throw std::runtime_error{"Failed to locate the primary monitor"};
 
-UniqueGlfwWindow CreateGlfwWindow(const char* const title, int width, int height) {
-  [[maybe_unused]] const auto& glfw_context = GlfwContext::Get();
-
-  auto* const monitor = glfwGetPrimaryMonitor();
-  const auto* const video_mode = glfwGetVideoMode(monitor);
+  const auto* const video_mode = glfwGetVideoMode(primary_monitor);
+  if (video_mode == nullptr) throw std::runtime_error{"Failed to get the primary monitor video mode"};
 
   glfwWindowHint(GLFW_RED_BITS, video_mode->redBits);
   glfwWindowHint(GLFW_GREEN_BITS, video_mode->greenBits);
   glfwWindowHint(GLFW_BLUE_BITS, video_mode->blueBits);
   glfwWindowHint(GLFW_REFRESH_RATE, video_mode->refreshRate);
 
-  assert(width > 0);
-  assert(height > 0);
-  width = std::min(width, video_mode->width);
-  height = std::min(height, video_mode->height);
-
-  UniqueGlfwWindow window{glfwCreateWindow(width, height, title, nullptr, nullptr), glfwDestroyWindow};
-  if (window == nullptr) throw std::runtime_error{"GLFW window creation failed"};
-
-  const auto center_x = (video_mode->width - width) / 2;
-  const auto center_y = (video_mode->height - height) / 2;
-  glfwSetWindowPos(window.get(), center_x, center_y);
-
-  return window;
+  return video_mode;  // pointer lifetime is managed by GLFW
 }
 
 }  // namespace
 
 namespace gfx {
 
-Window::Window(const char* const title, const int width, const int height)
-    : window_{CreateGlfwWindow(title, width, height)} {}
+Window::Window(const char* const title, int width, int height) {
+  [[maybe_unused]] const auto& glfw_context = GlfwContext::Get();
+
+  assert(width > 0);
+  assert(height > 0);
+  const auto* const video_mode = GetGlfwVideoMode();
+  width = std::min(width, video_mode->width);
+  height = std::min(height, video_mode->height);
+
+  window_ = std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)>{
+      glfwCreateWindow(width, height, title, nullptr, nullptr),
+      glfwDestroyWindow};
+  if (window_ == nullptr) throw std::runtime_error{"GLFW window creation failed"};
+
+  const auto center_x = (video_mode->width - width) / 2;
+  const auto center_y = (video_mode->height - height) / 2;
+  glfwSetWindowPos(window_.get(), center_x, center_y);
+}
 
 std::pair<int, int> Window::GetSize() const noexcept {
   int width = 0;
@@ -109,7 +112,7 @@ std::span<const char* const> Window::GetInstanceExtensions() {
   std::uint32_t required_extension_count = 0;
   const auto* const* required_extensions = glfwGetRequiredInstanceExtensions(&required_extension_count);
   if (required_extensions == nullptr) throw std::runtime_error{"No window surface instance extensions"};
-  return std::span{required_extensions, required_extension_count};  // pointer lifetime managed by GLFW
+  return std::span{required_extensions, required_extension_count};  // pointer lifetime is managed by GLFW
 }
 
 vk::UniqueSurfaceKHR Window::CreateSurface(const vk::Instance instance) const {

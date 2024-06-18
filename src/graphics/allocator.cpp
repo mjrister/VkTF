@@ -37,30 +37,22 @@ VmaVulkanFunctions GetVulkanFunctions() {
   };
 }
 
-VmaAllocator CreateAllocator(const vk::Instance instance,
-                             const vk::PhysicalDevice physical_device,
-                             const vk::Device device) {
+}  // namespace
+
+namespace gfx {
+
+Allocator::Allocator(const vk::Instance instance, const vk::PhysicalDevice physical_device, const vk::Device device) {
   const auto vulkan_functions = GetVulkanFunctions();
   const VmaAllocatorCreateInfo allocator_create_info{.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_PRIORITY_BIT,
                                                      .physicalDevice = physical_device,
                                                      .device = device,
                                                      .pVulkanFunctions = &vulkan_functions,
                                                      .instance = instance,
-                                                     .vulkanApiVersion = gfx::Instance::kApiVersion};
+                                                     .vulkanApiVersion = Instance::kApiVersion};
 
-  VmaAllocator allocator = nullptr;
-  const auto result = vmaCreateAllocator(&allocator_create_info, &allocator);
+  const auto result = vmaCreateAllocator(&allocator_create_info, &allocator_);
   vk::resultCheck(static_cast<vk::Result>(result), "Allocator creation failed");
-
-  return allocator;
 }
-
-}  // namespace
-
-namespace gfx {
-
-Allocator::Allocator(const vk::Instance instance, const vk::PhysicalDevice physical_device, const vk::Device device)
-    : allocator_{CreateAllocator(instance, physical_device, device)} {}
 
 Allocator& Allocator::operator=(Allocator&& allocator) noexcept {
   if (this != &allocator) {
