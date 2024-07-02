@@ -8,6 +8,8 @@
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.hpp>
 
+#include "graphics/data_view.h"
+
 namespace gfx {
 
 class Buffer {
@@ -28,17 +30,17 @@ public:
   [[nodiscard]] vk::Buffer operator*() const noexcept { return buffer_; }
 
   template <typename T>
-  void Copy(const vk::ArrayProxy<const T> data) {
-    assert(sizeof(T) * data.size() <= size_bytes_);
+  void Copy(const DataView<const T> data_view) {
+    assert(data_view.size_bytes() <= size_bytes_);
     auto* mapped_memory = MapMemory();
-    memcpy(mapped_memory, data.data(), size_bytes_);
+    memcpy(mapped_memory, data_view.data(), size_bytes_);
     const auto result = vmaFlushAllocation(allocator_, allocation_, 0, vk::WholeSize);
     vk::resultCheck(static_cast<vk::Result>(result), "Flush allocation failed");
   }
 
   template <typename T>
-  void CopyOnce(const vk::ArrayProxy<const T> data) {
-    Copy(data);
+  void CopyOnce(const DataView<const T> data_view) {
+    Copy(data_view);
     UnmapMemory();
   }
 

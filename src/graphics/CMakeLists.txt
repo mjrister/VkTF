@@ -8,6 +8,7 @@ target_sources(
          FILES allocator.h
                buffer.h
                camera.h
+               data_view.h
                delta_time.h
                device.h
                engine.h
