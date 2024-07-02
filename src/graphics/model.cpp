@@ -305,23 +305,23 @@ gfx::Buffer CreateBuffer(const std::vector<T>& buffer_data,
                          const vk::CommandBuffer command_buffer,
                          const VmaAllocator allocator,
                          std::vector<gfx::Buffer>& staging_buffers) {
-  const auto buffer_size_bytes = sizeof(T) * buffer_data.size();
+  const auto size_bytes = sizeof(T) * buffer_data.size();
 
   static constexpr VmaAllocationCreateInfo kStagingBufferAllocationCreateInfo{
       .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
       .usage = VMA_MEMORY_USAGE_AUTO};
-  auto& staging_buffer = staging_buffers.emplace_back(buffer_size_bytes,
+  auto& staging_buffer = staging_buffers.emplace_back(size_bytes,
                                                       vk::BufferUsageFlagBits::eTransferSrc,
                                                       allocator,
                                                       kStagingBufferAllocationCreateInfo);
   staging_buffer.template CopyOnce<T>(buffer_data);
 
   static constexpr VmaAllocationCreateInfo kBufferAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO};
-  gfx::Buffer buffer{buffer_size_bytes,
+  gfx::Buffer buffer{size_bytes,
                      buffer_usage_flags | vk::BufferUsageFlagBits::eTransferDst,
                      allocator,
                      kBufferAllocationCreateInfo};
-  command_buffer.copyBuffer(*staging_buffer, *buffer, vk::BufferCopy{.size = buffer_size_bytes});
+  command_buffer.copyBuffer(*staging_buffer, *buffer, vk::BufferCopy{.size = size_bytes});
 
   return buffer;
 }

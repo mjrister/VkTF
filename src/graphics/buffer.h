@@ -12,8 +12,8 @@ namespace gfx {
 
 class Buffer {
 public:
-  Buffer(vk::DeviceSize buffer_size_bytes,
-         vk::BufferUsageFlags buffer_usage_flags,
+  Buffer(vk::DeviceSize size_bytes,
+         vk::BufferUsageFlags usage_flags,
          VmaAllocator allocator,
          const VmaAllocationCreateInfo& allocation_create_info);
 
@@ -28,17 +28,17 @@ public:
   [[nodiscard]] vk::Buffer operator*() const noexcept { return buffer_; }
 
   template <typename T>
-  void Copy(const vk::ArrayProxy<const T> buffer_data) {
-    assert(sizeof(T) * buffer_data.size() <= buffer_size_bytes_);
+  void Copy(const vk::ArrayProxy<const T> data) {
+    assert(sizeof(T) * data.size() <= size_bytes_);
     auto* mapped_memory = MapMemory();
-    memcpy(mapped_memory, buffer_data.data(), buffer_size_bytes_);
+    memcpy(mapped_memory, data.data(), size_bytes_);
     const auto result = vmaFlushAllocation(allocator_, allocation_, 0, vk::WholeSize);
     vk::resultCheck(static_cast<vk::Result>(result), "Flush allocation failed");
   }
 
   template <typename T>
-  void CopyOnce(const vk::ArrayProxy<const T> buffer_data) {
-    Copy(buffer_data);
+  void CopyOnce(const vk::ArrayProxy<const T> data) {
+    Copy(data);
     UnmapMemory();
   }
 
@@ -47,7 +47,7 @@ private:
   void UnmapMemory() noexcept;
 
   vk::Buffer buffer_;
-  vk::DeviceSize buffer_size_bytes_ = 0;
+  vk::DeviceSize size_bytes_ = 0;
   void* mapped_memory_ = nullptr;
   VmaAllocator allocator_ = nullptr;
   VmaAllocation allocation_ = nullptr;

@@ -34,11 +34,11 @@ Image::Image(const vk::Device device,
              const vk::Extent2D extent,
              const std::uint32_t mip_levels,
              const vk::SampleCountFlagBits sample_count,
-             const vk::ImageUsageFlags image_usage_flags,
-             const vk::ImageAspectFlags image_aspect_flags,
+             const vk::ImageUsageFlags usage_flags,
+             const vk::ImageAspectFlags aspect_mask,
              const VmaAllocator allocator,
              const VmaAllocationCreateInfo& allocation_create_info)
-    : format_{format}, mip_levels_{mip_levels}, image_aspect_flags_{image_aspect_flags}, allocator_{allocator} {
+    : format_{format}, mip_levels_{mip_levels}, aspect_mask_{aspect_mask}, allocator_{allocator} {
   const VkImageCreateInfo image_create_info{
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .imageType = VK_IMAGE_TYPE_2D,
@@ -47,7 +47,7 @@ Image::Image(const vk::Device device,
       .mipLevels = mip_levels_,
       .arrayLayers = 1,
       .samples = static_cast<VkSampleCountFlagBits>(sample_count),
-      .usage = static_cast<VkImageUsageFlags>(image_usage_flags)};
+      .usage = static_cast<VkImageUsageFlags>(usage_flags)};
 
   VkImage image = nullptr;
   const auto result =
@@ -60,7 +60,7 @@ Image::Image(const vk::Device device,
       .viewType = vk::ImageViewType::e2D,
       .format = format,
       .subresourceRange =
-          vk::ImageSubresourceRange{.aspectMask = image_aspect_flags, .levelCount = mip_levels, .layerCount = 1}});
+          vk::ImageSubresourceRange{.aspectMask = aspect_mask_, .levelCount = mip_levels, .layerCount = 1}});
 }
 
 Image& Image::operator=(Image&& image) noexcept {
@@ -83,7 +83,7 @@ Image::~Image() noexcept {
 void Image::Copy(const vk::Buffer src_buffer,
                  const vk::CommandBuffer command_buffer,
                  const std::vector<vk::BufferImageCopy>& buffer_image_copies) const {
-  const vk::ImageSubresourceRange image_subresource_range{.aspectMask = image_aspect_flags_,
+  const vk::ImageSubresourceRange image_subresource_range{.aspectMask = aspect_mask_,
                                                           .levelCount = mip_levels_,
                                                           .layerCount = 1};
 

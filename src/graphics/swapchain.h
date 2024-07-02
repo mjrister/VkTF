@@ -15,7 +15,7 @@ public:
   Swapchain(vk::Device device,
             vk::PhysicalDevice physical_device,
             vk::SurfaceKHR surface,
-            vk::Extent2D framebuffer_extent,
+            vk::Extent2D image_extent,
             const QueueFamilyIndices& queue_family_indices);
 
   [[nodiscard]] vk::SwapchainKHR operator*() const noexcept { return *swapchain_; }

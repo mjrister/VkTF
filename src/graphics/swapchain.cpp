@@ -45,11 +45,11 @@ vk::Extent2D GetSwapchainImageExtent(const vk::SurfaceCapabilitiesKHR& surface_c
       surface_capabilities.currentExtent != vk::Extent2D{.width = kUndefinedExtent, .height = kUndefinedExtent}) {
     return surface_capabilities.currentExtent;
   }
-  const auto [min_width, min_height] = surface_capabilities.minImageExtent;
-  const auto [max_width, max_height] = surface_capabilities.maxImageExtent;
+  const auto [min_image_width, min_image_height] = surface_capabilities.minImageExtent;
+  const auto [max_image_width, max_image_height] = surface_capabilities.maxImageExtent;
   const auto [framebuffer_width, framebuffer_height] = framebuffer_extent;
-  return vk::Extent2D{.width = std::clamp(framebuffer_width, min_width, max_width),
-                      .height = std::clamp(framebuffer_height, min_height, max_height)};
+  return vk::Extent2D{.width = std::clamp(framebuffer_width, min_image_width, max_image_width),
+                      .height = std::clamp(framebuffer_height, min_image_height, max_image_height)};
 }
 
 std::vector<vk::UniqueImageView> CreateSwapchainImageViews(const vk::Device device,
@@ -75,7 +75,7 @@ namespace gfx {
 Swapchain::Swapchain(const vk::Device device,
                      const vk::PhysicalDevice physical_device,
                      const vk::SurfaceKHR surface,
-                     const vk::Extent2D framebuffer_extent,
+                     const vk::Extent2D image_extent,
                      const QueueFamilyIndices& queue_family_indices) {
   const auto surface_capabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
   const auto surface_format = GetSwapchainSurfaceFormat(physical_device, surface);
@@ -85,7 +85,7 @@ Swapchain::Swapchain(const vk::Device device,
       .minImageCount = GetSwapchainImageCount(surface_capabilities),
       .imageFormat = surface_format.format,
       .imageColorSpace = surface_format.colorSpace,
-      .imageExtent = GetSwapchainImageExtent(surface_capabilities, framebuffer_extent),
+      .imageExtent = GetSwapchainImageExtent(surface_capabilities, image_extent),
       .imageArrayLayers = 1,
       .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
       .presentMode = GetSwapchainPresentMode(physical_device, surface),

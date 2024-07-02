@@ -16,8 +16,8 @@ public:
         vk::Extent2D extent,
         std::uint32_t mip_levels,
         vk::SampleCountFlagBits sample_count,
-        vk::ImageUsageFlags image_usage_flags,
-        vk::ImageAspectFlags image_aspect_flags,
+        vk::ImageUsageFlags usage_flags,
+        vk::ImageAspectFlags aspect_mask,
         VmaAllocator allocator,
         const VmaAllocationCreateInfo& allocation_create_info);
 
@@ -41,7 +41,7 @@ private:
   vk::UniqueImageView image_view_;
   vk::Format format_ = vk::Format::eUndefined;
   std::uint32_t mip_levels_ = 0;
-  vk::ImageAspectFlags image_aspect_flags_;
+  vk::ImageAspectFlags aspect_mask_;
   VmaAllocator allocator_ = nullptr;
   VmaAllocation allocation_ = nullptr;
 };

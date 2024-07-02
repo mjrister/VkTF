@@ -5,9 +5,11 @@
 #include <iostream>
 #include <memory>
 #include <print>
+#include <stdexcept>
 #include <string_view>
 #include <utility>
 
+#include <glslang/Include/glslang_c_interface.h>
 #include <glslang/Public/resource_limits_c.h>
 
 template <>
@@ -169,6 +171,14 @@ std::vector<std::uint32_t> GenerateSpirv(const glslang_stage_t glslang_stage,
 }  // namespace
 
 namespace gfx {
+
+GlslangCompiler::GlslangCompiler() {
+  if (glslang_initialize_process() == 0) {
+    throw std::runtime_error{"glslang initialization failed"};
+  }
+}
+
+GlslangCompiler::~GlslangCompiler() noexcept { glslang_finalize_process(); }
 
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 std::vector<std::uint32_t> GlslangCompiler::Compile(const glslang_stage_t glslang_stage,
