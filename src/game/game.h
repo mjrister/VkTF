@@ -12,7 +12,7 @@ class Game {
 public:
   Game();
 
-  void Run();
+  void Start();
 
 private:
   Window window_;

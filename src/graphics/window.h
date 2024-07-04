@@ -25,7 +25,7 @@ public:
     return glfwGetMouseButton(window_.get(), button) == GLFW_PRESS;
   }
 
-  [[nodiscard]] bool IsClosed() const noexcept { return glfwWindowShouldClose(window_.get()) == GLFW_TRUE; }
+  [[nodiscard]] bool ShouldClose() const noexcept { return glfwWindowShouldClose(window_.get()) == GLFW_TRUE; }
   void Close() const noexcept { glfwSetWindowShouldClose(window_.get(), GLFW_TRUE); }
 
   static void Update() noexcept { glfwPollEvents(); }

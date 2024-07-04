@@ -2,29 +2,39 @@
 #define GRAPHICS_ENGINE_H_
 
 #include <array>
+#include <concepts>
 #include <filesystem>
 #include <vector>
 
 #include "graphics/allocator.h"
+#include "graphics/delta_time.h"
 #include "graphics/device.h"
 #include "graphics/image.h"
 #include "graphics/instance.h"
 #include "graphics/physical_device.h"
 #include "graphics/swapchain.h"
+#include "graphics/window.h"
 
 namespace gfx {
 class Camera;
 class Model;
-class Window;
 
 class Engine {
 public:
   explicit Engine(const Window& window);
 
-  [[nodiscard]] vk::Device device() const noexcept { return *device_; }
-
   [[nodiscard]] Model LoadModel(const std::filesystem::path& gltf_filepath) const;
-  void Render(const Model& model, const Camera& camera);
+
+  void Run(const Window& window, std::invocable<DeltaTime> auto&& main_loop) const {
+    for (DeltaTime delta_time; !window.ShouldClose();) {
+      Window::Update();
+      delta_time.Update();
+      main_loop(delta_time);
+    }
+    device_->waitIdle();
+  }
+
+  void Render(const Camera& camera, const Model& model);
 
 private:
   static constexpr std::size_t kMaxRenderFrames = 2;

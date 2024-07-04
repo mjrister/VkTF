@@ -5,8 +5,6 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 
-#include "graphics/delta_time.h"
-
 namespace {
 constexpr auto kWindowWidth4k = 3840;
 constexpr auto kWindowHeight4k = 2160;
@@ -66,15 +64,12 @@ Game::Game()
       camera_{CreateCamera(window_.GetAspectRatio())},
       model_{engine_.LoadModel("assets/models/sponza/Main.1_Sponza/NewSponza_Main_glTF_002.gltf")} {}
 
-void Game::Run() {
-  for (DeltaTime delta_time; !window_.IsClosed();) {
-    delta_time.Update();
-    Window::Update();
+void Game::Start() {
+  engine_.Run(window_, [this](const auto delta_time) {
     HandleKeyEvents(window_, camera_, delta_time);
     HandleMouseEvents(window_, camera_);
-    engine_.Render(model_, camera_);
-  }
-  engine_.device().waitIdle();
+    engine_.Render(camera_, model_);
+  });
 }
 
 }  // namespace gfx

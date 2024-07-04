@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <limits>
 #include <ranges>
+#include <stdexcept>
 
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.hpp>
@@ -224,6 +225,7 @@ Engine::Engine(const Window& window)
       draw_fences_{CreateFences<kMaxRenderFrames>(*device_)} {}
 
 Model Engine::LoadModel(const std::filesystem::path& gltf_filepath) const {
+  // TODO(matthew-rister): throw an exception for unsupported file formats
   return Model{gltf_filepath,
                physical_device_.features(),
                physical_device_.limits(),
@@ -237,7 +239,7 @@ Model Engine::LoadModel(const std::filesystem::path& gltf_filepath) const {
                *allocator_};
 }
 
-void Engine::Render(const Model& model, const Camera& camera) {
+void Engine::Render(const Camera& camera, const Model& model) {
   if (++current_frame_index_ == kMaxRenderFrames) {
     current_frame_index_ = 0;
   }

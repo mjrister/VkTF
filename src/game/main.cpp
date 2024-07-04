@@ -21,7 +21,7 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 int main() {  // NOLINT(bugprone-exception-escape)
   try {
     gfx::Game game;
-    game.Run();
+    game.Start();
   } catch (const std::system_error& e) {
     std::cerr << '[' << e.code() << "] " << e.what() << '\n';
     return EXIT_FAILURE;
