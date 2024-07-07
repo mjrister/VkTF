@@ -15,6 +15,7 @@ target_sources(
                glslang_compiler.h
                image.h
                instance.h
+               ktx_texture.h
                mesh.h
                model.h
                physical_device.h
@@ -30,6 +31,7 @@ target_sources(
           glslang_compiler.cpp
           image.cpp
           instance.cpp
+          ktx_texture.cpp
           model.cpp
           physical_device.cpp
           shader_module.cpp
