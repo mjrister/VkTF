@@ -19,7 +19,7 @@ public:
              const std::unordered_set<vk::Format>& supported_transcode_formats);
 
   [[nodiscard]] auto& operator*(this auto& self) noexcept { return *self.ktx_texture2_; }
-  [[nodiscard]] auto* operator->(this auto& self) noexcept { return self.ktx_texture2_.get(); }
+  [[nodiscard]] auto* operator->(this auto& self) noexcept { return std::to_address(self.ktx_texture2_); }
 
 private:
   std::unique_ptr<ktxTexture2, void (*)(ktxTexture2*)> ktx_texture2_;
