@@ -180,6 +180,38 @@ std::vector<T> UnpackIndices(const cgltf_accessor& gltf_accessor) {
   return indices;
 }
 
+template <typename VertexAttribute>
+void ValidateAttributeData(const VertexAttribute& vertex_attribute) {
+  if (!vertex_attribute.maybe_data.has_value()) {
+    throw std::runtime_error{std::format("Missing required vertex attribute {}", vertex_attribute.name)};
+  }
+}
+
+template <typename PositionsAttribute, typename VertexAttribute>
+void ValidateAttributeSize(const PositionsAttribute& positions_attribute, const VertexAttribute& vertex_attribute) {
+  const auto& [positions_name, maybe_positions_data] = positions_attribute;
+  const auto& [attribute_name, maybe_attribute_data] = vertex_attribute;
+  const auto positions_count = maybe_positions_data->size();
+  const auto attribute_count = maybe_attribute_data->size();
+
+  // glTF primitives are expected to represent an indexed triangle mesh with a matching number of vertex attributes
+  if (positions_count != attribute_count) {
+    throw std::runtime_error{std::format("The number of {} attributes {} does not match the number of {} attributes {}",
+                                         positions_name,
+                                         positions_count,
+                                         attribute_name,
+                                         attribute_count)};
+  }
+}
+
+// validation requires variadic templates because vertex attribute data types are not homogeneous
+template <typename PositionsAttribute, typename... VertexAttributes>
+void ValidateAttributes(const PositionsAttribute& positions_attribute, const VertexAttributes&... vertex_attributes) {
+  ValidateAttributeData(positions_attribute);
+  (ValidateAttributeData(vertex_attributes), ...);
+  (ValidateAttributeSize(positions_attribute, vertex_attributes), ...);
+}
+
 std::vector<Vertex> GetVertices(const cgltf_primitive& gltf_primitive) {
   VertexAttribute<float, 3> positions_attribute{.name = "POSITION"};
   VertexAttribute<float, 3> normals_attribute{.name = "NORMAL"};
@@ -216,37 +248,7 @@ std::vector<Vertex> GetVertices(const cgltf_primitive& gltf_primitive) {
     }
   }
 
-  const auto& [positions_attribute_name, maybe_positions] = positions_attribute;
-  const auto& [normals_attribute_name, maybe_normals] = normals_attribute;
-  const auto& [tangents_attribute_name, maybe_tangents] = tangents_attribute;
-  const auto& [texture_coordinates0_attribute_name, maybe_texture_coordinates0] = texture_coordinates0_attribute;
-
-  // unfortunately can't iterate over vertex attributes directly because vertex attribute data types are not homogeneous
-  for (const auto [attribute_name, has_attribute_data] :
-       std::array{std::pair{positions_attribute_name, maybe_positions.has_value()},
-                  std::pair{normals_attribute_name, maybe_normals.has_value()},
-                  std::pair{tangents_attribute_name, maybe_tangents.has_value()},
-                  std::pair{texture_coordinates0_attribute_name, maybe_texture_coordinates0.has_value()}}) {
-    if (!has_attribute_data) {
-      throw std::runtime_error{std::format("Missing required vertex attribute {}", attribute_name)};
-    }
-  }
-
-  // primitives are expected to represent an indexed triangle mesh with a matching number of vertex attributes
-  for (const auto positions_count = maybe_positions->size();
-       const auto [attribute_name, attribute_count] :
-       std::array{std::pair{normals_attribute_name, maybe_normals->size()},
-                  std::pair{tangents_attribute_name, maybe_tangents->size()},
-                  std::pair{texture_coordinates0_attribute_name, maybe_texture_coordinates0->size()}}) {
-    if (attribute_count != positions_count) {
-      throw std::runtime_error{
-          std::format("The number of {} attributes {} does not match the number of {} attributes {}",
-                      positions_attribute_name,
-                      positions_count,
-                      attribute_name,
-                      attribute_count)};
-    }
-  }
+  ValidateAttributes(positions_attribute, normals_attribute, tangents_attribute, texture_coordinates0_attribute);
 
   return std::views::zip_transform(
              [](const auto& position, const auto& normal, const auto& tangent, const auto& texture_coordinates0) {
@@ -261,10 +263,10 @@ std::vector<Vertex> GetVertices(const cgltf_primitive& gltf_primitive) {
                              .tangent = tangent,
                              .texture_coordinates0 = texture_coordinates0};
              },
-             *maybe_positions,
-             *maybe_normals,
-             *maybe_tangents,
-             *maybe_texture_coordinates0)
+             *positions_attribute.maybe_data,
+             *normals_attribute.maybe_data,
+             *tangents_attribute.maybe_data,
+             *texture_coordinates0_attribute.maybe_data)
          | std::ranges::to<std::vector>();
 }
 
