@@ -269,28 +269,35 @@ std::vector<Vertex> GetVertices(const cgltf_primitive& gltf_primitive) {
 }
 
 template <typename T>
+const gfx::Buffer& CreateStagingBuffer(const vk::ArrayProxy<const T> buffer_data,
+                                       const VmaAllocator allocator,
+                                       std::vector<gfx::Buffer>& staging_buffers) {
+  static constexpr VmaAllocationCreateInfo kStagingBufferAllocationCreateInfo{
+      .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+      .usage = VMA_MEMORY_USAGE_AUTO};
+  auto& staging_buffer = staging_buffers.emplace_back(sizeof(T) * buffer_data.size(),
+                                                      vk::BufferUsageFlagBits::eTransferSrc,
+                                                      allocator,
+                                                      kStagingBufferAllocationCreateInfo);
+  staging_buffer.CopyOnce(buffer_data);
+  return staging_buffer;
+}
+
+template <typename T>
 gfx::Buffer CreateBuffer(const std::vector<T>& buffer_data,
                          const vk::BufferUsageFlags buffer_usage_flags,
                          const vk::CommandBuffer command_buffer,
                          const VmaAllocator allocator,
                          std::vector<gfx::Buffer>& staging_buffers) {
-  const auto size_bytes = sizeof(T) * buffer_data.size();
-
-  static constexpr VmaAllocationCreateInfo kStagingBufferAllocationCreateInfo{
-      .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-      .usage = VMA_MEMORY_USAGE_AUTO};
-  auto& staging_buffer = staging_buffers.emplace_back(size_bytes,
-                                                      vk::BufferUsageFlagBits::eTransferSrc,
-                                                      allocator,
-                                                      kStagingBufferAllocationCreateInfo);
-  staging_buffer.template CopyOnce<T>(buffer_data);
+  const auto& staging_buffer = CreateStagingBuffer<T>(buffer_data, allocator, staging_buffers);
 
   static constexpr VmaAllocationCreateInfo kBufferAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO};
-  gfx::Buffer buffer{size_bytes,
+  gfx::Buffer buffer{staging_buffer.size_bytes(),
                      buffer_usage_flags | vk::BufferUsageFlagBits::eTransferDst,
                      allocator,
                      kBufferAllocationCreateInfo};
-  command_buffer.copyBuffer(*staging_buffer, *buffer, vk::BufferCopy{.size = size_bytes});
+
+  command_buffer.copyBuffer(*staging_buffer, *buffer, vk::BufferCopy{.size = staging_buffer.size_bytes()});
 
   return buffer;
 }
@@ -418,16 +425,12 @@ std::vector<vk::BufferImageCopy> GetBufferImageCopies(const ktxTexture2& ktx_tex
 gfx::Image CreateImage(const vk::Device device,
                        const vk::CommandBuffer command_buffer,
                        const VmaAllocator allocator,
-                       ktxTexture2& ktx_texture2,
+                       const ktxTexture2& ktx_texture2,
                        std::vector<gfx::Buffer>& staging_buffers) {
-  static constexpr VmaAllocationCreateInfo kStagingBufferAllocationCreateInfo{
-      .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-      .usage = VMA_MEMORY_USAGE_AUTO};
-  auto& staging_buffer = staging_buffers.emplace_back(ktx_texture2.dataSize,
-                                                      vk::BufferUsageFlagBits::eTransferSrc,
-                                                      allocator,
-                                                      kStagingBufferAllocationCreateInfo);
-  staging_buffer.CopyOnce<ktx_uint8_t>(std::span{ktx_texture2.pData, ktx_texture2.dataSize});
+  const auto& staging_buffer = CreateStagingBuffer(
+      vk::ArrayProxy<const ktx_uint8_t>{static_cast<uint32_t>(ktx_texture2.dataSize), ktx_texture2.pData},
+      allocator,
+      staging_buffers);
 
   static constexpr VmaAllocationCreateInfo kImageAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO};
   gfx::Image image{device,
