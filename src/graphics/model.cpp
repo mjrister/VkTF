@@ -400,11 +400,10 @@ std::optional<gfx::KtxTexture> CreateBaseColorKtxTexture(
 }
 
 std::vector<vk::BufferImageCopy> GetBufferImageCopies(const ktxTexture2& ktx_texture2) {
-  return std::views::iota(0u, ktx_texture2.numLevels)  //
-         | std::views::transform([&ktx_texture2](const auto mip_level) {
+  return std::views::iota(0u, ktx_texture2.numLevels)
+         | std::views::transform([ktx_texture = ktxTexture(&ktx_texture2)](const auto mip_level) {
              ktx_size_t image_offset = 0;
-             if (const auto ktx_error_code =  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
-                 ktxTexture_GetImageOffset(ktxTexture(&ktx_texture2), mip_level, 0, 0, &image_offset);
+             if (const auto ktx_error_code = ktxTexture_GetImageOffset(ktx_texture, mip_level, 0, 0, &image_offset);
                  ktx_error_code != KTX_SUCCESS) {
                throw std::runtime_error{std::format("Failed to get image offset for mip level {} with error {}",
                                                     mip_level,
@@ -415,8 +414,8 @@ std::vector<vk::BufferImageCopy> GetBufferImageCopies(const ktxTexture2& ktx_tex
                  .imageSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor,
                                                                 .mipLevel = mip_level,
                                                                 .layerCount = 1},
-                 .imageExtent = vk::Extent3D{.width = ktx_texture2.baseWidth >> mip_level,
-                                             .height = ktx_texture2.baseHeight >> mip_level,
+                 .imageExtent = vk::Extent3D{.width = ktx_texture->baseWidth >> mip_level,
+                                             .height = ktx_texture->baseHeight >> mip_level,
                                              .depth = 1}};
            })
          | std::ranges::to<std::vector>();

@@ -52,7 +52,7 @@ using UniqueGlslangShader = std::unique_ptr<glslang_shader_t, decltype(&glslang_
 using UniqueGlslangProgram = std::unique_ptr<glslang_program_t, decltype(&glslang_program_delete)>;
 
 constexpr auto kGlslangMessages =
-// NOLINTBEGIN(hicpp-signed-bitwise)
+// NOLINTBEGIN(hicpp-signed-bitwise): glslang bit flags use signed integers
 #ifndef NDEBUG
     GLSLANG_MSG_DEBUG_INFO_BIT |
 #endif
@@ -180,7 +180,7 @@ GlslangCompiler::GlslangCompiler() {
 
 GlslangCompiler::~GlslangCompiler() noexcept { glslang_finalize_process(); }
 
-// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static): enforce access through a singleton instance
 std::vector<std::uint32_t> GlslangCompiler::Compile(const glslang_stage_t glslang_stage,
                                                     const char* const glsl_source) const {
   const auto glslang_shader = CreateShader(glslang_stage, glsl_source);

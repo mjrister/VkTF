@@ -157,9 +157,7 @@ std::vector<vk::UniqueCommandBuffer> AllocateCommandBuffers(const vk::Device dev
 template <std::size_t N>
 std::array<vk::UniqueSemaphore, N> CreateSemaphores(const vk::Device device) {
   std::array<vk::UniqueSemaphore, N> semaphores;
-  std::ranges::generate(semaphores, [device] {  // NOLINT(whitespace/newline)
-    return device.createSemaphoreUnique(vk::SemaphoreCreateInfo{});
-  });
+  std::ranges::generate(semaphores, [device] { return device.createSemaphoreUnique(vk::SemaphoreCreateInfo{}); });
   return semaphores;
 }
 
@@ -244,7 +242,7 @@ void Engine::Render(const Camera& camera, const Model& model) {
     current_frame_index_ = 0;
   }
 
-  // NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index)
+  // NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index): current frame index validated prior to indexing
   const auto draw_fence = *draw_fences_[current_frame_index_];
   const auto acquire_next_image_semaphore = *acquire_next_image_semaphores_[current_frame_index_];
   const auto present_image_semaphore = *present_image_semaphores_[current_frame_index_];

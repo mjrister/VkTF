@@ -26,6 +26,13 @@ public:
   [[nodiscard]] const QueueFamilyIndices& queue_family_indices() const noexcept { return queue_family_indices_; }
 
 private:
+  struct RankedPhysicalDevice;
+
+  explicit PhysicalDevice(const RankedPhysicalDevice& ranked_physical_device);
+
+  static RankedPhysicalDevice SelectPhysicalDevice(vk::Instance instance, vk::SurfaceKHR surface);
+  static RankedPhysicalDevice GetRankedPhysicalDevice(vk::PhysicalDevice physical_device, vk::SurfaceKHR surface);
+
   vk::PhysicalDevice physical_device_;
   vk::PhysicalDeviceLimits physical_device_limits_;
   vk::PhysicalDeviceFeatures physical_device_features_;

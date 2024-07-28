@@ -29,8 +29,12 @@ struct TranscodeFormat {
   ktx_transcode_fmt_e ktx_transcode_format = KTX_TTF_NOSELECTION;
 };
 
-// NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
-void DestroyKtxTexture2(ktxTexture2* const ktx_texture2) noexcept { ktxTexture_Destroy(ktxTexture(ktx_texture2)); }
+ktxTexture* AsKtxTexture(ktxTexture2* const ktx_texture2) noexcept {
+  // NOLINT(cppcoreguidelines-pro-type-cstyle-cast): macro definition requires c-style cast to the ktxTexture base class
+  return ktxTexture(ktx_texture2);
+}
+
+void DestroyKtxTexture2(ktxTexture2* const ktx_texture2) noexcept { ktxTexture_Destroy(AsKtxTexture(ktx_texture2)); }
 using UniqueKtxTexture2 = std::unique_ptr<ktxTexture2, decltype(&DestroyKtxTexture2)>;
 
 constexpr TranscodeFormat kBc1TranscodeFormat{.srgb_format = vk::Format::eBc1RgbSrgbBlock,
@@ -197,7 +201,7 @@ UniqueKtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::path& im
   // TODO(matthew-rister): implement runtime mipmap generation for raw images
   const auto size_bytes = static_cast<ktx_size_t>(width) * height * channels;
   if (const auto result = ktxTexture_SetImageFromMemory(
-          ktxTexture(ktx_texture2.get()),  // NOLINT(cppcoreguidelines-pro-type-cstyle-cast)
+          AsKtxTexture(ktx_texture2.get()),
           0,
           0,
           KTX_FACESLICE_WHOLE_LEVEL,

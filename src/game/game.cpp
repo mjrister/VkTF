@@ -9,19 +9,21 @@ namespace {
 constexpr auto kWindowWidth4k = 3840;
 constexpr auto kWindowHeight4k = 2160;
 
+gfx::ViewFrustum CreateViewFrustum(const float aspect_ratio) {
+  static constexpr auto kFieldOfViewY = glm::radians(45.0f);
+  static constexpr auto kZNear = 0.1f;
+  static constexpr auto kZFar = 1.0e6f;
+  return gfx::ViewFrustum{.field_of_view_y = kFieldOfViewY,
+                          .aspect_ratio = aspect_ratio,
+                          .z_near = kZNear,
+                          .z_far = kZFar};
+};
+
 gfx::Camera CreateCamera(const float aspect_ratio) {
   static constexpr glm::vec3 kPosition{0.0f, 1.0f, 0.0f};
   static constexpr glm::vec3 kDirection{1.0f, 0.0f, 0.0f};
-  return gfx::Camera{
-      kPosition,
-      kDirection,
-      // NOLINTBEGIN(*-magic-numbers)
-      gfx::ViewFrustum{.field_of_view_y = glm::radians(45.0f),
-                       .aspect_ratio = aspect_ratio,
-                       .z_near = 0.1f,
-                       .z_far = 10'000.0f}
-      // NOLINTEND(*-magic-numbers)
-  };
+  const auto view_frustum = CreateViewFrustum(aspect_ratio);
+  return gfx::Camera{kPosition, kDirection, view_frustum};
 }
 
 void HandleKeyEvents(const gfx::Window& window, gfx::Camera& camera, const gfx::DeltaTime& delta_time) {

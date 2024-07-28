@@ -18,7 +18,7 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
 #include "game/game.h"
 
-int main() {  // NOLINT(bugprone-exception-escape)
+int main() {  // NOLINT(bugprone-exception-escape): std::cerr is not configured to throw exceptions
   try {
     gfx::Game game;
     game.Start();
