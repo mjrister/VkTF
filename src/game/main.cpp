@@ -15,8 +15,9 @@
 #include <vulkan/vulkan.hpp>
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 #endif
+#include <vulkan/vulkan_static_assertions.hpp>
 
-#include "game/game.h"
+import game;
 
 int main() {  // NOLINT(bugprone-exception-escape): std::cerr is not configured to throw exceptions
   try {

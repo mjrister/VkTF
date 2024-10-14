@@ -1,12 +1,47 @@
-#include "graphics/swapchain.h"
+module;
 
 #include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstdint>
 #include <limits>
+#include <ranges>
+#include <vector>
 
-#include "graphics/physical_device.h"
+#include <vulkan/vulkan.hpp>
+
+export module swapchain;
+
+import physical_device;
+
+namespace gfx {
+
+export class Swapchain {
+public:
+  Swapchain(vk::SurfaceKHR surface,
+            vk::PhysicalDevice physical_device,
+            vk::Device device,
+            vk::Extent2D image_extent,
+            const QueueFamilyIndices& queue_family_indices);
+
+  [[nodiscard]] vk::SwapchainKHR operator*() const noexcept { return *swapchain_; }
+
+  [[nodiscard]] vk::Format image_format() const noexcept { return image_format_; }
+  [[nodiscard]] vk::Extent2D image_extent() const noexcept { return image_extent_; }
+  [[nodiscard]] std::ranges::view auto image_views() const {
+    return image_views_ | std::views::transform([](const auto& image_view) { return *image_view; });
+  }
+
+private:
+  vk::UniqueSwapchainKHR swapchain_;
+  vk::Format image_format_ = vk::Format::eUndefined;
+  vk::Extent2D image_extent_;
+  std::vector<vk::UniqueImageView> image_views_;
+};
+
+}  // namespace gfx
+
+module :private;
 
 namespace {
 
@@ -45,9 +80,9 @@ vk::Extent2D GetSwapchainImageExtent(const vk::SurfaceCapabilitiesKHR& surface_c
       surface_capabilities.currentExtent != vk::Extent2D{.width = kUndefinedExtent, .height = kUndefinedExtent}) {
     return surface_capabilities.currentExtent;
   }
-  const auto [min_image_width, min_image_height] = surface_capabilities.minImageExtent;
-  const auto [max_image_width, max_image_height] = surface_capabilities.maxImageExtent;
-  const auto [framebuffer_width, framebuffer_height] = framebuffer_extent;
+  const auto& [min_image_width, min_image_height] = surface_capabilities.minImageExtent;
+  const auto& [max_image_width, max_image_height] = surface_capabilities.maxImageExtent;
+  const auto& [framebuffer_width, framebuffer_height] = framebuffer_extent;
   return vk::Extent2D{.width = std::clamp(framebuffer_width, min_image_width, max_image_width),
                       .height = std::clamp(framebuffer_height, min_image_height, max_image_height)};
 }
@@ -72,9 +107,9 @@ std::vector<vk::UniqueImageView> CreateSwapchainImageViews(const vk::Device devi
 
 namespace gfx {
 
-Swapchain::Swapchain(const vk::Device device,
+Swapchain::Swapchain(const vk::SurfaceKHR surface,
                      const vk::PhysicalDevice physical_device,
-                     const vk::SurfaceKHR surface,
+                     const vk::Device device,
                      const vk::Extent2D image_extent,
                      const QueueFamilyIndices& queue_family_indices) {
   const auto surface_capabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
@@ -91,7 +126,7 @@ Swapchain::Swapchain(const vk::Device device,
       .presentMode = GetSwapchainPresentMode(physical_device, surface),
       .clipped = vk::True};
 
-  const auto [graphics_index, present_index] = queue_family_indices;
+  const auto& [graphics_index, present_index] = queue_family_indices;
   const std::array graphics_and_present_index{graphics_index, present_index};
   if (graphics_index != present_index) {
     swapchain_create_info.imageSharingMode = vk::SharingMode::eConcurrent;

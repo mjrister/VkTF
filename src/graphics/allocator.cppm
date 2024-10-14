@@ -1,6 +1,39 @@
-#include "graphics/allocator.h"
+module;
 
-#include "graphics/instance.h"
+#include <utility>
+
+#include <vk_mem_alloc.h>
+#include <vulkan/vulkan.hpp>
+
+export module allocator;
+
+import instance;
+
+namespace gfx {
+
+export class Allocator {
+public:
+  Allocator(vk::Instance instance, vk::PhysicalDevice physical_device, vk::Device device);
+
+  Allocator(const Allocator&) = delete;
+  Allocator(Allocator&& allocator) noexcept { *this = std::move(allocator); }
+
+  Allocator& operator=(const Allocator&) = delete;
+  Allocator& operator=(Allocator&& allocator) noexcept;
+
+  ~Allocator() noexcept { vmaDestroyAllocator(allocator_); }
+
+  [[nodiscard]] VmaAllocator operator*() const noexcept { return allocator_; }
+
+private:
+  VmaAllocator allocator_ = nullptr;
+};
+
+export constexpr VmaAllocationCreateInfo kDefaultAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO};
+
+}  // namespace gfx
+
+module :private;
 
 namespace {
 
@@ -43,15 +76,14 @@ namespace gfx {
 
 Allocator::Allocator(const vk::Instance instance, const vk::PhysicalDevice physical_device, const vk::Device device) {
   const auto vulkan_functions = GetVulkanFunctions();
-  const VmaAllocatorCreateInfo allocator_create_info{.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_PRIORITY_BIT,
-                                                     .physicalDevice = physical_device,
+  const VmaAllocatorCreateInfo allocator_create_info{.physicalDevice = physical_device,
                                                      .device = device,
                                                      .pVulkanFunctions = &vulkan_functions,
                                                      .instance = instance,
                                                      .vulkanApiVersion = Instance::kApiVersion};
 
   const auto result = vmaCreateAllocator(&allocator_create_info, &allocator_);
-  vk::resultCheck(static_cast<vk::Result>(result), "Allocator creation failed");
+  vk::detail::resultCheck(static_cast<vk::Result>(result), "Allocator creation failed");
 }
 
 Allocator& Allocator::operator=(Allocator&& allocator) noexcept {

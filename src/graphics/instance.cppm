@@ -1,9 +1,31 @@
-#include "graphics/instance.h"
+module;
 
 #include <cstdint>
 #include <initializer_list>
 
-#include "graphics/window.h"
+#include <vulkan/vulkan.hpp>
+
+export module instance;
+
+import window;
+
+namespace gfx {
+
+export class Instance {
+public:
+  static constexpr auto kApiVersion = vk::ApiVersion13;
+
+  Instance();
+
+  [[nodiscard]] vk::Instance operator*() const noexcept { return *instance_; }
+
+private:
+  vk::UniqueInstance instance_;
+};
+
+}  // namespace gfx
+
+module :private;
 
 namespace gfx {
 
@@ -14,7 +36,7 @@ Instance::Instance() {
 #endif
 
   static constexpr vk::ApplicationInfo kApplicationInfo{.apiVersion = kApiVersion};
-  static constexpr std::initializer_list<const char* const> kInstanceLayers{
+  static constexpr std::initializer_list<const char* const> kInstanceLayers = {
 #ifndef NDEBUG
       "VK_LAYER_KHRONOS_validation"
 #endif

@@ -1,12 +1,60 @@
-#include "graphics/window.h"
+module;
 
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <format>
 #include <iostream>
+#include <memory>
 #include <print>
 #include <stdexcept>
+#include <utility>
+
+#include <GLFW/glfw3.h>
+#ifdef GLFW_INCLUDE_VULKAN
+#include <vulkan/vulkan.hpp>
+#endif
+
+export module window;
+
+namespace gfx {
+
+using GlfwWindow = std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)>;
+
+export class Window {
+public:
+  Window(const char* title, int width, int height);
+
+  [[nodiscard]] std::pair<int, int> GetSize() const noexcept;
+  [[nodiscard]] std::pair<int, int> GetFramebufferSize() const noexcept;
+  [[nodiscard]] float GetAspectRatio() const noexcept;
+  [[nodiscard]] std::pair<float, float> GetCursorPosition() const noexcept;
+
+  [[nodiscard]] bool IsKeyPressed(const int key) const noexcept {
+    return glfwGetKey(glfw_window_.get(), key) == GLFW_PRESS;
+  }
+
+  [[nodiscard]] bool IsMouseButtonPressed(const int button) const noexcept {
+    return glfwGetMouseButton(glfw_window_.get(), button) == GLFW_PRESS;
+  }
+
+  [[nodiscard]] bool ShouldClose() const noexcept { return glfwWindowShouldClose(glfw_window_.get()) == GLFW_TRUE; }
+  void Close() const noexcept { glfwSetWindowShouldClose(glfw_window_.get(), GLFW_TRUE); }
+
+  static void Update() noexcept { glfwPollEvents(); }
+
+#ifdef GLFW_INCLUDE_VULKAN
+  [[nodiscard]] static std::span<const char* const> GetInstanceExtensions();
+  [[nodiscard]] vk::UniqueSurfaceKHR CreateSurface(vk::Instance instance) const;
+#endif
+
+private:
+  GlfwWindow glfw_window_{nullptr, nullptr};
+};
+
+}  // namespace gfx
+
+module :private;
 
 namespace {
 
@@ -37,7 +85,7 @@ private:
     }
 #ifdef GLFW_INCLUDE_VULKAN
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);  // TODO(#50): enable after implementing swapchain recreation
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);  // TODO(matthew-rister): enable after implementing swapchain recreation
 #endif
   }
 };
@@ -70,27 +118,25 @@ Window::Window(const char* const title, int width, int height) {
   width = std::min(width, video_mode->width);
   height = std::min(height, video_mode->height);
 
-  window_ = std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)>{
-      glfwCreateWindow(width, height, title, nullptr, nullptr),
-      glfwDestroyWindow};
-  if (window_ == nullptr) throw std::runtime_error{"GLFW window creation failed"};
+  glfw_window_ = GlfwWindow{glfwCreateWindow(width, height, title, nullptr, nullptr), glfwDestroyWindow};
+  if (glfw_window_ == nullptr) throw std::runtime_error{"GLFW window creation failed"};
 
   const auto center_x = (video_mode->width - width) / 2;
   const auto center_y = (video_mode->height - height) / 2;
-  glfwSetWindowPos(window_.get(), center_x, center_y);
+  glfwSetWindowPos(glfw_window_.get(), center_x, center_y);
 }
 
 std::pair<int, int> Window::GetSize() const noexcept {
-  int width = 0;
-  int height = 0;
-  glfwGetWindowSize(window_.get(), &width, &height);
+  auto width = 0;
+  auto height = 0;
+  glfwGetWindowSize(glfw_window_.get(), &width, &height);
   return std::pair{width, height};
 }
 
 std::pair<int, int> Window::GetFramebufferSize() const noexcept {
-  int width = 0;
-  int height = 0;
-  glfwGetFramebufferSize(window_.get(), &width, &height);
+  auto width = 0;
+  auto height = 0;
+  glfwGetFramebufferSize(glfw_window_.get(), &width, &height);
   return std::pair{width, height};
 }
 
@@ -100,9 +146,9 @@ float Window::GetAspectRatio() const noexcept {
 }
 
 std::pair<float, float> Window::GetCursorPosition() const noexcept {
-  double x = 0.0;
-  double y = 0.0;
-  glfwGetCursorPos(window_.get(), &x, &y);
+  auto x = 0.0;
+  auto y = 0.0;
+  glfwGetCursorPos(glfw_window_.get(), &x, &y);
   return std::pair{static_cast<float>(x), static_cast<float>(y)};
 }
 
@@ -117,8 +163,8 @@ std::span<const char* const> Window::GetInstanceExtensions() {
 
 vk::UniqueSurfaceKHR Window::CreateSurface(const vk::Instance instance) const {
   VkSurfaceKHR surface = nullptr;
-  const auto result = glfwCreateWindowSurface(instance, window_.get(), nullptr, &surface);
-  vk::resultCheck(static_cast<vk::Result>(result), "Window surface creation failed");
+  const auto result = glfwCreateWindowSurface(instance, glfw_window_.get(), nullptr, &surface);
+  vk::detail::resultCheck(static_cast<vk::Result>(result), "Window surface creation failed");
   const vk::ObjectDestroy<vk::Instance, VULKAN_HPP_DEFAULT_DISPATCHER_TYPE> deleter{instance};
   return vk::UniqueSurfaceKHR{vk::SurfaceKHR{surface}, deleter};
 }

@@ -1,4 +1,57 @@
-#include "graphics/image.h"
+module;
+
+#include <utility>
+#include <vector>
+
+#include <vk_mem_alloc.h>
+#include <vulkan/vulkan.hpp>
+
+export module image;
+
+import allocator;
+
+namespace gfx {
+
+export class Image {
+public:
+  Image(vk::Device device,
+        vk::Format format,
+        vk::Extent2D extent,
+        std::uint32_t mip_levels,
+        vk::SampleCountFlagBits sample_count,
+        vk::ImageUsageFlags usage_flags,
+        vk::ImageAspectFlagBits aspect_mask,
+        VmaAllocator allocator,
+        const VmaAllocationCreateInfo& allocation_create_info = kDefaultAllocationCreateInfo);
+
+  Image(const Image&) = delete;
+  Image(Image&& image) noexcept { *this = std::move(image); }
+
+  Image& operator=(const Image&) = delete;
+  Image& operator=(Image&& image) noexcept;
+
+  ~Image() noexcept;
+
+  [[nodiscard]] vk::ImageView image_view() const noexcept { return *image_view_; }
+  [[nodiscard]] vk::Format format() const noexcept { return format_; }
+
+  void Copy(vk::Buffer buffer,
+            const std::vector<vk::BufferImageCopy>& buffer_image_copies,
+            vk::CommandBuffer command_buffer) const;
+
+private:
+  vk::Image image_;
+  vk::UniqueImageView image_view_;
+  vk::Format format_ = vk::Format::eUndefined;
+  std::uint32_t mip_levels_ = 0;
+  vk::ImageAspectFlagBits aspect_mask_ = vk::ImageAspectFlagBits::eNone;
+  VmaAllocator allocator_ = nullptr;
+  VmaAllocation allocation_ = nullptr;
+};
+
+}  // namespace gfx
+
+module :private;
 
 namespace {
 
@@ -8,9 +61,9 @@ void TransitionImageLayout(const vk::Image image,
                            const std::pair<vk::AccessFlags, vk::AccessFlags>& access_masks,
                            const std::pair<vk::ImageLayout, vk::ImageLayout>& image_layouts,
                            const vk::CommandBuffer command_buffer) {
-  const auto [src_stage_mask, dst_stage_mask] = stage_masks;
-  const auto [src_access_mask, dst_access_mask] = access_masks;
-  const auto [old_layout, new_layout] = image_layouts;
+  const auto& [src_stage_mask, dst_stage_mask] = stage_masks;
+  const auto& [src_access_mask, dst_access_mask] = access_masks;
+  const auto& [old_layout, new_layout] = image_layouts;
 
   command_buffer.pipelineBarrier(src_stage_mask,
                                  dst_stage_mask,
@@ -35,7 +88,7 @@ Image::Image(const vk::Device device,
              const std::uint32_t mip_levels,
              const vk::SampleCountFlagBits sample_count,
              const vk::ImageUsageFlags usage_flags,
-             const vk::ImageAspectFlags aspect_mask,
+             const vk::ImageAspectFlagBits aspect_mask,
              const VmaAllocator allocator,
              const VmaAllocationCreateInfo& allocation_create_info)
     : format_{format}, mip_levels_{mip_levels}, aspect_mask_{aspect_mask}, allocator_{allocator} {
@@ -52,7 +105,7 @@ Image::Image(const vk::Device device,
   VkImage image = nullptr;
   const auto result =
       vmaCreateImage(allocator_, &image_create_info, &allocation_create_info, &image, &allocation_, nullptr);
-  vk::resultCheck(static_cast<vk::Result>(result), "Image creation failed");
+  vk::detail::resultCheck(static_cast<vk::Result>(result), "Image creation failed");
   image_ = vk::Image{image};
 
   image_view_ = device.createImageViewUnique(vk::ImageViewCreateInfo{
@@ -80,9 +133,9 @@ Image::~Image() noexcept {
   }
 }
 
-void Image::Copy(const vk::Buffer src_buffer,
-                 const vk::CommandBuffer command_buffer,
-                 const std::vector<vk::BufferImageCopy>& buffer_image_copies) const {
+void Image::Copy(const vk::Buffer buffer,
+                 const std::vector<vk::BufferImageCopy>& buffer_image_copies,
+                 const vk::CommandBuffer command_buffer) const {
   const vk::ImageSubresourceRange image_subresource_range{.aspectMask = aspect_mask_,
                                                           .levelCount = mip_levels_,
                                                           .layerCount = 1};
@@ -94,7 +147,7 @@ void Image::Copy(const vk::Buffer src_buffer,
                         std::pair{vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal},
                         command_buffer);
 
-  command_buffer.copyBufferToImage(src_buffer, image_, vk::ImageLayout::eTransferDstOptimal, buffer_image_copies);
+  command_buffer.copyBufferToImage(buffer, image_, vk::ImageLayout::eTransferDstOptimal, buffer_image_copies);
 
   TransitionImageLayout(image_,
                         image_subresource_range,

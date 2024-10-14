@@ -1,18 +1,78 @@
-#include "graphics/engine.h"
+module;
 
 #include <algorithm>
+#include <array>
 #include <cassert>
+#include <concepts>
 #include <cstdint>
+#include <filesystem>
 #include <limits>
 #include <ranges>
 #include <stdexcept>
+#include <vector>
 
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.hpp>
 
-#include "graphics/camera.h"
-#include "graphics/model.h"
-#include "graphics/window.h"
+export module engine;
+
+import allocator;
+import buffer;
+import camera;
+import delta_time;
+import device;
+import image;
+import instance;
+import physical_device;
+import scene;
+import swapchain;
+import window;
+
+namespace gfx {
+
+export class Engine {
+public:
+  explicit Engine(const Window& window);
+
+  [[nodiscard]] Scene Load(const std::filesystem::path& asset_filepath) const;
+
+  void Run(const Window& window, std::invocable<DeltaTime> auto&& main_loop_fn) const {
+    for (DeltaTime delta_time; !window.ShouldClose();) {
+      delta_time.Update();
+      window.Update();
+      main_loop_fn(delta_time);
+    }
+    device_->waitIdle();
+  }
+
+  void Render(const Scene& scene, const Camera& camera);
+
+private:
+  static constexpr std::size_t kMaxRenderFrames = 2;
+  std::size_t current_frame_index_ = 0;
+  Instance instance_;
+  vk::UniqueSurfaceKHR surface_;
+  PhysicalDevice physical_device_;
+  Device device_;
+  Allocator allocator_;
+  Swapchain swapchain_;
+  vk::SampleCountFlagBits msaa_sample_count_ = vk::SampleCountFlagBits::e1;
+  Image color_attachment_;
+  Image depth_attachment_;
+  vk::UniqueRenderPass render_pass_;
+  std::vector<vk::UniqueFramebuffer> framebuffers_;
+  vk::Queue graphics_queue_;
+  vk::Queue present_queue_;
+  vk::UniqueCommandPool draw_command_pool_;
+  std::vector<vk::UniqueCommandBuffer> draw_command_buffers_;
+  std::array<vk::UniqueFence, kMaxRenderFrames> draw_fences_;
+  std::array<vk::UniqueSemaphore, kMaxRenderFrames> acquire_next_image_semaphores_;
+  std::array<vk::UniqueSemaphore, kMaxRenderFrames> present_image_semaphores_;
+};
+
+}  // namespace gfx
+
+module :private;
 
 namespace {
 
@@ -22,31 +82,36 @@ vk::Extent2D GetFrameBufferExtent(const gfx::Window& window) {
 }
 
 vk::SampleCountFlagBits GetMsaaSampleCount(const vk::PhysicalDeviceLimits& physical_device_limits) {
+  using enum vk::SampleCountFlagBits;
+  static constexpr auto kTargetSampleCountFlagBits = {e8, e4, e2, e1};
+
   const auto color_sample_count_flags = physical_device_limits.framebufferColorSampleCounts;
   const auto depth_sample_count_flags = physical_device_limits.framebufferDepthSampleCounts;
   const auto color_depth_sample_count_flags = color_sample_count_flags & depth_sample_count_flags;
 
-  using enum vk::SampleCountFlagBits;
-  for (const auto sample_count_flag_bit : {e8, e4, e2}) {
-    if (color_depth_sample_count_flags & sample_count_flag_bit) {
-      return sample_count_flag_bit;
-    }
-  }
+  const auto iterator =
+      std::ranges::find_if(kTargetSampleCountFlagBits,
+                           [color_depth_sample_count_flags](const auto sample_count_flag_bit) {
+                             return static_cast<bool>(sample_count_flag_bit & color_depth_sample_count_flags);
+                           });
 
-  assert(color_depth_sample_count_flags & e1);
-  return e1;
+  assert(iterator != std::cend(kTargetSampleCountFlagBits));  // at least one sample count is required
+  return *iterator;
 }
 
 vk::Format GetDepthAttachmentFormat(const vk::PhysicalDevice physical_device) {
   using enum vk::Format;
-  static constexpr std::array kTargetFormats{eD32Sfloat, eD32SfloatS8Uint, eD24UnormS8Uint, eD16Unorm, eD16UnormS8Uint};
-  for (const auto format : kTargetFormats) {
-    if (const auto format_properties = physical_device.getFormatProperties(format);
-        format_properties.optimalTilingFeatures & vk::FormatFeatureFlagBits::eDepthStencilAttachment) {
-      return format;
-    }
-  }
-  throw std::runtime_error{"No supported depth attachment format"};
+  static constexpr auto kTargetDepthAttachmentFormats = {eD32Sfloat, eX8D24UnormPack32, eD16Unorm};
+
+  const auto iterator = std::ranges::find_if(kTargetDepthAttachmentFormats, [physical_device](const auto format) {
+    const auto optimal_tiling_features = physical_device.getFormatProperties(format).optimalTilingFeatures;
+    return static_cast<bool>(optimal_tiling_features & vk::FormatFeatureFlagBits::eDepthStencilAttachment);
+  });
+
+  // the Vulkan specification requires VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT support for VK_FORMAT_D16_UNORM
+  // and at least one of VK_FORMAT_X8_D24_UNORM_PACK32 and VK_FORMAT_D32_SFLOAT
+  assert(iterator != std::cend(kTargetDepthAttachmentFormats));
+  return *iterator;
 }
 
 vk::UniqueRenderPass CreateRenderPass(const vk::Device device,
@@ -140,34 +205,21 @@ std::vector<vk::UniqueFramebuffer> CreateFramebuffers(const vk::Device device,
          | std::ranges::to<std::vector>();
 }
 
-vk::UniqueCommandPool CreateCommandPool(const vk::Device& device, const gfx::QueueFamilyIndices& queue_family_indices) {
-  return device.createCommandPoolUnique(
-      vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-                                .queueFamilyIndex = queue_family_indices.graphics_index});
-}
-
-template <std::size_t N>
-std::vector<vk::UniqueCommandBuffer> AllocateCommandBuffers(const vk::Device device,
-                                                            const vk::CommandPool command_pool) {
-  return device.allocateCommandBuffersUnique(vk::CommandBufferAllocateInfo{.commandPool = command_pool,
-                                                                           .level = vk::CommandBufferLevel::ePrimary,
-                                                                           .commandBufferCount = N});
-}
-
-template <std::size_t N>
-std::array<vk::UniqueSemaphore, N> CreateSemaphores(const vk::Device device) {
-  std::array<vk::UniqueSemaphore, N> semaphores;
-  std::ranges::generate(semaphores, [device] { return device.createSemaphoreUnique(vk::SemaphoreCreateInfo{}); });
-  return semaphores;
-}
-
-template <std::size_t N>
-std::array<vk::UniqueFence, N> CreateFences(const vk::Device device) {
-  std::array<vk::UniqueFence, N> fences;
+template <std::size_t MaxRenderFrames>
+std::array<vk::UniqueFence, MaxRenderFrames> CreateFences(const vk::Device device) {
+  std::array<vk::UniqueFence, MaxRenderFrames> fences;
   std::ranges::generate(fences, [device] {
+    // create the fence in a signaled state to avoid waiting on the first frame
     return device.createFenceUnique(vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled});
   });
   return fences;
+}
+
+template <std::size_t MaxRenderFrames>
+std::array<vk::UniqueSemaphore, MaxRenderFrames> CreateSemaphores(const vk::Device device) {
+  std::array<vk::UniqueSemaphore, MaxRenderFrames> semaphores;
+  std::ranges::generate(semaphores, [device] { return device.createSemaphoreUnique(vk::SemaphoreCreateInfo{}); });
+  return semaphores;
 }
 
 }  // namespace
@@ -179,9 +231,9 @@ Engine::Engine(const Window& window)
       physical_device_{*instance_, *surface_},
       device_{physical_device_},
       allocator_{*instance_, *physical_device_, *device_},
-      swapchain_{*device_,
+      swapchain_{*surface_,
                  *physical_device_,
-                 *surface_,
+                 *device_,
                  GetFrameBufferExtent(window),
                  physical_device_.queue_family_indices()},
       msaa_sample_count_{GetMsaaSampleCount(physical_device_.limits())},
@@ -216,33 +268,43 @@ Engine::Engine(const Window& window)
                                        depth_attachment_.image_view())},
       graphics_queue_{device_->getQueue(physical_device_.queue_family_indices().graphics_index, 0)},
       present_queue_{device_->getQueue(physical_device_.queue_family_indices().present_index, 0)},
-      command_pool_{CreateCommandPool(*device_, physical_device_.queue_family_indices())},
-      command_buffers_{AllocateCommandBuffers<kMaxRenderFrames>(*device_, *command_pool_)},
+      draw_command_pool_{device_->createCommandPoolUnique(
+          vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+                                    .queueFamilyIndex = physical_device_.queue_family_indices().graphics_index})},
+      draw_command_buffers_{
+          device_->allocateCommandBuffersUnique(vk::CommandBufferAllocateInfo{.commandPool = *draw_command_pool_,
+                                                                              .level = vk::CommandBufferLevel::ePrimary,
+                                                                              .commandBufferCount = kMaxRenderFrames})},
+      draw_fences_{CreateFences<kMaxRenderFrames>(*device_)},
       acquire_next_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)},
-      present_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)},
-      draw_fences_{CreateFences<kMaxRenderFrames>(*device_)} {}
+      present_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)} {}
 
-Model Engine::LoadModel(const std::filesystem::path& gltf_filepath) const {
-  // TODO(matthew-rister): throw an exception for unsupported file formats
-  return Model{gltf_filepath,
-               physical_device_.features(),
-               physical_device_.limits(),
-               *physical_device_,
-               *device_,
-               graphics_queue_,  // TODO(matthew-rister): prefer a dedicated transfer queue
-               physical_device_.queue_family_indices().graphics_index,
-               swapchain_.image_extent(),
-               msaa_sample_count_,
-               *render_pass_,
-               *allocator_};
+Scene Engine::Load(const std::filesystem::path& asset_filepath) const {
+  // TODO(matthew-rister): add support for loading .glb files
+  if (const auto extension = asset_filepath.extension(); extension != ".gltf") {
+    throw std::runtime_error{std::format("Unsupported file extension: {}", extension.string())};
+  }
+  return Scene{
+      asset_filepath,
+      SubmitCopyCommandsOptions{.device = *device_,
+                                // TODO(matthew-rister): use a dedicated transfer queue to copy assets to device memory
+                                .transfer_queue = graphics_queue_,
+                                .transfer_queue_family_index = physical_device_.queue_family_indices().graphics_index,
+                                .allocator = *allocator_},
+      CreateTextureOptions{.physical_device = *physical_device_,
+                           .enable_sampler_anisotropy = physical_device_.features().samplerAnisotropy,
+                           .max_sampler_anisotropy = physical_device_.limits().maxSamplerAnisotropy},
+      CreateGraphicsPipelineOptions{.viewport_extent = swapchain_.image_extent(),
+                                    .msaa_sample_count = msaa_sample_count_,
+                                    .render_pass = *render_pass_}};
 }
 
-void Engine::Render(const Camera& camera, const Model& model) {
+void Engine::Render(const Scene& scene, const Camera& camera) {
   if (++current_frame_index_ == kMaxRenderFrames) {
     current_frame_index_ = 0;
   }
 
-  // NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index): current frame index validated prior to indexing
+  // NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index): index guaranteed to be within array bounds
   const auto draw_fence = *draw_fences_[current_frame_index_];
   const auto acquire_next_image_semaphore = *acquire_next_image_semaphores_[current_frame_index_];
   const auto present_image_semaphore = *present_image_semaphores_[current_frame_index_];
@@ -250,21 +312,22 @@ void Engine::Render(const Camera& camera, const Model& model) {
 
   static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
   auto result = device_->waitForFences(draw_fence, vk::True, kMaxTimeout);
-  vk::resultCheck(result, "Fence failed to enter a signaled state");
+  vk::detail::resultCheck(result, "Draw fence failed to enter a signaled state");
   device_->resetFences(draw_fence);
 
   std::uint32_t image_index = 0;
   std::tie(result, image_index) = device_->acquireNextImageKHR(*swapchain_, kMaxTimeout, acquire_next_image_semaphore);
-  vk::resultCheck(result, "Acquire next swapchain image failed");
-
-  const auto command_buffer = *command_buffers_[current_frame_index_];
-  command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+  vk::detail::resultCheck(result, "Acquire next swapchain image failed");
 
   static constexpr std::array kClearColor{0.0f, 0.0f, 0.0f, 1.0f};
   static constexpr std::array kClearValues{vk::ClearValue{.color = vk::ClearColorValue{kClearColor}},
                                            vk::ClearValue{.color = vk::ClearColorValue{kClearColor}},
                                            vk::ClearValue{.depthStencil = vk::ClearDepthStencilValue{1.0f, 0}}};
-  command_buffer.beginRenderPass(
+
+  const auto draw_command_buffer = *draw_command_buffers_[current_frame_index_];
+  draw_command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+
+  draw_command_buffer.beginRenderPass(
       vk::RenderPassBeginInfo{
           .renderPass = *render_pass_,
           .framebuffer = *framebuffers_[image_index],
@@ -273,17 +336,17 @@ void Engine::Render(const Camera& camera, const Model& model) {
           .pClearValues = kClearValues.data()},
       vk::SubpassContents::eInline);
 
-  model.Render(camera, command_buffer);
+  scene.Render(camera, draw_command_buffer);
 
-  command_buffer.endRenderPass();
-  command_buffer.end();
+  draw_command_buffer.endRenderPass();
+  draw_command_buffer.end();
 
   static constexpr vk::PipelineStageFlags kPipelineWaitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
   graphics_queue_.submit(vk::SubmitInfo{.waitSemaphoreCount = 1,
                                         .pWaitSemaphores = &acquire_next_image_semaphore,
                                         .pWaitDstStageMask = &kPipelineWaitStage,
                                         .commandBufferCount = 1,
-                                        .pCommandBuffers = &command_buffer,
+                                        .pCommandBuffers = &draw_command_buffer,
                                         .signalSemaphoreCount = 1,
                                         .pSignalSemaphores = &present_image_semaphore},
                          draw_fence);
@@ -294,7 +357,7 @@ void Engine::Render(const Camera& camera, const Model& model) {
                                                         .swapchainCount = 1,
                                                         .pSwapchains = &swapchain,
                                                         .pImageIndices = &image_index});
-  vk::resultCheck(result, "Present swapchain image failed");
+  vk::detail::resultCheck(result, "Present swapchain image failed");
 }
 
 }  // namespace gfx

@@ -1,11 +1,39 @@
-#include "game/game.h"
+module;
 
+#include <filesystem>
 #include <optional>
 
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 
+export module game;
+
+import camera;
+import engine;
+import scene;
+import window;
+
+namespace gfx {
+
+export class Game {
+public:
+  Game();
+
+  void Start();
+
+private:
+  Window window_;
+  Engine engine_;
+  Scene scene_;
+  Camera camera_;
+};
+
+}  // namespace gfx
+
+module :private;
+
 namespace {
+
 constexpr auto kWindowWidth4k = 3840;
 constexpr auto kWindowHeight4k = 2160;
 
@@ -63,14 +91,14 @@ namespace gfx {
 Game::Game()
     : window_{"VkRender", kWindowWidth4k, kWindowHeight4k},
       engine_{window_},
-      camera_{CreateCamera(window_.GetAspectRatio())},
-      model_{engine_.LoadModel("assets/models/sponza/Main.1_Sponza/NewSponza_Main_glTF_002.gltf")} {}
+      scene_{engine_.Load(std::filesystem::path{"assets/models/sponza/Main.1_Sponza/NewSponza_Main_glTF_002.gltf"})},
+      camera_{CreateCamera(window_.GetAspectRatio())} {}
 
 void Game::Start() {
   engine_.Run(window_, [this](const auto delta_time) {
     HandleKeyEvents(window_, camera_, delta_time);
     HandleMouseEvents(window_, camera_);
-    engine_.Render(camera_, model_);
+    engine_.Render(scene_, camera_);
   });
 }
 

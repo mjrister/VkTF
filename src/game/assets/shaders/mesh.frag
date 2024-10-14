@@ -1,11 +1,15 @@
 #version 460
 
-layout(binding = 0, set = 0) uniform sampler2D base_color_sampler;
+const int kBaseColorSamplerIndex = 0;
+const int kMetallicRougnessSamplerIndex = 1;
+const int kMaxSamplers = 2;
+
+layout(set = 0, binding = 0) uniform sampler2D material_samplers[kMaxSamplers];
 
 layout(location = 0) in Vertex {
   vec3 position;
   vec3 normal;
-  vec2 texture_coordinates;
+  vec2 texture_coordinates_0;
 } vertex;
 
 layout(location = 0) out vec4 fragment_color;
@@ -35,6 +39,6 @@ void main() {
   const float specular_intensity = pow(max(dot(reflect_direction, view_direction), 0.0), kShininess);
 
   const vec3 light_color = (diffuse_intensity + specular_intensity) * attenuation * kPointLight.color;
-  const vec4 texture_color = texture(base_color_sampler, vertex.texture_coordinates);
-  fragment_color = vec4(kAmbientColor, 0.0) + vec4(light_color * texture_color.rgb, texture_color.a);
+  const vec4 base_color = texture(material_samplers[kBaseColorSamplerIndex], vertex.texture_coordinates_0);
+  fragment_color = vec4(kAmbientColor, 0.0) + vec4(light_color * base_color.rgb, base_color.a);
 }

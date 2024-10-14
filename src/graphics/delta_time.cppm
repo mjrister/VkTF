@@ -1,17 +1,18 @@
-#ifndef GRAPHICS_DELTA_TIME_H_
-#define GRAPHICS_DELTA_TIME_H_
+module;
 
 #include <chrono>
 
+export module delta_time;
+
 namespace gfx {
 
-class DeltaTime {
+export class DeltaTime {
   using Clock = std::chrono::steady_clock;
   using Duration = std::chrono::duration<float>;
   using TimePoint = std::chrono::time_point<Clock, Duration>;
 
 public:
-  // NOLINTNEXTLINE(google-explicit-constructor, hicpp-explicit-conversions): allow implicit conversion to float seconds
+  // NOLINTNEXTLINE(*-explicit-*): allow implicit conversion to underlying duration representation
   [[nodiscard]] operator Duration::rep() const noexcept { return delta_time_; }
 
   void Update() noexcept {
@@ -26,5 +27,3 @@ private:
 };
 
 }  // namespace gfx
-
-#endif  // GRAPHICS_DELTA_TIME_H_

@@ -1,26 +1,28 @@
 #version 460
 
-layout(push_constant) uniform PushConstants {
+layout(push_constant) uniform VertexTransforms {
   mat4 model_view_transform;
   mat4 projection_transform;
-} push_constants;
+} vertex_transforms;
 
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
 layout(location = 2) in vec4 tangent;
-layout(location = 3) in vec2 texture_coordinates;
+layout(location = 3) in vec2 texture_coordinates_0;
 
 layout(location = 0) out Vertex {
   vec3 position;
   vec3 normal;
-  vec2 texture_coordinates;
-} vertex;
+  vec2 texture_coordinates_0;
+ } vertex;
 
 void main() {
-  const vec4 model_view_position = push_constants.model_view_transform * vec4(position, 1.0);
-  const mat3 normal_transform = mat3(push_constants.model_view_transform);
+  const vec4 model_view_position = vertex_transforms.model_view_transform * vec4(position, 1.0);
+  const mat3 normal_transform = mat3(vertex_transforms.model_view_transform); // model-view transform assumed to be an orthogonal matrix
+
   vertex.position = model_view_position.xyz;
   vertex.normal = normalize(normal_transform * normal);
-  vertex.texture_coordinates = texture_coordinates;
-  gl_Position = push_constants.projection_transform * model_view_position;
+  vertex.texture_coordinates_0 = texture_coordinates_0;
+
+  gl_Position = vertex_transforms.projection_transform * model_view_position;
 }
