@@ -34,7 +34,7 @@ export class Engine {
 public:
   explicit Engine(const Window& window);
 
-  [[nodiscard]] Scene Load(const std::filesystem::path& asset_filepath) const;
+  [[nodiscard]] Scene Load(const std::filesystem::path& gltf_filepath) const;
 
   void Run(const Window& window, std::invocable<DeltaTime> auto&& main_loop_fn) const {
     for (DeltaTime delta_time; !window.ShouldClose();) {
@@ -82,36 +82,37 @@ vk::Extent2D GetFrameBufferExtent(const gfx::Window& window) {
 }
 
 vk::SampleCountFlagBits GetMsaaSampleCount(const vk::PhysicalDeviceLimits& physical_device_limits) {
-  using enum vk::SampleCountFlagBits;
-  static constexpr auto kTargetSampleCountFlagBits = {e8, e4, e2, e1};
-
   const auto color_sample_count_flags = physical_device_limits.framebufferColorSampleCounts;
   const auto depth_sample_count_flags = physical_device_limits.framebufferDepthSampleCounts;
   const auto color_depth_sample_count_flags = color_sample_count_flags & depth_sample_count_flags;
 
-  const auto iterator =
-      std::ranges::find_if(kTargetSampleCountFlagBits,
-                           [color_depth_sample_count_flags](const auto sample_count_flag_bit) {
-                             return static_cast<bool>(sample_count_flag_bit & color_depth_sample_count_flags);
-                           });
+  using enum vk::SampleCountFlagBits;
+  for (const auto& msaa_sample_count_bit : {e8, e4, e2}) {
+    if (msaa_sample_count_bit & color_depth_sample_count_flags) {
+      return msaa_sample_count_bit;
+    }
+  }
 
-  assert(iterator != std::cend(kTargetSampleCountFlagBits));  // at least one sample count is required
-  return *iterator;
+  assert(color_depth_sample_count_flags & e1);
+  return e1;  // multisample anti-aliasing is not supported on this device
 }
 
 vk::Format GetDepthAttachmentFormat(const vk::PhysicalDevice physical_device) {
-  using enum vk::Format;
-  static constexpr auto kTargetDepthAttachmentFormats = {eD32Sfloat, eX8D24UnormPack32, eD16Unorm};
-
-  const auto iterator = std::ranges::find_if(kTargetDepthAttachmentFormats, [physical_device](const auto format) {
-    const auto optimal_tiling_features = physical_device.getFormatProperties(format).optimalTilingFeatures;
-    return static_cast<bool>(optimal_tiling_features & vk::FormatFeatureFlagBits::eDepthStencilAttachment);
-  });
-
   // the Vulkan specification requires VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT support for VK_FORMAT_D16_UNORM
   // and at least one of VK_FORMAT_X8_D24_UNORM_PACK32 and VK_FORMAT_D32_SFLOAT
-  assert(iterator != std::cend(kTargetDepthAttachmentFormats));
-  return *iterator;
+  using enum vk::Format;
+  for (const auto& depth_attachment_format : {eD32Sfloat, eX8D24UnormPack32}) {
+    const auto format_properties = physical_device.getFormatProperties(depth_attachment_format);
+    if (format_properties.optimalTilingFeatures & vk::FormatFeatureFlagBits::eDepthStencilAttachment) {
+      return depth_attachment_format;
+    }
+  }
+
+#ifndef NDEBUG
+  const auto d16_unorm_format_properties = physical_device.getFormatProperties(eD16Unorm);
+  assert(d16_unorm_format_properties.optimalTilingFeatures & vk::FormatFeatureFlagBits::eDepthStencilAttachment);
+#endif
+  return eD16Unorm;
 }
 
 vk::UniqueRenderPass CreateRenderPass(const vk::Device device,
@@ -192,14 +193,14 @@ std::vector<vk::UniqueFramebuffer> CreateFramebuffers(const vk::Device device,
                                                       const vk::ImageView color_attachment,
                                                       const vk::ImageView depth_attachment) {
   return swapchain.image_views()
-         | std::views::transform([=, extent = swapchain.image_extent()](const auto color_resolve_attachment) {
+         | std::views::transform([=, image_extent = swapchain.image_extent()](const auto color_resolve_attachment) {
              const std::array image_attachments{color_attachment, color_resolve_attachment, depth_attachment};
              return device.createFramebufferUnique(
                  vk::FramebufferCreateInfo{.renderPass = render_pass,
                                            .attachmentCount = static_cast<std::uint32_t>(image_attachments.size()),
                                            .pAttachments = image_attachments.data(),
-                                           .width = extent.width,
-                                           .height = extent.height,
+                                           .width = image_extent.width,
+                                           .height = image_extent.height,
                                            .layers = 1});
            })
          | std::ranges::to<std::vector>();
@@ -279,13 +280,13 @@ Engine::Engine(const Window& window)
       acquire_next_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)},
       present_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)} {}
 
-Scene Engine::Load(const std::filesystem::path& asset_filepath) const {
-  // TODO(matthew-rister): add support for loading .glb files
-  if (const auto extension = asset_filepath.extension(); extension != ".gltf") {
+Scene Engine::Load(const std::filesystem::path& gltf_filepath) const {
+  if (const auto extension = gltf_filepath.extension(); extension != ".gltf") {
     throw std::runtime_error{std::format("Unsupported file extension: {}", extension.string())};
   }
   return Scene{
-      asset_filepath,
+      gltf_filepath,
+      kMaxRenderFrames,
       SubmitCopyCommandsOptions{.device = *device_,
                                 // TODO(matthew-rister): use a dedicated transfer queue to copy assets to device memory
                                 .transfer_queue = graphics_queue_,
@@ -326,7 +327,6 @@ void Engine::Render(const Scene& scene, const Camera& camera) {
 
   const auto draw_command_buffer = *draw_command_buffers_[current_frame_index_];
   draw_command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-
   draw_command_buffer.beginRenderPass(
       vk::RenderPassBeginInfo{
           .renderPass = *render_pass_,
@@ -336,7 +336,7 @@ void Engine::Render(const Scene& scene, const Camera& camera) {
           .pClearValues = kClearValues.data()},
       vk::SubpassContents::eInline);
 
-  scene.Render(camera, draw_command_buffer);
+  scene.Render(camera, current_frame_index_, draw_command_buffer);
 
   draw_command_buffer.endRenderPass();
   draw_command_buffer.end();

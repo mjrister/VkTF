@@ -70,8 +70,9 @@ glm::vec3 ToCartesianCoordinates(const gfx::SphericalCoordinates& spherical_coor
 namespace gfx {
 
 Camera::Camera(const glm::vec3& position, const glm::vec3& direction, const ViewFrustum& view_frustum)
-    : position_{position}, orientation_{ToSphericalCoordinates(-direction)}, view_frustum_{view_frustum} {
+    : position_{position}, view_frustum_{view_frustum} {
   assert(glm::length(direction) > 0.0f);
+  orientation_ = ToSphericalCoordinates(-direction);  // spherical coordinates offset from the +z-axis
 }
 
 glm::mat4 Camera::GetViewTransform() const {

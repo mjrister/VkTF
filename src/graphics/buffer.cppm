@@ -32,24 +32,18 @@ public:
   [[nodiscard]] vk::Buffer operator*() const noexcept { return buffer_; }
 
   template <typename T>
-  void Copy(const DataView<const T> data_view) {
+  void Copy(const DataView<const T> data_view) const {
     assert(data_view.size_bytes() <= size_bytes_);
-    auto* mapped_memory = MapMemory();
-    memcpy(mapped_memory, data_view.data(), size_bytes_);
+    assert(mapped_memory_ != nullptr);
+    memcpy(mapped_memory_, data_view.data(), size_bytes_);
     const auto result = vmaFlushAllocation(allocator_, allocation_, 0, vk::WholeSize);
     vk::detail::resultCheck(static_cast<vk::Result>(result), "Flush allocation failed");
   }
 
-  template <typename T>
-  void CopyOnce(const DataView<const T> data_view) {
-    Copy(data_view);
-    UnmapMemory();
-  }
-
-private:
-  void* MapMemory();
+  void MapMemory();
   void UnmapMemory() noexcept;
 
+private:
   vk::Buffer buffer_;
   vk::DeviceSize size_bytes_ = 0;
   void* mapped_memory_ = nullptr;
@@ -98,12 +92,11 @@ Buffer::~Buffer() noexcept {
   }
 }
 
-void* Buffer::MapMemory() {
+void Buffer::MapMemory() {
   if (mapped_memory_ == nullptr) {
     const auto result = vmaMapMemory(allocator_, allocation_, &mapped_memory_);
     vk::detail::resultCheck(static_cast<vk::Result>(result), "Map memory failed");
   }
-  return mapped_memory_;
 }
 
 void Buffer::UnmapMemory() noexcept {

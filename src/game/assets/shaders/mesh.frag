@@ -4,7 +4,7 @@ const int kBaseColorSamplerIndex = 0;
 const int kMetallicRougnessSamplerIndex = 1;
 const int kMaxSamplers = 2;
 
-layout(set = 0, binding = 0) uniform sampler2D material_samplers[kMaxSamplers];
+layout(set = 1, binding = 0) uniform sampler2D material_samplers[kMaxSamplers];
 
 layout(location = 0) in Vertex {
   vec3 position;

@@ -1,9 +1,13 @@
 #version 460
 
-layout(push_constant) uniform VertexTransforms {
-  mat4 model_view_transform;
+layout(set = 0, binding = 0) uniform CameraTransforms {
+  mat4 view_transform;
   mat4 projection_transform;
-} vertex_transforms;
+} camera_transforms;
+
+layout(push_constant) uniform PushConstants {
+  mat4 model_transform;
+} push_constants;
 
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
@@ -17,12 +21,13 @@ layout(location = 0) out Vertex {
  } vertex;
 
 void main() {
-  const vec4 model_view_position = vertex_transforms.model_view_transform * vec4(position, 1.0);
-  const mat3 normal_transform = mat3(vertex_transforms.model_view_transform); // model-view transform assumed to be an orthogonal matrix
+  const mat4 model_view_transform = camera_transforms.view_transform * push_constants.model_transform;
+  const vec4 model_view_position = model_view_transform * vec4(position, 1.0);
+  const mat3 normal_transform = mat3(model_view_transform); // model view transform assumed to be an orthogonal matrix
 
   vertex.position = model_view_position.xyz;
   vertex.normal = normalize(normal_transform * normal);
   vertex.texture_coordinates_0 = texture_coordinates_0;
 
-  gl_Position = vertex_transforms.projection_transform * model_view_position;
+  gl_Position = camera_transforms.projection_transform * model_view_position;
 }
