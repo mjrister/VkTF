@@ -33,7 +33,6 @@ private:
 module :private;
 
 namespace {
-
 constexpr auto kWindowWidth4k = 3840;
 constexpr auto kWindowHeight4k = 2160;
 
@@ -68,10 +67,12 @@ void HandleKeyEvents(const gfx::Window& window, gfx::Camera& camera, const gfx::
 }
 
 void HandleMouseEvents(const gfx::Window& window, gfx::Camera& camera) {
-  if (static std::optional<glm::vec2> maybe_previous_cursor_position;
-      window.IsMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT)) {
+  static std::optional<glm::vec2> maybe_previous_cursor_position;
+
+  if (window.IsMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT)) {
     const auto [x, y] = window.GetCursorPosition();
     const glm::vec2 cursor_position{x, y};
+
     if (maybe_previous_cursor_position.has_value()) {
       static constexpr auto kCursorSpeed = 0.00390625f;
       const auto delta_cursor_position = cursor_position - *maybe_previous_cursor_position;
@@ -79,6 +80,7 @@ void HandleMouseEvents(const gfx::Window& window, gfx::Camera& camera) {
       camera.Rotate(rotation.x, rotation.y);
     }
     maybe_previous_cursor_position = cursor_position;
+
   } else if (maybe_previous_cursor_position.has_value()) {
     maybe_previous_cursor_position = std::nullopt;
   }

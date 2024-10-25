@@ -11,6 +11,12 @@ import instance;
 
 namespace gfx {
 
+export constexpr VmaAllocationCreateInfo kHostVisibleAllocationCreateInfo{
+    .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+    .usage = VMA_MEMORY_USAGE_AUTO};
+
+export constexpr VmaAllocationCreateInfo kDefaultAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO};
+
 export class Allocator {
 public:
   Allocator(vk::Instance instance, vk::PhysicalDevice physical_device, vk::Device device);
@@ -28,8 +34,6 @@ public:
 private:
   VmaAllocator allocator_ = nullptr;
 };
-
-export constexpr VmaAllocationCreateInfo kDefaultAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO};
 
 }  // namespace gfx
 
