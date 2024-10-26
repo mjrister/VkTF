@@ -16,18 +16,20 @@ layout(location = 3) in vec2 texture_coordinates_0;
 
 layout(location = 0) out Vertex {
   vec3 position;
-  vec3 normal;
   vec2 texture_coordinates_0;
+  mat3 normal_transform;
  } vertex;
 
 void main() {
+  // model-view transform assumed to be an orthogonal matrix
   const mat4 model_view_transform = camera_transforms.view_transform * push_constants.model_transform;
   const vec4 model_view_position = model_view_transform * vec4(position, 1.0);
-  const mat3 normal_transform = mat3(model_view_transform); // model view transform assumed to be an orthogonal matrix
+  const vec3 bitangent = cross(normal, tangent.xyz) * tangent.w;
+  const mat3 normal_transform = mat3(model_view_transform) * mat3(tangent.xyz, bitangent, normal);
 
   vertex.position = model_view_position.xyz;
-  vertex.normal = normalize(normal_transform * normal);
   vertex.texture_coordinates_0 = texture_coordinates_0;
+  vertex.normal_transform = normal_transform;
 
   gl_Position = camera_transforms.projection_transform * model_view_position;
 }

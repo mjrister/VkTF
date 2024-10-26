@@ -46,13 +46,13 @@ import shader_module;
 namespace {
 
 struct Texture {
-  std::variant<gfx::KtxTexture, gfx::Image> image;
+  std::variant<gfx::KtxTexture, gfx::Image> image;  // first loaded as a KTX texture then converted to a device image
   vk::Sampler sampler;
 };
 
 struct Material {
   std::optional<Texture> maybe_base_color_texture;
-  std::optional<Texture> maybe_metallic_roughness_texture;
+  std::optional<Texture> maybe_normal_texture;
   glm::vec4 base_color_factor{1.0f};
   float metallic_factor = 1.0f;
   float roughness_factor = 1.0f;
@@ -130,7 +130,6 @@ private:
 
 module :private;
 
-// TODO(matthew-rister): implement normal mapping
 // TODO(matthew-rister): include material properties (base color, emission) in a uniform buffer
 // TODO(matthew-rister): implement PBR metallic-roughness lighting equations
 // TODO(matthew-rister): add support for KHR_lights_punctual
@@ -585,11 +584,11 @@ std::unique_ptr<Material> CreateMaterial(const vk::Device device,
   using enum gfx::ColorSpace;
   auto maybe_base_color_texture =
       CreateTexture(device, base_color_texture, kSrgb, create_texture_options, gltf_directory, samplers);
-  auto maybe_metallic_roughness_texture =
-      CreateTexture(device, metallic_roughness_texture, kLinear, create_texture_options, gltf_directory, samplers);
+  auto maybe_normal_texture =
+      CreateTexture(device, gltf_material.normal_texture, kLinear, create_texture_options, gltf_directory, samplers);
 
   return std::make_unique<Material>(std::move(maybe_base_color_texture),
-                                    std::move(maybe_metallic_roughness_texture),
+                                    std::move(maybe_normal_texture),
                                     ToVec(base_color_factor),
                                     metallic_factor,
                                     roughness_factor);
@@ -597,14 +596,14 @@ std::unique_ptr<Material> CreateMaterial(const vk::Device device,
 
 void UpdateMaterialImages(const vk::Device device, Material& material, CopyBufferOptions& copy_buffer_options) {
   auto& maybe_base_color_texture = material.maybe_base_color_texture;
-  auto& maybe_metallic_roughness_texture = material.maybe_metallic_roughness_texture;
+  auto& maybe_normal_texture = material.maybe_normal_texture;
 
-  if (!maybe_base_color_texture.has_value() || !maybe_metallic_roughness_texture.has_value()) {
+  if (!maybe_base_color_texture.has_value() || !maybe_normal_texture.has_value()) {
     material.descriptor_set = nullptr;
-    return;  // TODO(matthew-rister): avoid requiring base color and metallic-roughness textures
+    return;  // TODO(matthew-rister): add support for optional textures
   }
 
-  for (const auto texture : {std::ref(*maybe_base_color_texture), std::ref(*maybe_metallic_roughness_texture)}) {
+  for (const auto texture : {std::ref(*maybe_base_color_texture), std::ref(*maybe_normal_texture)}) {
     auto& [image, _] = texture.get();
     const auto& ktx_texture = std::get<gfx::KtxTexture>(image);
     image = CreateImage(device, *ktx_texture, copy_buffer_options);
@@ -645,13 +644,13 @@ void UpdateMaterialDescriptorSets(const vk::Device device, const UnorderedPtrMap
     if (material->descriptor_set == nullptr) continue;
 
     const auto& maybe_base_color_texture = material->maybe_base_color_texture;
-    const auto& maybe_metallic_roughness_texture = material->maybe_metallic_roughness_texture;
+    const auto& maybe_normal_texture = material->maybe_normal_texture;
     assert(maybe_base_color_texture.has_value());
-    assert(maybe_metallic_roughness_texture.has_value());
+    assert(maybe_normal_texture.has_value());
 
-    const auto& descriptor_image_info = descriptor_image_infos.emplace_back(
-        std::initializer_list{GetDescriptorImageInfo(*maybe_base_color_texture),
-                              GetDescriptorImageInfo(*maybe_metallic_roughness_texture)});
+    const auto& descriptor_image_info =
+        descriptor_image_infos.emplace_back(std::initializer_list{GetDescriptorImageInfo(*maybe_base_color_texture),
+                                                                  GetDescriptorImageInfo(*maybe_normal_texture)});
 
     descriptor_set_writes.push_back(
         vk::WriteDescriptorSet{.dstSet = material->descriptor_set,
