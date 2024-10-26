@@ -41,6 +41,7 @@ import data_view;
 import descriptor_sets;
 import image;
 import ktx_texture;
+import mesh;
 import shader_module;
 
 namespace {
@@ -59,24 +60,8 @@ struct Material {
   vk::DescriptorSet descriptor_set;
 };
 
-struct IndexBuffer {
-  std::uint32_t index_count = 0;
-  vk::IndexType index_type = vk::IndexType::eUint16;
-  gfx::Buffer buffer;
-};
-
-struct Primitive {
-  gfx::Buffer vertex_buffer;
-  IndexBuffer index_buffer;
-  vk::DescriptorSet descriptor_set;
-};
-
-struct Mesh {
-  std::vector<Primitive> primitives;
-};
-
 struct Node {
-  const Mesh* mesh = nullptr;  // pointer lifetime is managed by the scene
+  const gfx::Mesh* mesh = nullptr;  // pointer lifetime is managed by the scene
   glm::mat4 transform{1.0f};
   std::vector<std::unique_ptr<const Node>> children;
 };
@@ -806,19 +791,21 @@ std::vector<T> UnpackIndices(const cgltf_accessor& gltf_accessor) {
   return indices;
 }
 
-IndexBuffer CreateIndexBuffer(const cgltf_accessor& gltf_accessor, CopyBufferOptions& copy_buffer_options) {
+gfx::IndexBuffer CreateIndexBuffer(const cgltf_accessor& gltf_accessor, CopyBufferOptions& copy_buffer_options) {
   switch (const auto component_size = cgltf_component_size(gltf_accessor.component_type)) {
     case 2: {
       const auto indices = UnpackIndices<std::uint16_t>(gltf_accessor);
-      return IndexBuffer{.index_count = static_cast<std::uint32_t>(indices.size()),
-                         .index_type = vk::IndexType::eUint16,
-                         .buffer = CreateBuffer(indices, vk::BufferUsageFlagBits::eIndexBuffer, copy_buffer_options)};
+      return gfx::IndexBuffer{
+          .index_count = static_cast<std::uint32_t>(indices.size()),
+          .index_type = vk::IndexType::eUint16,
+          .buffer = CreateBuffer(indices, vk::BufferUsageFlagBits::eIndexBuffer, copy_buffer_options)};
     }
     case 4: {
       const auto indices = UnpackIndices<std::uint32_t>(gltf_accessor);
-      return IndexBuffer{.index_count = static_cast<std::uint32_t>(indices.size()),
-                         .index_type = vk::IndexType::eUint32,
-                         .buffer = CreateBuffer(indices, vk::BufferUsageFlagBits::eIndexBuffer, copy_buffer_options)};
+      return gfx::IndexBuffer{
+          .index_count = static_cast<std::uint32_t>(indices.size()),
+          .index_type = vk::IndexType::eUint32,
+          .buffer = CreateBuffer(indices, vk::BufferUsageFlagBits::eIndexBuffer, copy_buffer_options)};
     }
     default: {
       static constexpr auto kBitsPerByte = 8;
@@ -827,10 +814,10 @@ IndexBuffer CreateIndexBuffer(const cgltf_accessor& gltf_accessor, CopyBufferOpt
   }
 }
 
-std::unique_ptr<const Mesh> CreateMesh(const cgltf_mesh& gltf_mesh,
-                                       const UnorderedPtrMap<cgltf_material, Material>& materials,
-                                       CopyBufferOptions& copy_buffer_options) {
-  std::vector<Primitive> primitives;
+std::unique_ptr<const gfx::Mesh> CreateMesh(const cgltf_mesh& gltf_mesh,
+                                            const UnorderedPtrMap<cgltf_material, Material>& materials,
+                                            CopyBufferOptions& copy_buffer_options) {
+  std::vector<gfx::Primitive> primitives;
   primitives.reserve(gltf_mesh.primitives_count);
 
   for (auto index = 0; const auto& gltf_primitive : std::span{gltf_mesh.primitives, gltf_mesh.primitives_count}) {
@@ -860,7 +847,7 @@ std::unique_ptr<const Mesh> CreateMesh(const cgltf_mesh& gltf_mesh,
     ++index;
   }
 
-  return std::make_unique<const Mesh>(std::move(primitives));
+  return std::make_unique<const gfx::Mesh>(std::move(primitives));
 }
 
 // ======================================================= Nodes =======================================================
@@ -873,7 +860,7 @@ glm::mat4 GetLocalTransform(const cgltf_node& gltf_node) {
 
 std::vector<std::unique_ptr<const Node>> CreateNodes(const cgltf_node* const* const gltf_nodes,
                                                      const cgltf_size gltf_nodes_count,
-                                                     const UnorderedPtrMap<cgltf_mesh, Mesh>& meshes) {
+                                                     const UnorderedPtrMap<cgltf_mesh, gfx::Mesh>& meshes) {
   return std::span{gltf_nodes, gltf_nodes_count}  //
          | std::views::transform([&meshes](const auto* const gltf_node) {
              assert(gltf_node != nullptr);
@@ -885,7 +872,7 @@ std::vector<std::unique_ptr<const Node>> CreateNodes(const cgltf_node* const* co
 }
 
 std::unique_ptr<const Node> CreateRootNode(const cgltf_data& gltf_data,
-                                           const UnorderedPtrMap<cgltf_mesh, Mesh>& meshes) {
+                                           const UnorderedPtrMap<cgltf_mesh, gfx::Mesh>& meshes) {
   const auto& gltf_scene = GetDefaultScene(gltf_data);
   return std::make_unique<const Node>(nullptr,
                                       glm::mat4{1.0f},
@@ -1026,36 +1013,19 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
 
 // ==================================================== Rendering ======================================================
 
-void Render(const Mesh& mesh,
-            const glm::mat4& model_transform,
-            const vk::PipelineLayout graphics_pipeline_layout,
-            const vk::CommandBuffer command_buffer) {
-  using ModelTransform = decltype(PushConstants::model_transform);
-  command_buffer.pushConstants<ModelTransform>(graphics_pipeline_layout,
-                                               vk::ShaderStageFlagBits::eVertex,
-                                               offsetof(PushConstants, model_transform),
-                                               model_transform);
-
-  for (const auto& [vertex_buffer, index_buffer, descriptor_set] : mesh.primitives) {
-    command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                                      graphics_pipeline_layout,
-                                      1,
-                                      descriptor_set,
-                                      nullptr);
-    command_buffer.bindVertexBuffers(0, *vertex_buffer, static_cast<vk::DeviceSize>(0));
-    command_buffer.bindIndexBuffer(*index_buffer.buffer, 0, index_buffer.index_type);
-    command_buffer.drawIndexed(index_buffer.index_count, 1, 0, 0, 0);
-  }
-}
-
 void Render(const Node& node,
             const glm::mat4& parent_transform,
             const vk::PipelineLayout graphics_pipeline_layout,
             const vk::CommandBuffer command_buffer) {
   const auto model_transform = parent_transform * node.transform;
 
-  if (node.mesh != nullptr) {
-    Render(*node.mesh, model_transform, graphics_pipeline_layout, command_buffer);
+  if (const auto* const mesh = node.mesh; mesh != nullptr) {
+    using ModelTransform = decltype(PushConstants::model_transform);
+    command_buffer.pushConstants<ModelTransform>(graphics_pipeline_layout,
+                                                 vk::ShaderStageFlagBits::eVertex,
+                                                 offsetof(PushConstants, model_transform),
+                                                 model_transform);
+    mesh->Render(graphics_pipeline_layout, command_buffer);
   }
 
   for (const auto& child_node : node.children) {

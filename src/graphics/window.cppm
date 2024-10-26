@@ -19,8 +19,6 @@ export module window;
 
 namespace gfx {
 
-using GlfwWindow = std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)>;
-
 export class Window {
 public:
   Window(const char* title, int width, int height);
@@ -49,6 +47,8 @@ public:
 #endif
 
 private:
+  using GlfwWindow = std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)>;
+
   GlfwWindow glfw_window_{nullptr, nullptr};
 };
 
