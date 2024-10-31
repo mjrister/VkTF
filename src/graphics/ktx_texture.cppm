@@ -113,7 +113,7 @@ ktx_transcode_fmt_e FindSupportedKtxTranscodeFormat(const std::array<TranscodeTa
                                                     const vk::PhysicalDevice physical_device) {
   static const auto kSupportTranscodeFormats = GetSupportedTranscodeFormats(physical_device);
   for (const auto& [srgb_format, unorm_format, ktx_transcode_format] : transcode_targets) {
-    if (const auto transcode_format = color_space == gfx::ColorSpace::kLinear ? unorm_format : srgb_format;
+    if (const auto transcode_format = color_space == gfx::ColorSpace::kSrgb ? srgb_format : unorm_format;
         kSupportTranscodeFormats.contains(transcode_format)) {
       return ktx_transcode_format;
     }

@@ -9,6 +9,7 @@ module;
 #include <filesystem>
 #include <format>
 #include <future>
+#include <initializer_list>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -53,6 +54,7 @@ struct Texture {
 
 struct Material {
   std::optional<Texture> maybe_base_color_texture;
+  std::optional<Texture> maybe_metallic_roughness_texture;
   std::optional<Texture> maybe_normal_texture;
   glm::vec4 base_color_factor{1.0f};
   float metallic_factor = 1.0f;
@@ -116,7 +118,6 @@ private:
 module :private;
 
 // TODO(matthew-rister): include material properties (base color, emission) in a uniform buffer
-// TODO(matthew-rister): implement PBR metallic-roughness lighting equations
 // TODO(matthew-rister): add support for KHR_lights_punctual
 
 template <>
@@ -311,7 +312,7 @@ gfx::Buffer CreateBuffer(const std::vector<T>& data,
 
 // ====================================================== Camera =======================================================
 
-struct CameraUniformBuffer {
+struct CameraTransforms {
   glm::mat4 view_transform{1.0f};
   glm::mat4 projection_transform{1.0f};
 };
@@ -333,10 +334,10 @@ std::unique_ptr<const gfx::DescriptorSets> CreateCameraDescriptorSets(const vk::
                                                      kDescriptorSetLayoutBindings);
 }
 
-std::vector<gfx::Buffer> CreateCameraUniformBuffers(const std::size_t max_render_frames, const VmaAllocator allocator) {
+std::vector<gfx::Buffer> CreateCameraBuffers(const std::size_t max_render_frames, const VmaAllocator allocator) {
   return std::views::iota(0u, max_render_frames)  //
          | std::views::transform([allocator](const auto /*frame_index*/) {
-             static constexpr auto kSizeBytes = sizeof(CameraUniformBuffer);
+             static constexpr auto kSizeBytes = sizeof(CameraTransforms);
              gfx::Buffer camera_uniform_buffer{kSizeBytes,
                                                vk::BufferUsageFlagBits::eUniformBuffer,
                                                allocator,
@@ -463,8 +464,8 @@ vk::Sampler CreateSampler(const vk::Device device,
 
 std::optional<gfx::KtxTexture> CreateKtxTexture(const cgltf_texture_view& gltf_texture_view,
                                                 const gfx::ColorSpace color_space,
-                                                const vk::PhysicalDevice physical_device,
-                                                const std::filesystem::path& gltf_directory) {
+                                                const std::filesystem::path& gltf_directory,
+                                                const vk::PhysicalDevice physical_device) {
   const auto* const gltf_texture = gltf_texture_view.texture;
   if (gltf_texture == nullptr) return std::nullopt;
 
@@ -474,24 +475,24 @@ std::optional<gfx::KtxTexture> CreateKtxTexture(const cgltf_texture_view& gltf_t
     return std::nullopt;
   }
 
-  const std::filesystem::path gltf_image_filepath = gltf_image->uri == nullptr ? "" : gltf_image->uri;
-  if (gltf_image_filepath.empty()) {
+  const std::filesystem::path gltf_image_uri = gltf_image->uri == nullptr ? "" : gltf_image->uri;
+  if (gltf_image_uri.empty()) {
     std::println(std::cerr, "No URI for image {}", GetName(*gltf_image));
     return std::nullopt;
   }
 
-  return gfx::KtxTexture{gltf_directory / gltf_image_filepath, color_space, physical_device};
+  return gfx::KtxTexture{gltf_directory / gltf_image_uri, color_space, physical_device};
 }
 
 std::optional<Texture> CreateTexture(const vk::Device device,
                                      const cgltf_texture_view& gltf_texture_view,
                                      const gfx::ColorSpace color_space,
-                                     const gfx::CreateTextureOptions& create_texture_options,
                                      const std::filesystem::path& gltf_directory,
+                                     const gfx::CreateTextureOptions& create_texture_options,
                                      std::unordered_map<vk::SamplerCreateInfo, vk::UniqueSampler>& samplers) {
   const auto& [physical_device, enable_anisotropy, max_anisotropy] = create_texture_options;
 
-  return CreateKtxTexture(gltf_texture_view, color_space, physical_device, gltf_directory)
+  return CreateKtxTexture(gltf_texture_view, color_space, gltf_directory, physical_device)
       .transform([=, gltf_texture = gltf_texture_view.texture, &samplers](auto&& ktx_texture) {
         const auto mip_levels = ktx_texture->numLevels;
         return Texture{
@@ -553,11 +554,10 @@ gfx::Image CreateImage(const vk::Device device,
 
 std::unique_ptr<Material> CreateMaterial(const vk::Device device,
                                          const cgltf_material& gltf_material,
-                                         const gfx::CreateTextureOptions& create_texture_options,
                                          const std::filesystem::path& gltf_directory,
+                                         const gfx::CreateTextureOptions& create_texture_options,
                                          std::unordered_map<vk::SamplerCreateInfo, vk::UniqueSampler>& samplers) {
   if (!gltf_material.has_pbr_metallic_roughness) {
-    // TODO(matthew-rister): avoid requiring PBR metallic-roughness properties
     throw std::runtime_error{
         std::format("The material {} is unsupported because it does not have PBR metallic-roughness properties",
                     GetName(gltf_material))};
@@ -565,33 +565,29 @@ std::unique_ptr<Material> CreateMaterial(const vk::Device device,
 
   const auto& [base_color_texture, metallic_roughness_texture, base_color_factor, metallic_factor, roughness_factor] =
       gltf_material.pbr_metallic_roughness;
-
   using enum gfx::ColorSpace;
-  auto maybe_base_color_texture =
-      CreateTexture(device, base_color_texture, kSrgb, create_texture_options, gltf_directory, samplers);
-  auto maybe_normal_texture =
-      CreateTexture(device, gltf_material.normal_texture, kLinear, create_texture_options, gltf_directory, samplers);
 
-  return std::make_unique<Material>(std::move(maybe_base_color_texture),
-                                    std::move(maybe_normal_texture),
-                                    ToVec(base_color_factor),
-                                    metallic_factor,
-                                    roughness_factor);
+  return std::make_unique<Material>(
+      CreateTexture(device, base_color_texture, kSrgb, gltf_directory, create_texture_options, samplers),
+      CreateTexture(device, metallic_roughness_texture, kLinear, gltf_directory, create_texture_options, samplers),
+      CreateTexture(device, gltf_material.normal_texture, kLinear, gltf_directory, create_texture_options, samplers),
+      ToVec(base_color_factor),
+      metallic_factor,
+      roughness_factor);
 }
 
-void UpdateMaterialImages(const vk::Device device, Material& material, CopyBufferOptions& copy_buffer_options) {
-  auto& maybe_base_color_texture = material.maybe_base_color_texture;
-  auto& maybe_normal_texture = material.maybe_normal_texture;
-
-  if (!maybe_base_color_texture.has_value() || !maybe_normal_texture.has_value()) {
-    material.descriptor_set = nullptr;
-    return;  // TODO(matthew-rister): add support for optional textures
-  }
-
-  for (const auto texture : {std::ref(*maybe_base_color_texture), std::ref(*maybe_normal_texture)}) {
-    auto& [image, _] = texture.get();
-    const auto& ktx_texture = std::get<gfx::KtxTexture>(image);
-    image = CreateImage(device, *ktx_texture, copy_buffer_options);
+void CreateMaterialImages(const vk::Device device, Material& material, CopyBufferOptions& copy_buffer_options) {
+  for (const auto maybe_texture_ref : {std::ref(material.maybe_base_color_texture),
+                                       std::ref(material.maybe_metallic_roughness_texture),
+                                       std::ref(material.maybe_normal_texture)}) {
+    if (auto& maybe_texture = maybe_texture_ref.get(); maybe_texture.has_value()) {
+      const auto* const ktx_texture = std::get_if<gfx::KtxTexture>(&maybe_texture->image);
+      assert(ktx_texture != nullptr);
+      maybe_texture->image = CreateImage(device, **ktx_texture, copy_buffer_options);
+    } else {
+      material.descriptor_set = nullptr;  // TODO(matthew-rister): add default material support
+      return;
+    }
   }
 }
 
@@ -603,7 +599,7 @@ std::unique_ptr<const gfx::DescriptorSets> CreateMaterialDescriptorSets(const vk
   static constexpr std::array kDescriptorSetLayoutBindings{
       vk::DescriptorSetLayoutBinding{.binding = 0,
                                      .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-                                     .descriptorCount = 2,
+                                     .descriptorCount = 3,
                                      .stageFlags = vk::ShaderStageFlagBits::eFragment}};
 
   return std::make_unique<const gfx::DescriptorSets>(device,
@@ -613,9 +609,10 @@ std::unique_ptr<const gfx::DescriptorSets> CreateMaterialDescriptorSets(const vk
 }
 
 vk::DescriptorImageInfo GetDescriptorImageInfo(const Texture& texture) {
-  const auto& image = std::get<gfx::Image>(texture.image);
+  const auto* const image = std::get_if<gfx::Image>(&texture.image);
+  assert(image != nullptr);
   return vk::DescriptorImageInfo{.sampler = texture.sampler,
-                                 .imageView = image.image_view(),
+                                 .imageView = image->image_view(),
                                  .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal};
 }
 
@@ -629,13 +626,13 @@ void UpdateMaterialDescriptorSets(const vk::Device device, const UnorderedPtrMap
     if (material->descriptor_set == nullptr) continue;
 
     const auto& maybe_base_color_texture = material->maybe_base_color_texture;
+    const auto& maybe_metallic_roughness_texture = material->maybe_metallic_roughness_texture;
     const auto& maybe_normal_texture = material->maybe_normal_texture;
-    assert(maybe_base_color_texture.has_value());
-    assert(maybe_normal_texture.has_value());
 
-    const auto& descriptor_image_info =
-        descriptor_image_infos.emplace_back(std::initializer_list{GetDescriptorImageInfo(*maybe_base_color_texture),
-                                                                  GetDescriptorImageInfo(*maybe_normal_texture)});
+    const auto& descriptor_image_info = descriptor_image_infos.emplace_back(
+        std::initializer_list{GetDescriptorImageInfo(*maybe_base_color_texture),
+                              GetDescriptorImageInfo(*maybe_metallic_roughness_texture),
+                              GetDescriptorImageInfo(*maybe_normal_texture)});
 
     descriptor_set_writes.push_back(
         vk::WriteDescriptorSet{.dstSet = material->descriptor_set,
@@ -661,7 +658,7 @@ struct VertexAttribute {
 struct Vertex {
   glm::vec3 position{0.0f};
   glm::vec3 normal{0.0f};
-  glm::vec4 tangent{0.0f};  // w-component indicates the signed handedness of the tangent basis
+  glm::vec4 tangent{0.0f};
   glm::vec2 texture_coordinates_0{0.0f};
 };
 
@@ -1057,12 +1054,12 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
   auto material_futures =
       std::span{gltf_data->materials, gltf_data->materials_count}
       | std::views::transform(
-          [&gltf_directory, &create_texture_options, device, &material_samplers](const auto& gltf_material) {
+          [device, &gltf_directory, &create_texture_options, &material_samplers](const auto& gltf_material) {
             // TODO(matthew-rister): std::async will terminate if an uncaught exception is encountered in a thread
             return std::async([device, &gltf_material, &gltf_directory, &create_texture_options, &material_samplers] {
               return std::pair{
                   &gltf_material,
-                  CreateMaterial(device, gltf_material, create_texture_options, gltf_directory, material_samplers)};
+                  CreateMaterial(device, gltf_material, gltf_directory, create_texture_options, material_samplers)};
             });
           })
       | std::ranges::to<std::vector>();
@@ -1072,7 +1069,7 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
                        [device, &copy_buffer_options](const auto descriptor_set, auto& material_future) {
                          auto [gltf_material, material] = material_future.get();
                          material->descriptor_set = descriptor_set;
-                         UpdateMaterialImages(device, *material, copy_buffer_options);
+                         CreateMaterialImages(device, *material, copy_buffer_options);
                          return std::pair{gltf_material, std::unique_ptr<const Material>(std::move(material))};
                        },
                        *material_descriptor_sets_,
@@ -1091,7 +1088,7 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
   const auto copy_fence = device.createFenceUnique(vk::FenceCreateInfo{});
   transfer_queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &copy_command_buffer}, *copy_fence);
 
-  camera_buffers_ = CreateCameraUniformBuffers(max_render_frames, allocator);
+  camera_buffers_ = CreateCameraBuffers(max_render_frames, allocator);
   camera_descriptor_sets_ = CreateCameraDescriptorSets(device, max_render_frames);
   UpdateCameraDescriptorSets(device, *camera_descriptor_sets_, camera_buffers_);
 
@@ -1118,9 +1115,9 @@ void Scene::Render(const Camera& camera, const std::size_t frame_index, const vk
                                     (*camera_descriptor_sets_)[frame_index],
                                     nullptr);
 
-  camera_buffers_[frame_index].Copy<CameraUniformBuffer>(
-      CameraUniformBuffer{.view_transform = camera.GetViewTransform(),
-                          .projection_transform = camera.GetProjectionTransform()});
+  camera_buffers_[frame_index].Copy<CameraTransforms>(
+      CameraTransforms{.view_transform = camera.GetViewTransform(),
+                       .projection_transform = camera.GetProjectionTransform()});
 
   for (const auto& child_node : root_node_->children) {
     ::Render(*child_node, root_node_->transform, *graphics_pipeline_layout_, command_buffer);

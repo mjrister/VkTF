@@ -11,7 +11,7 @@ layout(push_constant) uniform PushConstants {
 
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
-layout(location = 2) in vec4 tangent;
+layout(location = 2) in vec4 tangent; // w-component indicates the signed handedness of the tangent basis
 layout(location = 3) in vec2 texture_coordinates_0;
 
 layout(location = 0) out Vertex {
@@ -21,7 +21,7 @@ layout(location = 0) out Vertex {
  } vertex;
 
 void main() {
-  // model-view transform assumed to be an orthogonal matrix
+  // model-view transform is assumed to consist of only translations, rotations, and uniform scaling
   const mat4 model_view_transform = camera_transforms.view_transform * push_constants.model_transform;
   const vec4 model_view_position = model_view_transform * vec4(position, 1.0);
   const vec3 bitangent = cross(normal, tangent.xyz) * tangent.w;

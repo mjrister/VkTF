@@ -26,7 +26,6 @@ public:
   [[nodiscard]] auto begin() const noexcept { return descriptor_sets_.cbegin(); }
   [[nodiscard]] auto end() const noexcept { return descriptor_sets_.cend(); }
 
-  [[nodiscard]] vk::DescriptorPool descriptor_pool() const noexcept { return *descriptor_pool_; }
   [[nodiscard]] vk::DescriptorSetLayout descriptor_set_layout() const noexcept { return *descriptor_set_layout_; }
 
 private:
