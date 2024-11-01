@@ -76,8 +76,8 @@ module :private;
 
 namespace {
 
-vk::Extent2D GetFrameBufferExtent(const gfx::Window& window) {
-  const auto& [width, height] = window.GetSize();
+vk::Extent2D GetFramebufferExtent(const gfx::Window& window) {
+  const auto& [width, height] = window.GetFramebufferSize();
   return vk::Extent2D{.width = static_cast<std::uint32_t>(width), .height = static_cast<std::uint32_t>(height)};
 }
 
@@ -235,7 +235,7 @@ Engine::Engine(const Window& window)
       swapchain_{*surface_,
                  *physical_device_,
                  *device_,
-                 GetFrameBufferExtent(window),
+                 GetFramebufferExtent(window),
                  physical_device_.queue_family_indices()},
       msaa_sample_count_{GetMsaaSampleCount(physical_device_.limits())},
       color_attachment_{*device_,
