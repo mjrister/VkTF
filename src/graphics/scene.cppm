@@ -56,15 +56,15 @@ struct Material {
   std::optional<Texture> maybe_base_color_texture;
   std::optional<Texture> maybe_metallic_roughness_texture;
   std::optional<Texture> maybe_normal_texture;
-  glm::vec4 base_color_factor{1.0f};
-  float metallic_factor = 1.0f;
-  float roughness_factor = 1.0f;
+  glm::vec4 base_color_factor{0.0f};
+  float metallic_factor = 0.0f;
+  float roughness_factor = 0.0f;
   vk::DescriptorSet descriptor_set;
 };
 
 struct Node {
   const gfx::Mesh* mesh = nullptr;  // pointer lifetime is managed by the scene
-  glm::mat4 transform{1.0f};
+  glm::mat4 transform{0.0f};
   std::vector<std::unique_ptr<const Node>> children;
 };
 
@@ -313,8 +313,8 @@ gfx::Buffer CreateBuffer(const std::vector<T>& data,
 // ====================================================== Camera =======================================================
 
 struct CameraTransforms {
-  glm::mat4 view_transform{1.0f};
-  glm::mat4 projection_transform{1.0f};
+  glm::mat4 view_transform{0.0f};
+  glm::mat4 projection_transform{0.0f};
 };
 
 std::unique_ptr<const gfx::DescriptorSets> CreateCameraDescriptorSets(const vk::Device device,
@@ -651,8 +651,9 @@ void UpdateMaterialDescriptorSets(const vk::Device device, const UnorderedPtrMap
 template <typename T, glm::length_t N>
   requires VecConstructible<T, N>
 struct VertexAttribute {
+  using Data = std::vector<glm::vec<N, T>>;
   std::string_view name;  // guaranteed to reference a string literal with static storage duration
-  std::optional<std::vector<glm::vec<N, T>>> maybe_data;
+  std::optional<Data> maybe_data;
 };
 
 struct Vertex {
@@ -660,6 +661,7 @@ struct Vertex {
   glm::vec3 normal{0.0f};
   glm::vec4 tangent{0.0f};
   glm::vec2 texture_coordinates_0{0.0f};
+  glm::vec4 color_0{0.0f};
 };
 
 template <glm::length_t N>
@@ -681,40 +683,55 @@ std::vector<glm::vec<N, float>> UnpackFloats(const cgltf_accessor& gltf_accessor
 }
 
 template <glm::length_t N>
-void ValidateRequiredAttributeData(const VertexAttribute<float, N>& vertex_attribute) {
-  if (!vertex_attribute.maybe_data.has_value()) {
+bool TryUnpackAttribute(const cgltf_attribute& gltf_attribute, VertexAttribute<float, N>& vertex_attribute) {
+  if (auto& [name, maybe_data] = vertex_attribute; name == GetName(gltf_attribute)) {
+    assert(!maybe_data.has_value());  // glTF primitives should not have duplicate attributes
+    maybe_data = UnpackFloats<N>(*gltf_attribute.data);
+    return true;
+  }
+  return false;
+}
+
+template <glm::length_t N>
+void ValidateRequiredAttribute(const VertexAttribute<float, N>& vertex_attribute) {
+  if (const auto& maybe_attribute_data = vertex_attribute.maybe_data;
+      !maybe_attribute_data.has_value() || maybe_attribute_data->empty()) {
     throw std::runtime_error{std::format("Missing required vertex attribute {}", vertex_attribute.name)};
   }
 }
 
 template <glm::length_t N>
-void ValidateRequiredAttributeSize(const VertexAttribute<float, 3>& vertex_attribute_0,
-                                   const VertexAttribute<float, N>& vertex_attribute_n) {
-  const auto& [attribute_0_name, maybe_attribute_0_data] = vertex_attribute_0;
-  const auto& [attribute_n_name, maybe_attribute_n_data] = vertex_attribute_n;
-
-  // NOLINTBEGIN(bugprone-unchecked-optional-access): attribute data is validated before this function is called
-  const auto attribute_0_size = maybe_attribute_0_data->size();
-  const auto attribute_n_size = maybe_attribute_n_data->size();
-  // NOLINTEND(bugprone-unchecked-optional-access)
-
-  // the glTF specification requires all attribute accessors for a primitive must have the same count
-  if (attribute_0_size != attribute_n_size) {
-    throw std::runtime_error{std::format("The number of {} attributes {} does not match the number of {} attributes {}",
-                                         attribute_0_name,
-                                         attribute_0_size,
-                                         attribute_n_name,
-                                         attribute_n_size)};
+void ValidateOptionalAttribute(VertexAttribute<float, N>& vertex_attribute,
+                               const std::size_t attribute_count,
+                               const glm::vec<N, float>& default_value) {
+  if (auto& maybe_attribute_data = vertex_attribute.maybe_data; !maybe_attribute_data.has_value()) {
+    // TODO(matthew-rister): avoid filling the vertex buffer with default values when an attribute is missing
+    maybe_attribute_data = std::vector<glm::vec<N, float>>(attribute_count, default_value);
   }
 }
 
-// validation requires variadic templates because vertex attribute data types are not homogeneous
-template <typename... VertexAttributes>
-void ValidateRequiredAttributes(const VertexAttribute<float, 3>& vertex_attribute_0,
-                                const VertexAttributes&... vertex_attributes) {
-  ValidateRequiredAttributeData(vertex_attribute_0);
-  (ValidateRequiredAttributeData(vertex_attributes), ...);
-  (ValidateRequiredAttributeSize(vertex_attribute_0, vertex_attributes), ...);
+void ValidateAttributes(const VertexAttribute<float, 3>& position_attribute,
+                        const VertexAttribute<float, 3>& normal_attribute,
+                        const VertexAttribute<float, 4>& tangent_attribute,
+                        const VertexAttribute<float, 2>& texture_coordinates_0_attribute,
+                        VertexAttribute<float, 4>& color_0_attribute) {
+  ValidateRequiredAttribute(position_attribute);
+  ValidateRequiredAttribute(normal_attribute);
+  ValidateRequiredAttribute(tangent_attribute);
+  ValidateRequiredAttribute(texture_coordinates_0_attribute);
+
+  const auto position_count = position_attribute.maybe_data->size();
+  ValidateOptionalAttribute(color_0_attribute, position_count, glm::vec4{1.0f});
+
+#ifndef NDEBUG
+  // the glTF specification requires that all attribute for a given primitive have the same count
+  for (const auto& attribute_count : {normal_attribute.maybe_data->size(),
+                                      tangent_attribute.maybe_data->size(),
+                                      texture_coordinates_0_attribute.maybe_data->size(),
+                                      color_0_attribute.maybe_data->size()}) {
+    assert(attribute_count == position_count);
+  }
+#endif
 }
 
 std::vector<Vertex> CreateVertices(const cgltf_primitive& gltf_primitive) {
@@ -722,41 +739,43 @@ std::vector<Vertex> CreateVertices(const cgltf_primitive& gltf_primitive) {
   VertexAttribute<float, 3> normal_attribute{.name = "NORMAL"};
   VertexAttribute<float, 4> tangent_attribute{.name = "TANGENT"};
   VertexAttribute<float, 2> texture_coordinates_0_attribute{.name = "TEXCOORD_0"};
-
-  static constexpr auto kUnpackAttributeData = []<glm::length_t N>(const auto& gltf_attribute,
-                                                                   VertexAttribute<float, N>& vertex_attribute) {
-    assert(!vertex_attribute.maybe_data.has_value());  // glTF primitives should not have duplicate attributes
-    vertex_attribute.maybe_data = UnpackFloats<N>(*gltf_attribute.data);
-  };
+  VertexAttribute<float, 4> color_0_attribute{.name = "COLOR_0"};
 
   for (const auto& gltf_attribute : std::span{gltf_primitive.attributes, gltf_primitive.attributes_count}) {
     switch (gltf_attribute.type) {
       case cgltf_attribute_type_position:
-        kUnpackAttributeData(gltf_attribute, position_attribute);
+        if (TryUnpackAttribute(gltf_attribute, position_attribute)) continue;
         break;
       case cgltf_attribute_type_normal:
-        kUnpackAttributeData(gltf_attribute, normal_attribute);
+        if (TryUnpackAttribute(gltf_attribute, normal_attribute)) continue;
         break;
       case cgltf_attribute_type_tangent:
-        kUnpackAttributeData(gltf_attribute, tangent_attribute);
+        if (TryUnpackAttribute(gltf_attribute, tangent_attribute)) continue;
         break;
       case cgltf_attribute_type_texcoord:
-        if (texture_coordinates_0_attribute.name == GetName(gltf_attribute)) {
-          kUnpackAttributeData(gltf_attribute, texture_coordinates_0_attribute);
-          break;
-        }
-        [[fallthrough]];
+        if (TryUnpackAttribute(gltf_attribute, texture_coordinates_0_attribute)) continue;
+        break;
+      case cgltf_attribute_type_color:
+        if (TryUnpackAttribute(gltf_attribute, color_0_attribute)) continue;
+        break;
       default:
-        std::println(std::cerr, "Unsupported primitive attribute {}", GetName(gltf_attribute));
         break;
     }
+    std::println(std::cerr, "Unsupported primitive attribute {}", GetName(gltf_attribute));
   }
 
-  // TODO(matthew-rister): add support for optional vertex attributes
-  ValidateRequiredAttributes(position_attribute, normal_attribute, tangent_attribute, texture_coordinates_0_attribute);
+  ValidateAttributes(position_attribute,
+                     normal_attribute,
+                     tangent_attribute,
+                     texture_coordinates_0_attribute,
+                     color_0_attribute);
 
   return std::views::zip_transform(
-             [](const auto& position, const auto& normal, const auto& tangent, const auto& texture_coordinates_0) {
+             [](const auto& position,
+                const auto& normal,
+                const auto& tangent,
+                const auto& texture_coordinates_0,
+                const auto& color_0) {
 #ifndef NDEBUG
                // the glTF specification requires unit length normals and tangent vectors
                static constexpr auto kEpsilon = 1.0e-6f;
@@ -766,12 +785,14 @@ std::vector<Vertex> CreateVertices(const cgltf_primitive& gltf_primitive) {
                return Vertex{.position = position,
                              .normal = normal,
                              .tangent = tangent,
-                             .texture_coordinates_0 = texture_coordinates_0};
+                             .texture_coordinates_0 = texture_coordinates_0,
+                             .color_0 = color_0};
              },
              *position_attribute.maybe_data,
              *normal_attribute.maybe_data,
              *tangent_attribute.maybe_data,
-             *texture_coordinates_0_attribute.maybe_data)
+             *texture_coordinates_0_attribute.maybe_data,
+             *color_0_attribute.maybe_data)
          | std::ranges::to<std::vector>();
 }
 
@@ -850,7 +871,7 @@ std::unique_ptr<const gfx::Mesh> CreateMesh(const cgltf_mesh& gltf_mesh,
 // ======================================================= Nodes =======================================================
 
 glm::mat4 GetLocalTransform(const cgltf_node& gltf_node) {
-  glm::mat4 transform{1.0f};
+  glm::mat4 transform{0.0f};
   cgltf_node_transform_local(&gltf_node, glm::value_ptr(transform));
   return transform;
 }
@@ -879,7 +900,7 @@ std::unique_ptr<const Node> CreateRootNode(const cgltf_data& gltf_data,
 // ================================================= Graphics Pipeline =================================================
 
 struct PushConstants {
-  glm::mat4 model_transform{1.0f};
+  glm::mat4 model_transform{0.0f};
 };
 
 template <std::size_t N>
@@ -934,7 +955,11 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
       vk::VertexInputAttributeDescription{.location = 3,
                                           .binding = 0,
                                           .format = vk::Format::eR32G32Sfloat,
-                                          .offset = offsetof(Vertex, texture_coordinates_0)}};
+                                          .offset = offsetof(Vertex, texture_coordinates_0)},
+      vk::VertexInputAttributeDescription{.location = 4,
+                                          .binding = 0,
+                                          .format = vk::Format::eR32G32B32A32Sfloat,
+                                          .offset = offsetof(Vertex, color_0)}};
 
   static constexpr vk::PipelineVertexInputStateCreateInfo kVertexInputStateCreateInfo{
       .vertexBindingDescriptionCount = 1,

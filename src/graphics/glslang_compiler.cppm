@@ -184,7 +184,6 @@ std::vector<std::uint32_t> GenerateSpirv(const glslang_stage_t glslang_stage, gl
 
   std::vector<std::uint32_t> spirv(spirv_size);
   glslang_program_SPIRV_get(&glslang_program, spirv.data());
-
 #ifndef NDEBUG
   Print(std::clog, glslang_program_SPIRV_get_messages, &glslang_program);
 #endif

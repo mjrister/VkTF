@@ -1,6 +1,7 @@
 module;
 
 #include <cstdint>
+#include <vector>
 
 #include <vulkan/vulkan.hpp>
 

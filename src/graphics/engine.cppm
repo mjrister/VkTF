@@ -320,13 +320,13 @@ void Engine::Render(const Scene& scene, const Camera& camera) {
   std::tie(result, image_index) = device_->acquireNextImageKHR(*swapchain_, kMaxTimeout, acquire_next_image_semaphore);
   vk::detail::resultCheck(result, "Acquire next swapchain image failed");
 
+  const auto draw_command_buffer = *draw_command_buffers_[current_frame_index_];
+  draw_command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+
   static constexpr std::array kClearColor{0.0f, 0.0f, 0.0f, 1.0f};
   static constexpr std::array kClearValues{vk::ClearValue{.color = vk::ClearColorValue{kClearColor}},
                                            vk::ClearValue{.color = vk::ClearColorValue{kClearColor}},
                                            vk::ClearValue{.depthStencil = vk::ClearDepthStencilValue{1.0f, 0}}};
-
-  const auto draw_command_buffer = *draw_command_buffers_[current_frame_index_];
-  draw_command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
   draw_command_buffer.beginRenderPass(
       vk::RenderPassBeginInfo{
           .renderPass = *render_pass_,

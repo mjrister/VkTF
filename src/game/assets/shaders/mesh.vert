@@ -13,11 +13,13 @@ layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
 layout(location = 2) in vec4 tangent; // w-component indicates the signed handedness of the tangent basis
 layout(location = 3) in vec2 texture_coordinates_0;
+layout(location = 4) in vec4 color_0;
 
 layout(location = 0) out Vertex {
   vec3 position;
-  vec2 texture_coordinates_0;
   mat3 normal_transform;
+  vec2 texture_coordinates_0;
+  vec4 color_0;
  } vertex;
 
 void main() {
@@ -28,8 +30,9 @@ void main() {
   const mat3 normal_transform = mat3(model_view_transform) * mat3(tangent.xyz, bitangent, normal);
 
   vertex.position = model_view_position.xyz;
-  vertex.texture_coordinates_0 = texture_coordinates_0;
   vertex.normal_transform = normal_transform;
+  vertex.texture_coordinates_0 = texture_coordinates_0;
+  vertex.color_0 = color_0;
 
   gl_Position = camera_transforms.projection_transform * model_view_position;
 }

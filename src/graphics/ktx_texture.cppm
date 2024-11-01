@@ -282,7 +282,6 @@ KtxTexture2 CreateKtxTexture2(const std::filesystem::path& texture_filepath,
 
 namespace gfx {
 
-// TODO(matthew-rister): validate image dimensions are a power-of-two
 KtxTexture::KtxTexture(const std::filesystem::path& texture_filepath,
                        const ColorSpace color_space,
                        const vk::PhysicalDevice physical_device)

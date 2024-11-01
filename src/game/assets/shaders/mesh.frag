@@ -11,8 +11,9 @@ layout(set = 1, binding = 0) uniform sampler2D material_samplers[kSamplerCount];
 
 layout(location = 0) in Vertex {
   vec3 position;
-  vec2 texture_coordinates_0;
   mat3 normal_transform;  // TODO(matthew-rister): prefer normal transform matrix multplication in the vertex shader
+  vec2 texture_coordinates_0;
+  vec4 color;
 } vertex;
 
 layout(location = 0) out vec4 fragment_color;
@@ -31,8 +32,8 @@ vec4 GetImageColor(const uint sampler_index) {
 }
 
 vec3 GetNormal() {
-  vec3 normal = GetImageColor(kNormalSamplerIndex).rgb;
-  normal = 2.0 * normal - 1.0;  // convert sampled RGB values from [0, 1] to [-1, 1]
+  // convert sampled RGB values from [0, 1] to [-1, 1]
+  const vec3 normal = 2.0 * GetImageColor(kNormalSamplerIndex).rgb - 1.0;
   return normalize(vertex.normal_transform * normal);
 }
 
@@ -75,7 +76,7 @@ vec3 GetFresnelApproximation(const vec3 view_direction, const vec3 halfway_direc
 
 // implementation based on https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#implementation
 vec3 GetMaterialBrdf(const vec3 normal, const vec3 view_direction, const vec3 light_direction,
-                     const vec3 halfway_direction, out vec3 base_color) {
+                     const vec3 halfway_direction, out vec4 base_color) {
   const vec2 metallic_roughness = GetImageColor(kMetallicRoughnessSamplerIndex).bg;
   const float metallic_factor = metallic_roughness.x;
   const float roughness_factor = metallic_roughness.y;
@@ -84,12 +85,12 @@ vec3 GetMaterialBrdf(const vec3 normal, const vec3 view_direction, const vec3 li
   const float D = GetMicrofacetDistribution(normal, halfway_direction, alpha);
   const float V = GetMicrofacetVisibility(normal, view_direction, light_direction, halfway_direction, alpha);
 
-  base_color = GetImageColor(kBaseColorSamplerIndex).rgb;
-  const vec3 f0 = mix(vec3(0.04), base_color, metallic_factor);
+  base_color = vertex.color * GetImageColor(kBaseColorSamplerIndex);
+  const vec3 f0 = mix(vec3(0.04), base_color.rgb, metallic_factor);
   const vec3 F = GetFresnelApproximation(view_direction, halfway_direction, f0);
 
   const vec3 specular_brdf = D * V * F;
-  const vec3 diffuse_brdf = (1.0 - F) / kPi * mix(base_color, vec3(0.0), metallic_factor);
+  const vec3 diffuse_brdf = (1.0 - F) / kPi * mix(base_color.rgb, vec3(0.0), metallic_factor);
   return diffuse_brdf + specular_brdf;
 }
 
@@ -100,7 +101,7 @@ void main() {
   const vec3 light_direction = GetLightDirection(light_distance);
   const vec3 halfway_direction = normalize(light_direction + view_direction);
 
-  vec3 base_color = vec3(0.0);
+  vec4 base_color = vec4(0.0);
   const vec3 material_brdf = GetMaterialBrdf(normal, view_direction, light_direction, halfway_direction, base_color);
 
   const float light_attenuation = 1.0 / max(light_distance * light_distance, 1.0);
@@ -109,6 +110,6 @@ void main() {
   const float cos_theta = max(dot(normal, light_direction), 0.0);
   const vec3 radiance_out = material_brdf * radiance_in * cos_theta;
 
-  const vec3 kAmbiance = vec3(0.03) * base_color;  // HACK
-  fragment_color = vec4(kAmbiance + radiance_out, 1.0);
+  const vec3 kAmbiance = vec3(0.03) * base_color.rgb;  // HACK
+  fragment_color = vec4(kAmbiance + radiance_out, base_color.a); // TODO(matthew-rister): add alpha-mode support
 }
