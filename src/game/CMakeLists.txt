@@ -1,6 +1,8 @@
 add_executable(game main.cpp)
 
-target_sources(game PRIVATE FILE_SET CXX_MODULES FILES game.cppm)
+target_sources(game PRIVATE FILE_SET CXX_MODULES
+                            FILES game.cppm)
+
 target_link_libraries(game PRIVATE graphics)
 
 set(ASSETS_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/assets)

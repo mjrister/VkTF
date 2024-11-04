@@ -21,7 +21,7 @@ public:
   Swapchain(vk::SurfaceKHR surface,
             vk::PhysicalDevice physical_device,
             vk::Device device,
-            vk::Extent2D image_extent,
+            vk::Extent2D framebuffer_extent,
             const QueueFamilyIndices& queue_family_indices);
 
   [[nodiscard]] vk::SwapchainKHR operator*() const noexcept { return *swapchain_; }
@@ -110,7 +110,7 @@ namespace gfx {
 Swapchain::Swapchain(const vk::SurfaceKHR surface,
                      const vk::PhysicalDevice physical_device,
                      const vk::Device device,
-                     const vk::Extent2D image_extent,
+                     const vk::Extent2D framebuffer_extent,
                      const QueueFamilyIndices& queue_family_indices) {
   const auto surface_capabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
   const auto surface_format = GetSwapchainSurfaceFormat(physical_device, surface);
@@ -120,7 +120,7 @@ Swapchain::Swapchain(const vk::SurfaceKHR surface,
       .minImageCount = GetSwapchainImageCount(surface_capabilities),
       .imageFormat = surface_format.format,
       .imageColorSpace = surface_format.colorSpace,
-      .imageExtent = GetSwapchainImageExtent(surface_capabilities, image_extent),
+      .imageExtent = GetSwapchainImageExtent(surface_capabilities, framebuffer_extent),
       .imageArrayLayers = 1,
       .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
       .presentMode = GetSwapchainPresentMode(physical_device, surface),

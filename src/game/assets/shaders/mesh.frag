@@ -7,7 +7,13 @@ const int kMetallicRoughnessSamplerIndex = 1;
 const int kNormalSamplerIndex = 2;
 const int kSamplerCount = 3;
 
-layout(set = 1, binding = 0) uniform sampler2D material_samplers[kSamplerCount];
+layout(set = 1, binding = 0) uniform Material {
+  vec4 base_color_factor;
+  float metallic_factor;
+  float roughness_factor;
+} material;
+
+layout(set = 1, binding = 1) uniform sampler2D material_samplers[kSamplerCount];
 
 layout(location = 0) in Vertex {
   vec3 position;
@@ -78,14 +84,14 @@ vec3 GetFresnelApproximation(const vec3 view_direction, const vec3 halfway_direc
 vec3 GetMaterialBrdf(const vec3 normal, const vec3 view_direction, const vec3 light_direction,
                      const vec3 halfway_direction, out vec4 base_color) {
   const vec2 metallic_roughness = GetImageColor(kMetallicRoughnessSamplerIndex).bg;
-  const float metallic_factor = metallic_roughness.x;
-  const float roughness_factor = metallic_roughness.y;
+  const float metallic_factor = material.metallic_factor * metallic_roughness[0];
+  const float roughness_factor = material.roughness_factor * metallic_roughness[1];
 
   const float alpha = roughness_factor * roughness_factor;
   const float D = GetMicrofacetDistribution(normal, halfway_direction, alpha);
   const float V = GetMicrofacetVisibility(normal, view_direction, light_direction, halfway_direction, alpha);
 
-  base_color = vertex.color * GetImageColor(kBaseColorSamplerIndex);
+  base_color = vertex.color * material.base_color_factor * GetImageColor(kBaseColorSamplerIndex);
   const vec3 f0 = mix(vec3(0.04), base_color.rgb, metallic_factor);
   const vec3 F = GetFresnelApproximation(view_direction, halfway_direction, f0);
 
@@ -104,7 +110,7 @@ void main() {
   vec4 base_color = vec4(0.0);
   const vec3 material_brdf = GetMaterialBrdf(normal, view_direction, light_direction, halfway_direction, base_color);
 
-  const float light_attenuation = 1.0 / max(light_distance * light_distance, 1.0);
+  const float light_attenuation = 1.0 / max(light_distance, 1.0); // TODO(matthew-rister): use quadratic attenuation
   const vec3 radiance_in = kPointLight.color * light_attenuation;
 
   const float cos_theta = max(dot(normal, light_direction), 0.0);
