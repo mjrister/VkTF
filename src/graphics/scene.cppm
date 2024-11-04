@@ -53,15 +53,10 @@ struct Texture {
 };
 
 struct Material {
-  struct Properties {
-    glm::vec4 base_color_factor{0.0f};
-    float metallic_factor = 0.0f;
-    float roughness_factor = 0.0f;
-  } properties;
   std::optional<Texture> maybe_base_color_texture;
   std::optional<Texture> maybe_metallic_roughness_texture;
   std::optional<Texture> maybe_normal_texture;
-  std::optional<gfx::Buffer> maybe_buffer;
+  std::optional<gfx::Buffer> maybe_properties_buffer;
   vk::DescriptorSet descriptor_set;
 };
 
@@ -548,6 +543,12 @@ gfx::Image CreateImage(const vk::Device device,
 
 // ===================================================== Materials =====================================================
 
+struct MaterialProperties {
+  glm::vec4 base_color_factor{0.0f};
+  float metallic_factor = 0.0f;
+  float roughness_factor = 0.0f;
+};
+
 std::unique_ptr<Material> CreateMaterial(const vk::Device device,
                                          const cgltf_material& gltf_material,
                                          const std::filesystem::path& gltf_directory,
@@ -561,15 +562,15 @@ std::unique_ptr<Material> CreateMaterial(const vk::Device device,
   using enum gfx::ColorSpace;
 
   return std::make_unique<Material>(
-      Material::Properties{.base_color_factor = ToVec(base_color_factor),
-                           .metallic_factor = metallic_factor,
-                           .roughness_factor = roughness_factor},
       CreateTexture(device, base_color_texture, kSrgb, gltf_directory, create_texture_options, samplers),
       CreateTexture(device, metallic_roughness_texture, kLinear, gltf_directory, create_texture_options, samplers),
       CreateTexture(device, gltf_material.normal_texture, kLinear, gltf_directory, create_texture_options, samplers));
 }
 
-void UpdateMaterial(const vk::Device device, Material& material, CopyBufferOptions& copy_buffer_options) {
+void UpdateMaterial(const vk::Device device,
+                    const cgltf_material& gltf_material,
+                    Material& material,
+                    CopyBufferOptions& copy_buffer_options) {
   const auto maybe_texture_refs = {std::ref(material.maybe_base_color_texture),
                                    std::ref(material.maybe_metallic_roughness_texture),
                                    std::ref(material.maybe_normal_texture)};
@@ -587,9 +588,15 @@ void UpdateMaterial(const vk::Device device, Material& material, CopyBufferOptio
     maybe_texture->image = CreateImage(device, **ktx_texture, copy_buffer_options);
   }
 
-  material.maybe_buffer = CreateBuffer<Material::Properties>(material.properties,
-                                                             vk::BufferUsageFlagBits::eUniformBuffer,
-                                                             copy_buffer_options);
+  assert(gltf_material.has_pbr_metallic_roughness);
+  const auto& pbr_metallic_roughness = gltf_material.pbr_metallic_roughness;
+
+  material.maybe_properties_buffer = CreateBuffer<MaterialProperties>(
+      MaterialProperties{.base_color_factor = ToVec(pbr_metallic_roughness.base_color_factor),
+                         .metallic_factor = pbr_metallic_roughness.metallic_factor,
+                         .roughness_factor = pbr_metallic_roughness.roughness_factor},
+      vk::BufferUsageFlagBits::eUniformBuffer,
+      copy_buffer_options);
 }
 
 std::unique_ptr<const gfx::DescriptorSets> CreateMaterialDescriptorSets(const vk::Device device,
@@ -636,17 +643,16 @@ void UpdateMaterialDescriptorSets(const vk::Device device, const UnorderedPtrMap
   std::vector<vk::WriteDescriptorSet> descriptor_set_writes;
   descriptor_set_writes.reserve(materials.size());
 
-  for (const auto& [_,
-                    maybe_base_color_texture,
+  for (const auto& [maybe_base_color_texture,
                     maybe_metallic_roughness_texture,
                     maybe_normal_texture,
-                    maybe_buffer,
+                    maybe_properties_buffer,
                     descriptor_set] :
        materials | std::views::transform([](const auto& material) -> const auto& { return *material.second; })) {
     if (descriptor_set == nullptr) continue;
 
     const auto& descriptor_buffer_info = descriptor_buffer_infos.emplace_back(
-        vk::DescriptorBufferInfo{.buffer = **maybe_buffer, .range = vk::WholeSize});
+        vk::DescriptorBufferInfo{.buffer = **maybe_properties_buffer, .range = vk::WholeSize});
 
     descriptor_set_writes.push_back(vk::WriteDescriptorSet{.dstSet = descriptor_set,
                                                            .dstBinding = 0,
@@ -1122,7 +1128,7 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
                          auto [gltf_material, material] = material_future.get();
                          if (material != nullptr) {
                            material->descriptor_set = descriptor_set;
-                           UpdateMaterial(device, *material, copy_buffer_options);
+                           UpdateMaterial(device, *gltf_material, *material, copy_buffer_options);
                          }
                          return std::pair{gltf_material, std::unique_ptr<const Material>(std::move(material))};
                        },
