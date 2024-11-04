@@ -33,9 +33,9 @@ public:
 
   template <typename T>
   void Copy(const DataView<const T> data_view) const {
-    assert(data_view.size_bytes() <= size_bytes_);
     assert(mapped_memory_ != nullptr);
-    memcpy(mapped_memory_, data_view.data(), size_bytes_);
+    assert(data_view.size_bytes() <= size_bytes_);
+    memcpy(mapped_memory_, data_view.data(), data_view.size_bytes());
     const auto result = vmaFlushAllocation(allocator_, allocation_, 0, vk::WholeSize);
     vk::detail::resultCheck(static_cast<vk::Result>(result), "Flush allocation failed");
   }
