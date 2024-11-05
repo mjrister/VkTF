@@ -284,20 +284,18 @@ Scene Engine::Load(const std::filesystem::path& gltf_filepath) const {
   if (const auto extension = gltf_filepath.extension(); extension != ".gltf") {
     throw std::runtime_error{std::format("Unsupported file extension: {}", extension.string())};
   }
-  return Scene{
-      gltf_filepath,
-      kMaxRenderFrames,
-      SubmitCopyCommandsOptions{.device = *device_,
-                                // TODO(matthew-rister): use a dedicated transfer queue to copy assets to device memory
-                                .transfer_queue = graphics_queue_,
-                                .transfer_queue_family_index = physical_device_.queue_family_indices().graphics_index,
-                                .allocator = *allocator_},
-      CreateTextureOptions{.physical_device = *physical_device_,
-                           .enable_sampler_anisotropy = physical_device_.features().samplerAnisotropy,
-                           .max_sampler_anisotropy = physical_device_.limits().maxSamplerAnisotropy},
-      CreateGraphicsPipelineOptions{.viewport_extent = swapchain_.image_extent(),
-                                    .msaa_sample_count = msaa_sample_count_,
-                                    .render_pass = *render_pass_}};
+  return Scene{gltf_filepath,
+               *physical_device_,
+               physical_device_.features().samplerAnisotropy,
+               physical_device_.limits().maxSamplerAnisotropy,
+               *device_,
+               graphics_queue_,  // TODO(matthew-rister): use a dedicated transfer queue to copy assets to device memory
+               physical_device_.queue_family_indices().graphics_index,
+               swapchain_.image_extent(),
+               msaa_sample_count_,
+               *render_pass_,
+               *allocator_,
+               kMaxRenderFrames};
 }
 
 void Engine::Render(const Scene& scene, const Camera& camera) {

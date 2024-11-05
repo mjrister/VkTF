@@ -22,7 +22,6 @@ module;
 #include <string_view>
 #include <unordered_map>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include <cgltf.h>
@@ -48,7 +47,7 @@ import shader_module;
 namespace {
 
 struct Texture {
-  std::variant<gfx::KtxTexture, gfx::Image> image;  // first loaded as a KTX texture then converted to a device image
+  gfx::Image image;
   vk::Sampler sampler;
 };
 
@@ -70,32 +69,20 @@ struct Node {
 
 namespace gfx {
 
-export struct SubmitCopyCommandsOptions {
-  vk::Device device;
-  vk::Queue transfer_queue;
-  std::uint32_t transfer_queue_family_index = 0;
-  VmaAllocator allocator = nullptr;
-};
-
-export struct CreateTextureOptions {
-  vk::PhysicalDevice physical_device;
-  vk::Bool32 enable_sampler_anisotropy = 0;
-  float max_sampler_anisotropy = 0.0f;
-};
-
-export struct CreateGraphicsPipelineOptions {
-  vk::Extent2D viewport_extent;
-  vk::SampleCountFlagBits msaa_sample_count = vk::SampleCountFlagBits::e1;
-  vk::RenderPass render_pass;
-};
-
 export class Scene {
 public:
   Scene(const std::filesystem::path& gltf_filepath,
-        const std::size_t max_render_frames,
-        const SubmitCopyCommandsOptions& submit_copy_commands_options,
-        const CreateTextureOptions& create_texture_options,
-        const CreateGraphicsPipelineOptions& create_graphics_pipeline_options);
+        vk::PhysicalDevice physical_device,
+        vk::Bool32 enable_sampler_anisotropy,
+        float max_sampler_anisotropy,
+        vk::Device device,
+        vk::Queue transfer_queue,
+        std::uint32_t transfer_queue_family_index,
+        vk::Extent2D viewport_extent,
+        vk::SampleCountFlagBits msaa_sample_count,
+        vk::RenderPass render_pass,
+        VmaAllocator allocator,
+        std::size_t max_render_frames);
 
   void Render(const Camera& camera, std::size_t frame_index, vk::CommandBuffer command_buffer) const;
 
@@ -103,7 +90,7 @@ private:
   std::unique_ptr<const DescriptorSets> camera_descriptor_sets_;
   std::vector<Buffer> camera_buffers_;
   std::unique_ptr<const DescriptorSets> material_descriptor_sets_;
-  std::vector<std::unique_ptr<const Material>> materials_;
+  std::vector<std::unique_ptr<Material>> materials_;
   std::vector<vk::UniqueSampler> material_samplers_;
   vk::UniquePipelineLayout graphics_pipeline_layout_;
   vk::UniquePipeline graphics_pipeline_;
@@ -185,7 +172,7 @@ glm::vec<N, T> ToVec(const T (&src_array)[N]) {  // NOLINT(*-c-arrays): defines 
 }
 
 template <typename Key, typename Value>
-using UnorderedPtrMap = std::unordered_map<const Key*, std::unique_ptr<const Value>>;
+using UnorderedPtrMap = std::unordered_map<const Key*, std::unique_ptr<Value>>;
 
 template <typename Key, typename Value>
 const Value* Find(const Key* const key, const UnorderedPtrMap<Key, Value>& map) {
@@ -325,10 +312,9 @@ std::vector<gfx::Buffer> CreateCameraBuffers(const std::size_t max_render_frames
 }
 
 std::unique_ptr<const gfx::DescriptorSets> CreateCameraDescriptorSets(const vk::Device device,
-                                                                      const std::size_t max_render_frames) {
+                                                                      const std::uint32_t max_render_frames) {
   const std::array descriptor_pool_sizes{
-      vk::DescriptorPoolSize{.type = vk::DescriptorType::eUniformBuffer,
-                             .descriptorCount = static_cast<std::uint32_t>(max_render_frames)}};
+      vk::DescriptorPoolSize{.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = max_render_frames}};
 
   static constexpr std::array kDescriptorSetLayoutBindings{
       vk::DescriptorSetLayoutBinding{.binding = 0,
@@ -337,7 +323,7 @@ std::unique_ptr<const gfx::DescriptorSets> CreateCameraDescriptorSets(const vk::
                                      .stageFlags = vk::ShaderStageFlagBits::eVertex}};
 
   return std::make_unique<const gfx::DescriptorSets>(device,
-                                                     static_cast<std::uint32_t>(max_render_frames),
+                                                     max_render_frames,
                                                      descriptor_pool_sizes,
                                                      kDescriptorSetLayoutBindings);
 }
@@ -367,6 +353,12 @@ void UpdateCameraDescriptorSets(const vk::Device device,
 }
 
 // ===================================================== Samplers ======================================================
+
+struct CreateSamplerOptions {
+  vk::Bool32 enable_anisotropy = vk::False;
+  float max_anisotropy = 0.0f;
+  std::unordered_map<vk::SamplerCreateInfo, vk::UniqueSampler> samplers;
+};
 
 // filter and address mode values come from https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#reference-sampler
 enum class SamplerFilter : std::uint16_t {
@@ -426,10 +418,9 @@ vk::SamplerAddressMode GetSamplerAddressMode(const int gltf_wrap_mode) {
 
 vk::Sampler CreateSampler(const vk::Device device,
                           const cgltf_sampler* const gltf_sampler,
-                          const vk::Bool32 enable_anisotropy,
-                          const float max_anisotropy,
                           const std::uint32_t mip_levels,
-                          std::unordered_map<vk::SamplerCreateInfo, vk::UniqueSampler>& samplers) {
+                          CreateSamplerOptions& create_sampler_options) {
+  auto& [enable_anisotropy, max_anisotropy, samplers] = create_sampler_options;
   vk::SamplerCreateInfo sampler_create_info{.anisotropyEnable = enable_anisotropy,
                                             .maxAnisotropy = max_anisotropy,
                                             .maxLod = static_cast<float>(mip_levels)};
@@ -449,48 +440,6 @@ vk::Sampler CreateSampler(const vk::Device device,
   }
 
   return *iterator->second;
-}
-
-// ===================================================== Textures ======================================================
-
-std::optional<gfx::KtxTexture> CreateKtxTexture(const cgltf_texture_view& gltf_texture_view,
-                                                const gfx::ColorSpace color_space,
-                                                const std::filesystem::path& gltf_directory,
-                                                const vk::PhysicalDevice physical_device) {
-  const auto* const gltf_texture = gltf_texture_view.texture;
-  if (gltf_texture == nullptr) return std::nullopt;
-
-  const auto* const gltf_image = gltf_texture->has_basisu == 0 ? gltf_texture->image : gltf_texture->basisu_image;
-  if (gltf_image == nullptr) {
-    std::println(std::cerr, "No image source for texture {}", GetName(*gltf_texture));
-    return std::nullopt;
-  }
-
-  const std::filesystem::path gltf_image_uri = gltf_image->uri == nullptr ? "" : gltf_image->uri;
-  if (gltf_image_uri.empty()) {
-    std::println(std::cerr, "No URI for image {}", GetName(*gltf_image));
-    return std::nullopt;
-  }
-
-  return gfx::KtxTexture{gltf_directory / gltf_image_uri, color_space, physical_device};
-}
-
-std::optional<Texture> CreateTexture(const vk::Device device,
-                                     const cgltf_texture_view& gltf_texture_view,
-                                     const gfx::ColorSpace color_space,
-                                     const std::filesystem::path& gltf_directory,
-                                     const gfx::CreateTextureOptions& create_texture_options,
-                                     std::unordered_map<vk::SamplerCreateInfo, vk::UniqueSampler>& samplers) {
-  const auto& [physical_device, enable_anisotropy, max_anisotropy] = create_texture_options;
-
-  return CreateKtxTexture(gltf_texture_view, color_space, gltf_directory, physical_device)
-      .transform([=, gltf_texture = gltf_texture_view.texture, &samplers](auto&& ktx_texture) {
-        const auto mip_levels = ktx_texture->numLevels;
-        return Texture{
-            .image = std::move(ktx_texture),
-            .sampler =
-                CreateSampler(device, gltf_texture->sampler, enable_anisotropy, max_anisotropy, mip_levels, samplers)};
-      });
 }
 
 // ====================================================== Images =======================================================
@@ -543,71 +492,118 @@ gfx::Image CreateImage(const vk::Device device,
 
 // ===================================================== Materials =====================================================
 
+struct MaterialKtxTextures {
+  const cgltf_material* gltf_material = nullptr;
+  std::optional<gfx::KtxTexture> maybe_base_color_texture;
+  std::optional<gfx::KtxTexture> maybe_metallic_roughness_texture;
+  std::optional<gfx::KtxTexture> maybe_normal_texture;
+};
+
 struct MaterialProperties {
   glm::vec4 base_color_factor{0.0f};
   float metallic_factor = 0.0f;
   float roughness_factor = 0.0f;
 };
 
-std::unique_ptr<Material> CreateMaterial(const vk::Device device,
-                                         const cgltf_material& gltf_material,
-                                         const std::filesystem::path& gltf_directory,
-                                         const gfx::CreateTextureOptions& create_texture_options,
-                                         std::unordered_map<vk::SamplerCreateInfo, vk::UniqueSampler>& samplers) {
-  // TODO(matthew-rister): add support for non PBR metallic-roughness materials
-  if (!gltf_material.has_pbr_metallic_roughness) return nullptr;
+std::optional<gfx::KtxTexture> CreateKtxTexture(const cgltf_texture_view& gltf_texture_view,
+                                                const gfx::ColorSpace color_space,
+                                                const std::filesystem::path& gltf_directory,
+                                                const vk::PhysicalDevice physical_device) {
+  const auto* const gltf_texture = gltf_texture_view.texture;
+  if (gltf_texture == nullptr) return std::nullopt;
 
-  const auto& [base_color_texture, metallic_roughness_texture, base_color_factor, metallic_factor, roughness_factor] =
-      gltf_material.pbr_metallic_roughness;
-  using enum gfx::ColorSpace;
+  const auto* const gltf_image = gltf_texture->has_basisu == 0 ? gltf_texture->image : gltf_texture->basisu_image;
+  if (gltf_image == nullptr) {
+    std::println(std::cerr, "No image source for texture {}", GetName(*gltf_texture));
+    return std::nullopt;
+  }
 
-  return std::make_unique<Material>(
-      CreateTexture(device, base_color_texture, kSrgb, gltf_directory, create_texture_options, samplers),
-      CreateTexture(device, metallic_roughness_texture, kLinear, gltf_directory, create_texture_options, samplers),
-      CreateTexture(device, gltf_material.normal_texture, kLinear, gltf_directory, create_texture_options, samplers));
+  const std::filesystem::path gltf_image_uri = gltf_image->uri == nullptr ? "" : gltf_image->uri;
+  if (gltf_image_uri.empty()) {
+    std::println(std::cerr, "No URI for image {}", GetName(*gltf_image));
+    return std::nullopt;
+  }
+
+  return gfx::KtxTexture{gltf_directory / gltf_image_uri, color_space, physical_device};
 }
 
-void UpdateMaterial(const vk::Device device,
-                    const cgltf_material& gltf_material,
-                    Material& material,
-                    CopyBufferOptions& copy_buffer_options) {
-  const auto maybe_texture_refs = {std::ref(material.maybe_base_color_texture),
-                                   std::ref(material.maybe_metallic_roughness_texture),
-                                   std::ref(material.maybe_normal_texture)};
+MaterialKtxTextures CreateMaterialKtxTextures(const cgltf_material* const gltf_material,
+                                              const std::filesystem::path& gltf_directory,
+                                              const vk::PhysicalDevice physical_device) {
+  // TODO(matthew-rister): add support for non PBR metallic-roughness materials
+  if (gltf_material->has_pbr_metallic_roughness == 0) return {};
 
-  if (std::ranges::any_of(maybe_texture_refs,
-                          [](const auto maybe_texture_ref) { return !maybe_texture_ref.get().has_value(); })) {
-    material.descriptor_set = nullptr;
-    return;  // TODO(matthew-rister): add support for optional material textures
+  const auto& [base_color_texture_view,
+               metallic_roughness_texture_view,
+               base_color_factor,
+               metallic_factor,
+               roughness_factor] = gltf_material->pbr_metallic_roughness;
+
+  return MaterialKtxTextures{
+      .gltf_material = gltf_material,
+      .maybe_base_color_texture =
+          CreateKtxTexture(base_color_texture_view, gfx::ColorSpace::kSrgb, gltf_directory, physical_device),
+      .maybe_metallic_roughness_texture =
+          CreateKtxTexture(metallic_roughness_texture_view, gfx::ColorSpace::kLinear, gltf_directory, physical_device),
+      .maybe_normal_texture =
+          CreateKtxTexture(gltf_material->normal_texture, gfx::ColorSpace::kLinear, gltf_directory, physical_device)};
+}
+
+std::unique_ptr<Material> CreateMaterial(const vk::Device device,
+                                         const MaterialKtxTextures& material_ktx_textures,
+                                         CopyBufferOptions& copy_buffer_options,
+                                         CreateSamplerOptions& create_sampler_options) {
+  const auto& [gltf_material,
+               maybe_base_color_ktx_texture,
+               maybe_metallic_roughness_ktx_texture,
+               maybe_normal_ktx_texture] = material_ktx_textures;
+
+  if (std::ranges::any_of(
+          std::array{&maybe_base_color_ktx_texture, &maybe_metallic_roughness_ktx_texture, &maybe_normal_ktx_texture},
+          [](const auto* const maybe_ktx_texture) { return !maybe_ktx_texture->has_value(); })) {
+    return nullptr;  // TODO(matthew-rister): add support for optional material textures
   }
 
-  for (const auto maybe_texture_ref : maybe_texture_refs) {
-    auto& maybe_texture = maybe_texture_ref.get();
-    const auto* const ktx_texture = std::get_if<gfx::KtxTexture>(&maybe_texture->image);
-    assert(ktx_texture != nullptr);
-    maybe_texture->image = CreateImage(device, **ktx_texture, copy_buffer_options);
-  }
+  const auto& [base_color_texture_view,
+               metallic_roughness_texture_view,
+               base_color_factor,
+               metallic_factor,
+               roughness_factor] = gltf_material->pbr_metallic_roughness;
 
-  assert(gltf_material.has_pbr_metallic_roughness);
-  const auto& pbr_metallic_roughness = gltf_material.pbr_metallic_roughness;
+  const auto* const base_color_sampler = base_color_texture_view.texture->sampler;
+  const auto* const metallic_roughness_sampler = metallic_roughness_texture_view.texture->sampler;
+  const auto* const normal_sampler = gltf_material->normal_texture.texture->sampler;
 
-  material.maybe_properties_buffer = CreateBuffer<MaterialProperties>(
-      MaterialProperties{.base_color_factor = ToVec(pbr_metallic_roughness.base_color_factor),
-                         .metallic_factor = pbr_metallic_roughness.metallic_factor,
-                         .roughness_factor = pbr_metallic_roughness.roughness_factor},
-      vk::BufferUsageFlagBits::eUniformBuffer,
-      copy_buffer_options);
+  const auto& base_color_ktx_texture = *maybe_base_color_ktx_texture;
+  const auto& metallic_roughness_ktx_texture = *maybe_metallic_roughness_ktx_texture;
+  const auto& normal_ktx_texture = *maybe_normal_ktx_texture;
+
+  return std::make_unique<Material>(
+      Texture{.image = CreateImage(device, *base_color_ktx_texture, copy_buffer_options),
+              .sampler =
+                  CreateSampler(device, base_color_sampler, base_color_ktx_texture->numLevels, create_sampler_options)},
+      Texture{.image = CreateImage(device, *metallic_roughness_ktx_texture, copy_buffer_options),
+              .sampler = CreateSampler(device,
+                                       metallic_roughness_sampler,
+                                       metallic_roughness_ktx_texture->numLevels,
+                                       create_sampler_options)},
+      Texture{.image = CreateImage(device, *normal_ktx_texture, copy_buffer_options),
+              .sampler = CreateSampler(device, normal_sampler, normal_ktx_texture->numLevels, create_sampler_options)},
+      CreateBuffer<MaterialProperties>(MaterialProperties{.base_color_factor = ToVec(base_color_factor),
+                                                          .metallic_factor = metallic_factor,
+                                                          .roughness_factor = roughness_factor},
+                                       vk::BufferUsageFlagBits::eUniformBuffer,
+                                       copy_buffer_options));
 }
 
 std::unique_ptr<const gfx::DescriptorSets> CreateMaterialDescriptorSets(const vk::Device device,
-                                                                        const std::size_t material_count) {
+                                                                        const std::uint32_t material_count) {
   static constexpr std::uint32_t kImagesPerMaterial = 3;
 
   const std::array descriptor_pool_sizes{
-      vk::DescriptorPoolSize{.type = vk::DescriptorType::eUniformBuffer,
-                             .descriptorCount = static_cast<std::uint32_t>(material_count)},
+      vk::DescriptorPoolSize{.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = material_count},
       vk::DescriptorPoolSize{.type = vk::DescriptorType::eCombinedImageSampler,
-                             .descriptorCount = kImagesPerMaterial * static_cast<std::uint32_t>(material_count)}};
+                             .descriptorCount = kImagesPerMaterial * material_count}};
 
   static constexpr std::array kDescriptorSetLayoutBindings{
       vk::DescriptorSetLayoutBinding{.binding = 0,
@@ -620,20 +616,14 @@ std::unique_ptr<const gfx::DescriptorSets> CreateMaterialDescriptorSets(const vk
                                      .stageFlags = vk::ShaderStageFlagBits::eFragment}};
 
   return std::make_unique<const gfx::DescriptorSets>(device,
-                                                     static_cast<std::uint32_t>(material_count),
+                                                     material_count,
                                                      descriptor_pool_sizes,
                                                      kDescriptorSetLayoutBindings);
 }
 
-vk::DescriptorImageInfo GetDescriptorImageInfo(const Texture& texture) {
-  const auto* const image = std::get_if<gfx::Image>(&texture.image);
-  assert(image != nullptr);
-  return vk::DescriptorImageInfo{.sampler = texture.sampler,
-                                 .imageView = image->image_view(),
-                                 .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal};
-}
-
-void UpdateMaterialDescriptorSets(const vk::Device device, const UnorderedPtrMap<cgltf_material, Material>& materials) {
+void UpdateMaterialDescriptorSets(const vk::Device device,
+                                  const gfx::DescriptorSets& material_descriptor_sets,
+                                  UnorderedPtrMap<cgltf_material, Material>& materials) {
   std::vector<vk::DescriptorBufferInfo> descriptor_buffer_infos;
   descriptor_buffer_infos.resize(materials.size());
 
@@ -643,16 +633,18 @@ void UpdateMaterialDescriptorSets(const vk::Device device, const UnorderedPtrMap
   std::vector<vk::WriteDescriptorSet> descriptor_set_writes;
   descriptor_set_writes.reserve(materials.size());
 
-  for (const auto& [maybe_base_color_texture,
-                    maybe_metallic_roughness_texture,
-                    maybe_normal_texture,
-                    maybe_properties_buffer,
-                    descriptor_set] :
-       materials | std::views::transform([](const auto& material) -> const auto& { return *material.second; })) {
-    if (descriptor_set == nullptr) continue;
+  for (const auto& [descriptor_set, material] :
+       std::views::zip(material_descriptor_sets, materials | std::views::values)) {
+    if (material == nullptr) continue;
+
+    const auto& [base_color_image, base_color_sampler] = *material->maybe_base_color_texture;
+    const auto& [metallic_roughness_image, metallic_roughness_sampler] = *material->maybe_metallic_roughness_texture;
+    const auto& [normal_image, normal_sampler] = *material->maybe_normal_texture;
+    const auto& properties_buffer = *material->maybe_properties_buffer;
+    material->descriptor_set = descriptor_set;
 
     const auto& descriptor_buffer_info = descriptor_buffer_infos.emplace_back(
-        vk::DescriptorBufferInfo{.buffer = **maybe_properties_buffer, .range = vk::WholeSize});
+        vk::DescriptorBufferInfo{.buffer = *properties_buffer, .range = vk::WholeSize});
 
     descriptor_set_writes.push_back(vk::WriteDescriptorSet{.dstSet = descriptor_set,
                                                            .dstBinding = 0,
@@ -662,9 +654,15 @@ void UpdateMaterialDescriptorSets(const vk::Device device, const UnorderedPtrMap
                                                            .pBufferInfo = &descriptor_buffer_info});
 
     const auto& descriptor_image_info = descriptor_image_infos.emplace_back(
-        std::initializer_list{GetDescriptorImageInfo(*maybe_base_color_texture),
-                              GetDescriptorImageInfo(*maybe_metallic_roughness_texture),
-                              GetDescriptorImageInfo(*maybe_normal_texture)});
+        std::initializer_list{vk::DescriptorImageInfo{.sampler = base_color_sampler,
+                                                      .imageView = base_color_image.image_view(),
+                                                      .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal},
+                              vk::DescriptorImageInfo{.sampler = metallic_roughness_sampler,
+                                                      .imageView = metallic_roughness_image.image_view(),
+                                                      .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal},
+                              vk::DescriptorImageInfo{.sampler = normal_sampler,
+                                                      .imageView = normal_image.image_view(),
+                                                      .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal}});
 
     descriptor_set_writes.push_back(
         vk::WriteDescriptorSet{.dstSet = descriptor_set,
@@ -885,7 +883,7 @@ std::unique_ptr<const gfx::Mesh> CreateMesh(const cgltf_mesh& gltf_mesh,
     }
 
     const auto* const material = Find(gltf_primitive.material, materials);
-    if (material == nullptr || material->descriptor_set == nullptr) {
+    if (material == nullptr) {
       static constexpr auto kMessageFormat = "Mesh {} primitive {} with material {} is unsupported";
       std::println(std::cerr, kMessageFormat, GetName(gltf_mesh), index++, GetName(*gltf_primitive.material));
       continue;  // TODO(matthew-rister): add default material support
@@ -911,7 +909,7 @@ glm::mat4 GetLocalTransform(const cgltf_node& gltf_node) {
 
 std::vector<std::unique_ptr<const Node>> CreateNodes(const cgltf_node* const* const gltf_nodes,
                                                      const cgltf_size gltf_nodes_count,
-                                                     const UnorderedPtrMap<cgltf_mesh, gfx::Mesh>& meshes) {
+                                                     const UnorderedPtrMap<cgltf_mesh, const gfx::Mesh>& meshes) {
   return std::span{gltf_nodes, gltf_nodes_count}  //
          | std::views::transform([&meshes](const auto* const gltf_node) {
              assert(gltf_node != nullptr);
@@ -923,7 +921,7 @@ std::vector<std::unique_ptr<const Node>> CreateNodes(const cgltf_node* const* co
 }
 
 std::unique_ptr<const Node> CreateRootNode(const cgltf_data& gltf_data,
-                                           const UnorderedPtrMap<cgltf_mesh, gfx::Mesh>& meshes) {
+                                           const UnorderedPtrMap<cgltf_mesh, const gfx::Mesh>& meshes) {
   const auto& gltf_scene = GetDefaultScene(gltf_data);
   return std::make_unique<const Node>(nullptr,
                                       glm::mat4{1.0f},
@@ -952,7 +950,9 @@ vk::UniquePipelineLayout CreateGraphicsPipelineLayout(
 
 vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
                                           const vk::PipelineLayout graphics_pipeline_layout,
-                                          const gfx::CreateGraphicsPipelineOptions& create_graphics_pipeline_options) {
+                                          const vk::Extent2D viewport_extent,
+                                          const vk::SampleCountFlagBits msaa_sample_count,
+                                          const vk::RenderPass render_pass) {
   const std::filesystem::path vertex_shader_filepath{"assets/shaders/mesh.vert"};
   const gfx::ShaderModule vertex_shader_module{device, vk::ShaderStageFlagBits::eVertex, vertex_shader_filepath};
 
@@ -1004,7 +1004,6 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
       .topology = vk::PrimitiveTopology::eTriangleList};
 
   // TODO(matthew-rister): use dynamic viewport and scissor pipeline state when window resizing is implemented
-  const auto& [viewport_extent, msaa_sample_count, render_pass] = create_graphics_pipeline_options;
   const vk::Viewport viewport{.x = 0.0f,
                               .y = 0.0f,
                               .width = static_cast<float>(viewport_extent.width),
@@ -1093,11 +1092,17 @@ void Render(const Node& node,
 namespace gfx {
 
 Scene::Scene(const std::filesystem::path& gltf_filepath,
-             const std::size_t max_render_frames,
-             const SubmitCopyCommandsOptions& submit_copy_commands_options,
-             const CreateTextureOptions& create_texture_options,
-             const CreateGraphicsPipelineOptions& create_graphics_pipeline_options) {
-  const auto& [device, transfer_queue, transfer_queue_family_index, allocator] = submit_copy_commands_options;
+             const vk::PhysicalDevice physical_device,
+             const vk::Bool32 enable_sampler_anisotropy,
+             const float max_sampler_anisotropy,
+             const vk::Device device,
+             const vk::Queue transfer_queue,
+             const std::uint32_t transfer_queue_family_index,
+             const vk::Extent2D viewport_extent,
+             const vk::SampleCountFlagBits msaa_sample_count,
+             const vk::RenderPass render_pass,
+             const VmaAllocator allocator,
+             const std::size_t max_render_frames) {
   const auto gltf_data = Load(gltf_filepath.string());
   const auto gltf_directory = gltf_filepath.parent_path();
 
@@ -1108,34 +1113,28 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
   const auto copy_command_buffer = *copy_buffer_options.command_buffer;
   copy_command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
 
-  std::unordered_map<vk::SamplerCreateInfo, vk::UniqueSampler> material_samplers;
-  auto material_futures =
-      std::span{gltf_data->materials, gltf_data->materials_count}
-      | std::views::transform(
-          [device, &gltf_directory, &create_texture_options, &material_samplers](const auto& gltf_material) {
-            // TODO(matthew-rister): std::async will terminate if an uncaught exception is encountered in a thread
-            return std::async([device, &gltf_material, &gltf_directory, &create_texture_options, &material_samplers] {
-              return std::pair{
-                  &gltf_material,
-                  CreateMaterial(device, gltf_material, gltf_directory, create_texture_options, material_samplers)};
-            });
-          })
-      | std::ranges::to<std::vector>();
+  CreateSamplerOptions create_sampler_options{.enable_anisotropy = enable_sampler_anisotropy,
+                                              .max_anisotropy = max_sampler_anisotropy};
 
-  material_descriptor_sets_ = CreateMaterialDescriptorSets(device, material_futures.size());
-  auto materials = std::views::zip_transform(
-                       [device, &copy_buffer_options](const auto descriptor_set, auto& material_future) {
-                         auto [gltf_material, material] = material_future.get();
-                         if (material != nullptr) {
-                           material->descriptor_set = descriptor_set;
-                           UpdateMaterial(device, *gltf_material, *material, copy_buffer_options);
-                         }
-                         return std::pair{gltf_material, std::unique_ptr<const Material>(std::move(material))};
-                       },
-                       *material_descriptor_sets_,
-                       material_futures)
-                   | std::ranges::to<std::unordered_map>();
-  UpdateMaterialDescriptorSets(device, materials);
+  auto material_futures = std::span{gltf_data->materials, gltf_data->materials_count}
+                          | std::views::transform([&gltf_directory, physical_device](const auto& gltf_material) {
+                              return std::async(std::launch::async, [&gltf_material, &gltf_directory, physical_device] {
+                                return CreateMaterialKtxTextures(&gltf_material, gltf_directory, physical_device);
+                              });
+                            })
+                          | std::ranges::to<std::vector>();
+
+  auto materials =
+      material_futures
+      | std::views::transform([device, &copy_buffer_options, &create_sampler_options](auto& material_future) {
+          auto material_ktx_textures = material_future.get();
+          return std::pair{material_ktx_textures.gltf_material,
+                           CreateMaterial(device, material_ktx_textures, copy_buffer_options, create_sampler_options)};
+        })
+      | std::ranges::to<std::unordered_map>();
+
+  material_descriptor_sets_ = CreateMaterialDescriptorSets(device, static_cast<std::uint32_t>(materials.size()));
+  UpdateMaterialDescriptorSets(device, *material_descriptor_sets_, materials);
 
   auto meshes = std::span{gltf_data->meshes, gltf_data->meshes_count}
                 | std::views::transform([&materials, &copy_buffer_options](const auto& gltf_mesh) {
@@ -1149,18 +1148,20 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
   transfer_queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &copy_command_buffer}, *copy_fence);
 
   camera_buffers_ = CreateCameraBuffers(max_render_frames, allocator);
-  camera_descriptor_sets_ = CreateCameraDescriptorSets(device, max_render_frames);
+  camera_descriptor_sets_ = CreateCameraDescriptorSets(device, static_cast<std::uint32_t>(max_render_frames));
   UpdateCameraDescriptorSets(device, *camera_descriptor_sets_, camera_buffers_);
 
   const auto descriptor_set_layouts =
       std::array{camera_descriptor_sets_->descriptor_set_layout(), material_descriptor_sets_->descriptor_set_layout()};
   graphics_pipeline_layout_ = CreateGraphicsPipelineLayout(device, descriptor_set_layouts);
-  graphics_pipeline_ = CreateGraphicsPipeline(device, *graphics_pipeline_layout_, create_graphics_pipeline_options);
+  graphics_pipeline_ =
+      CreateGraphicsPipeline(device, *graphics_pipeline_layout_, viewport_extent, msaa_sample_count, render_pass);
 
   root_node_ = CreateRootNode(*gltf_data, meshes);
   meshes_ = meshes | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
   materials_ = materials | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
-  material_samplers_ = material_samplers | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
+  material_samplers_ =
+      create_sampler_options.samplers | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
 
   static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
   const auto result = device.waitForFences(*copy_fence, vk::True, kMaxTimeout);
