@@ -93,7 +93,7 @@ namespace gfx {
 Game::Game()
     : window_{"VkRender", kWindowWidth4k, kWindowHeight4k},
       engine_{window_},
-      scene_{engine_.Load(std::filesystem::path{"assets/models/sponza/Main.1_Sponza/NewSponza_Main_glTF_002.gltf"})},
+      scene_{engine_.Load(std::filesystem::path{"assets/models/Main.1_Sponza/NewSponza_Main_glTF_002.gltf"})},
       camera_{CreateCamera(window_.GetAspectRatio())} {}
 
 void Game::Start() {
