@@ -3,12 +3,13 @@ module;
 #include <algorithm>
 #include <cassert>
 #include <cmath>
-#include <stdexcept>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 export module camera;
+
+import spherical_coordiantes;
 
 namespace gfx {
 
@@ -17,12 +18,6 @@ export struct ViewFrustum {
   float aspect_ratio = 0.0f;
   float z_near = 0.0f;
   float z_far = 0.0f;
-};
-
-struct SphericalCoordinates {
-  float radius = 0.0f;
-  float theta = 0.0f;
-  float phi = 0.0f;
 };
 
 export class Camera {
@@ -44,28 +39,6 @@ private:
 }  // namespace gfx
 
 module :private;
-
-namespace {
-
-gfx::SphericalCoordinates ToSphericalCoordinates(const glm::vec3& cartesian_coordinates) {
-  const auto radius = glm::length(cartesian_coordinates);
-  return radius == 0.0f
-             ? gfx::SphericalCoordinates{.radius = 0.0f, .theta = 0.0f, .phi = 0.0f}
-             : gfx::SphericalCoordinates{.radius = radius,
-                                         .theta = std::atan2(cartesian_coordinates.x, cartesian_coordinates.z),
-                                         .phi = std::asin(-cartesian_coordinates.y / radius)};
-}
-
-glm::vec3 ToCartesianCoordinates(const gfx::SphericalCoordinates& spherical_coordinates) {
-  const auto& [radius, theta, phi] = spherical_coordinates;
-  const auto cos_phi = std::cos(phi);
-  const auto x = radius * std::sin(theta) * cos_phi;
-  const auto y = radius * std::sin(-phi);
-  const auto z = radius * std::cos(theta) * cos_phi;
-  return glm::vec3{x, y, z};
-}
-
-}  // namespace
 
 namespace gfx {
 
@@ -90,8 +63,8 @@ glm::mat4 Camera::GetProjectionTransform() const {
 }
 
 void Camera::Translate(const float x, const float y, const float z) {
-  const glm::mat3 view_transform = GetViewTransform();
-  position_ += glm::vec3{x, y, z} * view_transform;
+  const glm::mat3 orientation = GetViewTransform();
+  position_ += glm::vec3{x, y, z} * orientation;
 }
 
 void Camera::Rotate(const float theta, const float phi) {

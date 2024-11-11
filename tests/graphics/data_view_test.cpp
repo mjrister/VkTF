@@ -1,15 +1,15 @@
 #include <array>
 #include <cstdint>
-#include <numbers>
 
 #include <gtest/gtest.h>
+#include <glm/gtc/constants.hpp>
 
 import data_view;
 
 namespace {
 
 using DataType = float;
-constexpr auto kDataValue = std::numbers::pi_v<DataType>;
+constexpr auto kDataValue = glm::pi<DataType>();
 constexpr std::array kDataValues{kDataValue, kDataValue, kDataValue};
 
 TEST(DataViewTest, SingleValueInitializationHasTheCorrectData) {
