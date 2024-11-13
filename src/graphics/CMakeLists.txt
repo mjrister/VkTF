@@ -13,7 +13,6 @@ target_sources(graphics PUBLIC FILE_SET CXX_MODULES
                                      image.cppm
                                      instance.cppm
                                      ktx_texture.cppm
-                                     mesh.cppm
                                      physical_device.cppm
                                      scene.cppm
                                      shader_module.cppm
