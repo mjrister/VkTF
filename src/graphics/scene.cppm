@@ -87,11 +87,11 @@ public:
   void Render(const Camera& camera, std::size_t frame_index, vk::CommandBuffer command_buffer) const;
 
 private:
-  std::unique_ptr<const DescriptorSets> camera_descriptor_sets_;
   std::vector<Buffer> camera_buffers_;
-  std::unique_ptr<const DescriptorSets> material_descriptor_sets_;
+  std::unique_ptr<const DescriptorSets> camera_descriptor_sets_;
   std::vector<std::unique_ptr<Material>> materials_;
   std::vector<vk::UniqueSampler> material_samplers_;
+  std::unique_ptr<const DescriptorSets> material_descriptor_sets_;
   vk::UniquePipelineLayout graphics_pipeline_layout_;
   vk::UniquePipeline graphics_pipeline_;
   std::vector<std::unique_ptr<const Mesh>> meshes_;
@@ -357,7 +357,7 @@ void UpdateCameraDescriptorSets(const vk::Device device,
 struct CreateSamplerOptions {
   vk::Bool32 enable_anisotropy = vk::False;
   float max_anisotropy = 0.0f;
-  std::unordered_map<vk::SamplerCreateInfo, vk::UniqueSampler> samplers;
+  std::unordered_map<vk::SamplerCreateInfo, vk::UniqueSampler>* samplers = nullptr;
 };
 
 // filter and address mode values come from https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#reference-sampler
@@ -434,9 +434,9 @@ vk::Sampler CreateSampler(const vk::Device device,
     sampler_create_info.addressModeV = GetSamplerAddressMode(gltf_sampler->wrap_t);
   }
 
-  auto iterator = samplers.find(sampler_create_info);
-  if (iterator == samplers.cend()) {
-    iterator = samplers.emplace(sampler_create_info, device.createSamplerUnique(sampler_create_info)).first;
+  auto iterator = samplers->find(sampler_create_info);
+  if (iterator == samplers->cend()) {
+    iterator = samplers->emplace(sampler_create_info, device.createSamplerUnique(sampler_create_info)).first;
   }
 
   return *iterator->second;
@@ -493,7 +493,6 @@ gfx::Image CreateImage(const vk::Device device,
 // ===================================================== Materials =====================================================
 
 struct MaterialKtxTextures {
-  const cgltf_material* gltf_material = nullptr;
   std::optional<gfx::KtxTexture> maybe_base_color_texture;
   std::optional<gfx::KtxTexture> maybe_metallic_roughness_texture;
   std::optional<gfx::KtxTexture> maybe_normal_texture;
@@ -527,36 +526,34 @@ std::optional<gfx::KtxTexture> CreateKtxTexture(const cgltf_texture_view& gltf_t
   return gfx::KtxTexture{gltf_directory / gltf_image_uri, color_space, physical_device};
 }
 
-MaterialKtxTextures CreateMaterialKtxTextures(const cgltf_material* const gltf_material,
-                                              const std::filesystem::path& gltf_directory,
-                                              const vk::PhysicalDevice physical_device) {
+MaterialKtxTextures CreateKtxTextures(const cgltf_material& gltf_material,
+                                      const std::filesystem::path& gltf_directory,
+                                      const vk::PhysicalDevice physical_device) {
   // TODO(matthew-rister): add support for non PBR metallic-roughness materials
-  if (gltf_material->has_pbr_metallic_roughness == 0) return {};
+  if (gltf_material.has_pbr_metallic_roughness == 0) return {};
 
   const auto& [base_color_texture_view,
                metallic_roughness_texture_view,
                base_color_factor,
                metallic_factor,
-               roughness_factor] = gltf_material->pbr_metallic_roughness;
+               roughness_factor] = gltf_material.pbr_metallic_roughness;
 
   return MaterialKtxTextures{
-      .gltf_material = gltf_material,
       .maybe_base_color_texture =
           CreateKtxTexture(base_color_texture_view, gfx::ColorSpace::kSrgb, gltf_directory, physical_device),
       .maybe_metallic_roughness_texture =
           CreateKtxTexture(metallic_roughness_texture_view, gfx::ColorSpace::kLinear, gltf_directory, physical_device),
       .maybe_normal_texture =
-          CreateKtxTexture(gltf_material->normal_texture, gfx::ColorSpace::kLinear, gltf_directory, physical_device)};
+          CreateKtxTexture(gltf_material.normal_texture, gfx::ColorSpace::kLinear, gltf_directory, physical_device)};
 }
 
 std::unique_ptr<Material> CreateMaterial(const vk::Device device,
+                                         const cgltf_material& gltf_material,
                                          const MaterialKtxTextures& material_ktx_textures,
                                          CopyBufferOptions& copy_buffer_options,
                                          CreateSamplerOptions& create_sampler_options) {
-  const auto& [gltf_material,
-               maybe_base_color_ktx_texture,
-               maybe_metallic_roughness_ktx_texture,
-               maybe_normal_ktx_texture] = material_ktx_textures;
+  const auto& [maybe_base_color_ktx_texture, maybe_metallic_roughness_ktx_texture, maybe_normal_ktx_texture] =
+      material_ktx_textures;
 
   if (std::ranges::any_of(
           std::array{&maybe_base_color_ktx_texture, &maybe_metallic_roughness_ktx_texture, &maybe_normal_ktx_texture},
@@ -568,11 +565,11 @@ std::unique_ptr<Material> CreateMaterial(const vk::Device device,
                metallic_roughness_texture_view,
                base_color_factor,
                metallic_factor,
-               roughness_factor] = gltf_material->pbr_metallic_roughness;
+               roughness_factor] = gltf_material.pbr_metallic_roughness;
 
   const auto* const base_color_sampler = base_color_texture_view.texture->sampler;
   const auto* const metallic_roughness_sampler = metallic_roughness_texture_view.texture->sampler;
-  const auto* const normal_sampler = gltf_material->normal_texture.texture->sampler;
+  const auto* const normal_sampler = gltf_material.normal_texture.texture->sampler;
 
   const auto& base_color_ktx_texture = *maybe_base_color_ktx_texture;
   const auto& metallic_roughness_ktx_texture = *maybe_metallic_roughness_ktx_texture;
@@ -1110,26 +1107,30 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
   auto copy_buffer_options =
       CreateCopyBufferOptions(device, transfer_queue_family_index, staging_buffer_count, allocator);
 
+  std::unordered_map<vk::SamplerCreateInfo, vk::UniqueSampler> material_samplers;
+  CreateSamplerOptions create_sampler_options{.enable_anisotropy = enable_sampler_anisotropy,
+                                              .max_anisotropy = max_sampler_anisotropy,
+                                              .samplers = &material_samplers};
+
+  auto material_futures =
+      std::span{gltf_data->materials, gltf_data->materials_count}
+      | std::views::transform([&gltf_directory, physical_device](const auto& gltf_material) {
+          return std::async(std::launch::async, [&gltf_material, &gltf_directory, physical_device] {
+            return std::pair{&gltf_material, CreateKtxTextures(gltf_material, gltf_directory, physical_device)};
+          });
+        })
+      | std::ranges::to<std::vector>();
+
   const auto copy_command_buffer = *copy_buffer_options.command_buffer;
   copy_command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-
-  CreateSamplerOptions create_sampler_options{.enable_anisotropy = enable_sampler_anisotropy,
-                                              .max_anisotropy = max_sampler_anisotropy};
-
-  auto material_futures = std::span{gltf_data->materials, gltf_data->materials_count}
-                          | std::views::transform([&gltf_directory, physical_device](const auto& gltf_material) {
-                              return std::async(std::launch::async, [&gltf_material, &gltf_directory, physical_device] {
-                                return CreateMaterialKtxTextures(&gltf_material, gltf_directory, physical_device);
-                              });
-                            })
-                          | std::ranges::to<std::vector>();
 
   auto materials =
       material_futures
       | std::views::transform([device, &copy_buffer_options, &create_sampler_options](auto& material_future) {
-          auto material_ktx_textures = material_future.get();
-          return std::pair{material_ktx_textures.gltf_material,
-                           CreateMaterial(device, material_ktx_textures, copy_buffer_options, create_sampler_options)};
+          auto [gltf_material, ktx_textures] = material_future.get();
+          return std::pair{
+              gltf_material,
+              CreateMaterial(device, *gltf_material, ktx_textures, copy_buffer_options, create_sampler_options)};
         })
       | std::ranges::to<std::unordered_map>();
 
@@ -1160,8 +1161,7 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
   root_node_ = CreateRootNode(*gltf_data, meshes);
   meshes_ = meshes | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
   materials_ = materials | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
-  material_samplers_ =
-      create_sampler_options.samplers | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
+  material_samplers_ = material_samplers | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
 
   static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
   const auto result = device.waitForFences(*copy_fence, vk::True, kMaxTimeout);
