@@ -1,7 +1,6 @@
 #version 460
 
 const float kPi = 3.141592653589793;
-
 const int kBaseColorSamplerIndex = 0;
 const int kMetallicRoughnessSamplerIndex = 1;
 const int kNormalSamplerIndex = 2;
@@ -15,40 +14,36 @@ layout(set = 1, binding = 0) uniform Material {
 
 layout(set = 1, binding = 1) uniform sampler2D material_samplers[kSamplerCount];
 
-layout(location = 0) in Vertex {
+layout(push_constant, std430) uniform PushConstants {
+  layout(offset = 64) vec3 camera_position;
+} push_constants;
+
+layout(location = 0) in Fragment {
   vec3 position;
   mat3 normal_transform;  // TODO(matthew-rister): prefer normal transform matrix multplication in the vertex shader
   vec2 texture_coordinates_0;
   vec4 color;
-} vertex;
+} fragment;
 
 layout(location = 0) out vec4 fragment_color;
 
-struct PointLight {
-  vec3 position;
-  vec3 color;
-} kPointLight = {
-  // TODO(matthew-rister): import lights from a glTF scene using the KHR_lights_punctual extension
-  vec3(0.0, 0.0, 0.0),
-  vec3(1.0, 1.0, 1.0)
-};
-
 vec4 GetImageColor(const uint sampler_index) {
-  return texture(material_samplers[sampler_index], vertex.texture_coordinates_0);
+  return texture(material_samplers[sampler_index], fragment.texture_coordinates_0);
 }
 
 vec3 GetNormal() {
   // convert sampled RGB values from [0, 1] to [-1, 1]
   const vec3 normal = 2.0 * GetImageColor(kNormalSamplerIndex).rgb - 1.0;
-  return normalize(vertex.normal_transform * normal);
+  return normalize(fragment.normal_transform * normal);
 }
 
 vec3 GetViewDirection() {
-  return normalize(-vertex.position);  // position assumed to be in view space
+  return normalize(push_constants.camera_position - fragment.position);
 }
 
 vec3 GetLightDirection(out float light_distance) {
-  const vec3 light_direction = kPointLight.position - vertex.position;
+  // TODO(matthew-rister): import lights from a glTF scene using the KHR_lights_punctual extension
+  const vec3 light_direction = push_constants.camera_position - fragment.position;
   light_distance = length(light_direction);
   return light_direction / light_distance;
 }
@@ -91,7 +86,7 @@ vec3 GetMaterialBrdf(const vec3 normal, const vec3 view_direction, const vec3 li
   const float D = GetMicrofacetDistribution(normal, halfway_direction, alpha);
   const float V = GetMicrofacetVisibility(normal, view_direction, light_direction, halfway_direction, alpha);
 
-  base_color = vertex.color * material.base_color_factor * GetImageColor(kBaseColorSamplerIndex);
+  base_color = fragment.color * material.base_color_factor * GetImageColor(kBaseColorSamplerIndex);
   const vec3 f0 = mix(vec3(0.04), base_color.rgb, metallic_factor);
   const vec3 F = GetFresnelApproximation(view_direction, halfway_direction, f0);
 
@@ -110,12 +105,13 @@ void main() {
   vec4 base_color = vec4(0.0);
   const vec3 material_brdf = GetMaterialBrdf(normal, view_direction, light_direction, halfway_direction, base_color);
 
-  const float light_attenuation = 1.0 / max(light_distance, 1.0); // TODO(matthew-rister): use quadratic attenuation
-  const vec3 radiance_in = kPointLight.color * light_attenuation;
+  const float light_attenuation = 1.0 / light_distance; // TODO(matthew-rister): use quadratic attenuation
+  const vec3 kLightColor = vec3(1.0);
+  const vec3 radiance_in = kLightColor * light_attenuation;
 
   const float cos_theta = max(dot(normal, light_direction), 0.0);
   const vec3 radiance_out = material_brdf * radiance_in * cos_theta;
 
-  const vec3 kAmbiance = vec3(0.03) * base_color.rgb;  // HACK
+  const vec3 kAmbiance = vec3(0.05) * base_color.rgb;  // TODO(matthew-rister): use a more sophisticated ambient model
   fragment_color = vec4(kAmbiance + radiance_out, base_color.a); // TODO(matthew-rister): add alpha-mode support
 }

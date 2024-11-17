@@ -15,24 +15,28 @@ layout(location = 2) in vec4 tangent; // w-component indicates the signed handed
 layout(location = 3) in vec2 texture_coordinates_0;
 layout(location = 4) in vec4 color_0;
 
-layout(location = 0) out Vertex {
+layout(location = 0) out Fragment {
   vec3 position;
   mat3 normal_transform;
   vec2 texture_coordinates_0;
   vec4 color_0;
- } vertex;
+} fragment;
+
+mat3 GetNormalTransform(const mat4 model_transform) {
+  const vec3 bitangent = cross(normal, tangent.xyz) * tangent.w;  // tangent and bitangent assumed to be unit length
+  return mat3(model_transform) * mat3(tangent.xyz, bitangent, normal);  // model transform assumed to be orthogonal
+}
 
 void main() {
-  // model-view transform is assumed to consist of only translations, rotations, and uniform scaling
-  const mat4 model_view_transform = camera_transforms.view_transform * push_constants.model_transform;
-  const vec4 model_view_position = model_view_transform * vec4(position, 1.0);
-  const vec3 bitangent = cross(normal, tangent.xyz) * tangent.w;
-  const mat3 normal_transform = mat3(model_view_transform) * mat3(tangent.xyz, bitangent, normal);
+  const mat4 model_transform = push_constants.model_transform;
+  const mat4 view_transform = camera_transforms.view_transform;
+  const mat4 projection_transform = camera_transforms.projection_transform;
+  const vec4 model_position = model_transform * vec4(position, 1.0);
 
-  vertex.position = model_view_position.xyz;
-  vertex.normal_transform = normal_transform;
-  vertex.texture_coordinates_0 = texture_coordinates_0;
-  vertex.color_0 = color_0;
+  fragment.position = model_position.xyz;
+  fragment.normal_transform = GetNormalTransform(model_transform);
+  fragment.texture_coordinates_0 = texture_coordinates_0;
+  fragment.color_0 = color_0;
 
-  gl_Position = camera_transforms.projection_transform * model_view_position;
+  gl_Position = projection_transform * view_transform * model_position;
 }

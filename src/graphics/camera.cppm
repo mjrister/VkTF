@@ -24,6 +24,8 @@ export class Camera {
 public:
   Camera(const glm::vec3& position, const glm::vec3& direction, const ViewFrustum& view_frustum);
 
+  [[nodiscard]] const glm::vec3& position() const noexcept { return position_; }
+
   [[nodiscard]] glm::mat4 GetViewTransform() const;
   [[nodiscard]] glm::mat4 GetProjectionTransform() const;
 

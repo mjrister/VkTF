@@ -944,20 +944,26 @@ std::unique_ptr<const Node> CreateRootNode(const cgltf_data& gltf_data,
 
 struct PushConstants {
   glm::mat4 model_transform{0.0f};
+  glm::vec3 camera_position{0.0f};
 };
 
 template <std::size_t N>
 vk::UniquePipelineLayout CreateGraphicsPipelineLayout(
     const vk::Device device,
     const std::array<vk::DescriptorSetLayout, N>& descriptor_set_layouts) {
-  static constexpr vk::PushConstantRange kVertexShaderPushConstantRange{.stageFlags = vk::ShaderStageFlagBits::eVertex,
-                                                                        .offset = 0,
-                                                                        .size = sizeof(PushConstants)};
+  static constexpr std::array kPushConstantRanges{
+      vk::PushConstantRange{.stageFlags = vk::ShaderStageFlagBits::eVertex,
+                            .offset = offsetof(PushConstants, model_transform),
+                            .size = sizeof(PushConstants::model_transform)},
+      vk::PushConstantRange{.stageFlags = vk::ShaderStageFlagBits::eFragment,
+                            .offset = offsetof(PushConstants, camera_position),
+                            .size = sizeof(PushConstants::camera_position)}};
+
   return device.createPipelineLayoutUnique(
       vk::PipelineLayoutCreateInfo{.setLayoutCount = static_cast<std::uint32_t>(descriptor_set_layouts.size()),
                                    .pSetLayouts = descriptor_set_layouts.data(),
-                                   .pushConstantRangeCount = 1,
-                                   .pPushConstantRanges = &kVertexShaderPushConstantRange});
+                                   .pushConstantRangeCount = static_cast<std::uint32_t>(kPushConstantRanges.size()),
+                                   .pPushConstantRanges = kPushConstantRanges.data()});
 }
 
 vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
@@ -1211,6 +1217,12 @@ void Scene::Render(const Camera& camera, const std::size_t frame_index, const vk
   camera_buffers_[frame_index].Copy<CameraTransforms>(
       CameraTransforms{.view_transform = camera.GetViewTransform(),
                        .projection_transform = camera.GetProjectionTransform()});
+
+  using CameraPosition = decltype(PushConstants::camera_position);
+  command_buffer.pushConstants<CameraPosition>(*graphics_pipeline_layout_,
+                                               vk::ShaderStageFlagBits::eFragment,
+                                               offsetof(PushConstants, camera_position),
+                                               camera.position());
 
   for (const auto& child_node : root_node_->children) {
     ::Render(*child_node, root_node_->transform, *graphics_pipeline_layout_, command_buffer);
