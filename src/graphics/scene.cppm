@@ -373,6 +373,7 @@ struct CreateSamplerOptions {
 
 // filter and address mode values come from https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#reference-sampler
 enum class SamplerFilter : std::uint16_t {
+  kUndefined = 0,
   kNearest = 9728,
   kLinear = 9729,
   kNearestMipmapNearest = 9984,
@@ -383,9 +384,10 @@ enum class SamplerFilter : std::uint16_t {
 
 enum class SamplerAddressMode : std::uint16_t { kClampToEdge = 33071, kMirroredRepeat = 33648, kRepeat = 10497 };
 
-vk::Filter GetSamplerMagFilter(const int gltf_mag_filter) {
+vk::Filter GetSamplerMagFilter(const cgltf_int gltf_mag_filter) {
   switch (static_cast<SamplerFilter>(gltf_mag_filter)) {
     using enum SamplerFilter;
+    case kUndefined:
     case kNearest:
       return vk::Filter::eNearest;
     case kLinear:
@@ -395,9 +397,10 @@ vk::Filter GetSamplerMagFilter(const int gltf_mag_filter) {
   }
 }
 
-std::pair<vk::Filter, vk::SamplerMipmapMode> GetSamplerMinFilterAndMipmapMode(const int gltf_min_filter) {
+std::pair<vk::Filter, vk::SamplerMipmapMode> GetSamplerMinFilterAndMipmapMode(const cgltf_int gltf_min_filter) {
   switch (static_cast<SamplerFilter>(gltf_min_filter)) {
     using enum SamplerFilter;
+    case kUndefined:
     case kNearest:
     case kNearestMipmapNearest:
       return std::pair{vk::Filter::eNearest, vk::SamplerMipmapMode::eNearest};
@@ -413,7 +416,7 @@ std::pair<vk::Filter, vk::SamplerMipmapMode> GetSamplerMinFilterAndMipmapMode(co
   }
 }
 
-vk::SamplerAddressMode GetSamplerAddressMode(const int gltf_wrap_mode) {
+vk::SamplerAddressMode GetSamplerAddressMode(const cgltf_int gltf_wrap_mode) {
   switch (static_cast<SamplerAddressMode>(gltf_wrap_mode)) {
     using enum SamplerAddressMode;
     case kClampToEdge:
