@@ -75,8 +75,8 @@ struct Mesh {
 };
 
 struct Node {
-  const Mesh* mesh = nullptr;
-  glm::mat4 transform{0.0f};
+  const Mesh* mesh = nullptr;  // non-owning pointer to a mesh managed by the top-level scene
+  glm::mat4 world_transform{0.0f};
   std::vector<std::unique_ptr<const Node>> children;
 };
 
@@ -110,7 +110,7 @@ private:
   vk::UniquePipelineLayout graphics_pipeline_layout_;
   vk::UniquePipeline graphics_pipeline_;
   std::vector<std::unique_ptr<const Mesh>> meshes_;
-  std::unique_ptr<const Node> root_node_;
+  std::vector<std::unique_ptr<const Node>> root_nodes_;
 };
 
 }  // namespace gfx
@@ -909,30 +909,24 @@ std::unique_ptr<const Mesh> CreateMesh(const cgltf_mesh& gltf_mesh,
 // ======================================================= Nodes =======================================================
 
 glm::mat4 GetLocalTransform(const cgltf_node& gltf_node) {
-  glm::mat4 transform{0.0f};
-  cgltf_node_transform_local(&gltf_node, glm::value_ptr(transform));
-  return transform;
+  glm::mat4 local_transform{0.0f};
+  cgltf_node_transform_local(&gltf_node, glm::value_ptr(local_transform));
+  return local_transform;
 }
 
 std::vector<std::unique_ptr<const Node>> CreateNodes(const cgltf_node* const* const gltf_nodes,
                                                      const cgltf_size gltf_nodes_count,
-                                                     const UnorderedPtrMap<cgltf_mesh, const Mesh>& meshes) {
+                                                     const UnorderedPtrMap<cgltf_mesh, const Mesh>& meshes,
+                                                     const glm::mat4& parent_transform = glm::mat4{1.0f}) {
   return std::span{gltf_nodes, gltf_nodes_count}  //
-         | std::views::transform([&meshes](const auto* const gltf_node) {
-             assert(gltf_node != nullptr);
-             return std::make_unique<const Node>(Find(gltf_node->mesh, meshes),
-                                                 GetLocalTransform(*gltf_node),
-                                                 CreateNodes(gltf_node->children, gltf_node->children_count, meshes));
+         | std::views::transform([&parent_transform, &meshes](const auto* const gltf_node) {
+             const auto node_transform = parent_transform * GetLocalTransform(*gltf_node);
+             return std::make_unique<const Node>(
+                 Find(gltf_node->mesh, meshes),
+                 node_transform,
+                 CreateNodes(gltf_node->children, gltf_node->children_count, meshes, node_transform));
            })
          | std::ranges::to<std::vector>();
-}
-
-std::unique_ptr<const Node> CreateRootNode(const cgltf_data& gltf_data,
-                                           const UnorderedPtrMap<cgltf_mesh, const Mesh>& meshes) {
-  const auto& gltf_scene = GetDefaultScene(gltf_data);
-  return std::make_unique<const Node>(nullptr,
-                                      glm::mat4{1.0f},
-                                      CreateNodes(gltf_scene.nodes, gltf_scene.nodes_count, meshes));
 }
 
 // ================================================= Graphics Pipeline =================================================
@@ -1103,17 +1097,14 @@ void Render(const Mesh& mesh,
 }
 
 void Render(const Node& node,
-            const glm::mat4& parent_transform,
             const vk::PipelineLayout graphics_pipeline_layout,
             const vk::CommandBuffer command_buffer) {
-  const auto model_transform = parent_transform * node.transform;
-
   if (const auto* const mesh = node.mesh; mesh != nullptr) {
-    Render(*mesh, model_transform, graphics_pipeline_layout, command_buffer);
+    Render(*mesh, node.world_transform, graphics_pipeline_layout, command_buffer);
   }
 
   for (const auto& child_node : node.children) {
-    Render(*child_node, model_transform, graphics_pipeline_layout, command_buffer);
+    Render(*child_node, graphics_pipeline_layout, command_buffer);
   }
 }
 
@@ -1191,7 +1182,9 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
   graphics_pipeline_ =
       CreateGraphicsPipeline(device, *graphics_pipeline_layout_, viewport_extent, msaa_sample_count, render_pass);
 
-  root_node_ = CreateRootNode(*gltf_data, meshes);
+  const auto& gltf_scene = GetDefaultScene(*gltf_data);
+  root_nodes_ = CreateNodes(gltf_scene.nodes, gltf_scene.nodes_count, meshes);
+
   meshes_ = meshes | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
   materials_ = materials | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
   material_samplers_ = material_samplers | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
@@ -1219,8 +1212,8 @@ void Scene::Render(const Camera& camera, const std::size_t frame_index, const vk
                                                offsetof(PushConstants, camera_position),
                                                camera.position());
 
-  for (const auto& child_node : root_node_->children) {
-    ::Render(*child_node, root_node_->transform, *graphics_pipeline_layout_, command_buffer);
+  for (const auto& root_node : root_nodes_) {
+    ::Render(*root_node, *graphics_pipeline_layout_, command_buffer);
   }
 }
 
