@@ -1,6 +1,5 @@
 module;
 
-#include <filesystem>
 #include <optional>
 
 #include <GLFW/glfw3.h>
@@ -10,7 +9,7 @@ export module game;
 
 import camera;
 import engine;
-import scene;
+import gltf_scene;
 import window;
 
 namespace gfx {
@@ -24,7 +23,7 @@ public:
 private:
   Window window_;
   Engine engine_;
-  Scene scene_;
+  GltfScene gltf_scene_;
   Camera camera_;
 };
 
@@ -93,14 +92,14 @@ namespace gfx {
 Game::Game()
     : window_{"VkRender", kWindowWidth4k, kWindowHeight4k},
       engine_{window_},
-      scene_{engine_.Load(std::filesystem::path{"assets/models/Main.1_Sponza/NewSponza_Main_glTF_002.gltf"})},
+      gltf_scene_{engine_.Load("assets/models/Main.1_Sponza/NewSponza_Main_glTF_002.gltf")},
       camera_{CreateCamera(window_.GetAspectRatio())} {}
 
 void Game::Start() {
   engine_.Run(window_, [this](const auto delta_time) {
     HandleKeyEvents(window_, camera_, delta_time);
     HandleMouseEvents(window_, camera_);
-    engine_.Render(scene_, camera_);
+    engine_.Render(gltf_scene_, camera_);
   });
 }
 

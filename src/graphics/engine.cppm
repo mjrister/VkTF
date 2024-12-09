@@ -23,8 +23,8 @@ import delta_time;
 import device;
 import image;
 import instance;
+import gltf_scene;
 import physical_device;
-import scene;
 import swapchain;
 import window;
 
@@ -34,7 +34,7 @@ export class Engine {
 public:
   explicit Engine(const Window& window);
 
-  [[nodiscard]] Scene Load(const std::filesystem::path& gltf_filepath) const;
+  [[nodiscard]] GltfScene Load(const std::filesystem::path& gltf_filepath) const;
 
   void Run(const Window& window, std::invocable<DeltaTime> auto&& main_loop_fn) const {
     for (DeltaTime delta_time; !window.ShouldClose();) {
@@ -45,7 +45,7 @@ public:
     device_->waitIdle();
   }
 
-  void Render(const Scene& scene, const Camera& camera);
+  void Render(const GltfScene& gltf_scene, const Camera& camera);
 
 private:
   static constexpr std::size_t kMaxRenderFrames = 2;
@@ -206,9 +206,9 @@ std::vector<vk::UniqueFramebuffer> CreateFramebuffers(const vk::Device device,
          | std::ranges::to<std::vector>();
 }
 
-template <std::size_t MaxRenderFrames>
-std::array<vk::UniqueFence, MaxRenderFrames> CreateFences(const vk::Device device) {
-  std::array<vk::UniqueFence, MaxRenderFrames> fences;
+template <std::size_t N>
+std::array<vk::UniqueFence, N> CreateFences(const vk::Device device) {
+  std::array<vk::UniqueFence, N> fences;
   std::ranges::generate(fences, [device] {
     // create the fence in a signaled state to avoid waiting on the first frame
     return device.createFenceUnique(vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled});
@@ -216,9 +216,9 @@ std::array<vk::UniqueFence, MaxRenderFrames> CreateFences(const vk::Device devic
   return fences;
 }
 
-template <std::size_t MaxRenderFrames>
-std::array<vk::UniqueSemaphore, MaxRenderFrames> CreateSemaphores(const vk::Device device) {
-  std::array<vk::UniqueSemaphore, MaxRenderFrames> semaphores;
+template <std::size_t N>
+std::array<vk::UniqueSemaphore, N> CreateSemaphores(const vk::Device device) {
+  std::array<vk::UniqueSemaphore, N> semaphores;
   std::ranges::generate(semaphores, [device] { return device.createSemaphoreUnique(vk::SemaphoreCreateInfo{}); });
   return semaphores;
 }
@@ -280,25 +280,26 @@ Engine::Engine(const Window& window)
       acquire_next_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)},
       present_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)} {}
 
-Scene Engine::Load(const std::filesystem::path& gltf_filepath) const {
+GltfScene Engine::Load(const std::filesystem::path& gltf_filepath) const {
   if (const auto extension = gltf_filepath.extension(); extension != ".gltf") {
     throw std::runtime_error{std::format("Unsupported file extension: {}", extension.string())};
   }
-  return Scene{gltf_filepath,
-               *physical_device_,
-               physical_device_.features().samplerAnisotropy,
-               physical_device_.limits().maxSamplerAnisotropy,
-               *device_,
-               graphics_queue_,  // TODO(matthew-rister): use a dedicated transfer queue to copy assets to device memory
-               physical_device_.queue_family_indices().graphics_index,
-               swapchain_.image_extent(),
-               msaa_sample_count_,
-               *render_pass_,
-               *allocator_,
-               kMaxRenderFrames};
+  return GltfScene{gltf_filepath,
+                   *physical_device_,
+                   physical_device_.features().samplerAnisotropy,
+                   physical_device_.limits().maxSamplerAnisotropy,
+                   *device_,
+                   // TODO(matthew-rister): use a dedicated transfer queue to copy assets to device memory
+                   graphics_queue_,
+                   physical_device_.queue_family_indices().graphics_index,
+                   swapchain_.image_extent(),
+                   msaa_sample_count_,
+                   *render_pass_,
+                   *allocator_,
+                   kMaxRenderFrames};
 }
 
-void Engine::Render(const Scene& scene, const Camera& camera) {
+void Engine::Render(const GltfScene& gltf_scene, const Camera& camera) {
   if (++current_frame_index_ == kMaxRenderFrames) {
     current_frame_index_ = 0;
   }
@@ -321,10 +322,12 @@ void Engine::Render(const Scene& scene, const Camera& camera) {
   const auto draw_command_buffer = *draw_command_buffers_[current_frame_index_];
   draw_command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
 
-  static constexpr std::array kClearColor{0.0f, 0.0f, 0.0f, 1.0f};
-  static constexpr std::array kClearValues{vk::ClearValue{.color = vk::ClearColorValue{kClearColor}},
-                                           vk::ClearValue{.color = vk::ClearColorValue{kClearColor}},
-                                           vk::ClearValue{.depthStencil = vk::ClearDepthStencilValue{1.0f, 0}}};
+  static constexpr std::array kClearColor{0.0f, 0.0f, 0.0f, 0.0f};
+  static constexpr std::array kClearValues{
+      vk::ClearValue{.color = vk::ClearColorValue{kClearColor}},
+      vk::ClearValue{.color = vk::ClearColorValue{kClearColor}},
+      vk::ClearValue{.depthStencil = vk::ClearDepthStencilValue{.depth = 1.0f, .stencil = 0}}};
+
   draw_command_buffer.beginRenderPass(
       vk::RenderPassBeginInfo{
           .renderPass = *render_pass_,
@@ -334,7 +337,7 @@ void Engine::Render(const Scene& scene, const Camera& camera) {
           .pClearValues = kClearValues.data()},
       vk::SubpassContents::eInline);
 
-  scene.Render(camera, current_frame_index_, draw_command_buffer);
+  gltf_scene.Render(camera, current_frame_index_, draw_command_buffer);
 
   draw_command_buffer.endRenderPass();
   draw_command_buffer.end();

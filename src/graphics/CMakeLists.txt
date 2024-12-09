@@ -10,11 +10,11 @@ target_sources(graphics PUBLIC FILE_SET CXX_MODULES
                                      device.cppm
                                      engine.cppm
                                      glslang_compiler.cppm
+                                     gltf_scene.cppm
                                      image.cppm
                                      instance.cppm
                                      ktx_texture.cppm
                                      physical_device.cppm
-                                     scene.cppm
                                      shader_module.cppm
                                      swapchain.cppm
                                      window.cppm)

@@ -33,7 +33,7 @@ module;
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_hash.hpp>
 
-export module scene;
+export module gltf_scene;
 
 import buffer;
 import camera;
@@ -75,7 +75,7 @@ struct Mesh {
 };
 
 struct Node {
-  const Mesh* mesh = nullptr;  // non-owning pointer to a mesh managed by the top-level scene
+  const Mesh* mesh = nullptr;  // non-owning pointer managed by the top-level scene
   glm::mat4 world_transform{0.0f};
   std::vector<std::unique_ptr<const Node>> children;
 };
@@ -84,20 +84,20 @@ struct Node {
 
 namespace gfx {
 
-export class Scene {
+export class GltfScene {
 public:
-  Scene(const std::filesystem::path& gltf_filepath,
-        vk::PhysicalDevice physical_device,
-        vk::Bool32 enable_sampler_anisotropy,
-        float max_sampler_anisotropy,
-        vk::Device device,
-        vk::Queue transfer_queue,
-        std::uint32_t transfer_queue_family_index,
-        vk::Extent2D viewport_extent,
-        vk::SampleCountFlagBits msaa_sample_count,
-        vk::RenderPass render_pass,
-        VmaAllocator allocator,
-        std::size_t max_render_frames);
+  GltfScene(const std::filesystem::path& gltf_filepath,
+            vk::PhysicalDevice physical_device,
+            vk::Bool32 enable_sampler_anisotropy,
+            float max_sampler_anisotropy,
+            vk::Device device,
+            vk::Queue transfer_queue,
+            std::uint32_t transfer_queue_family_index,
+            vk::Extent2D viewport_extent,
+            vk::SampleCountFlagBits msaa_sample_count,
+            vk::RenderPass render_pass,
+            VmaAllocator allocator,
+            std::size_t max_render_frames);
 
   void Render(const Camera& camera, std::size_t frame_index, vk::CommandBuffer command_buffer) const;
 
@@ -572,6 +572,9 @@ std::unique_ptr<Material> CreateMaterial(const vk::Device device,
   if (std::ranges::any_of(
           std::array{&maybe_base_color_ktx_texture, &maybe_metallic_roughness_ktx_texture, &maybe_normal_ktx_texture},
           [](const auto* const maybe_ktx_texture) { return !maybe_ktx_texture->has_value(); })) {
+    std::println(std::cerr,
+                 "Failed to create material {} because it's missing required PBR metallic-roughness textures",
+                 GetName(gltf_material));
     return nullptr;  // TODO(matthew-rister): add support for optional material textures
   }
 
@@ -581,25 +584,26 @@ std::unique_ptr<Material> CreateMaterial(const vk::Device device,
                metallic_factor,
                roughness_factor] = gltf_material.pbr_metallic_roughness;
 
-  const auto* const base_color_sampler = base_color_texture_view.texture->sampler;
-  const auto* const metallic_roughness_sampler = metallic_roughness_texture_view.texture->sampler;
-  const auto* const normal_sampler = gltf_material.normal_texture.texture->sampler;
-
   const auto& base_color_ktx_texture = *maybe_base_color_ktx_texture;
   const auto& metallic_roughness_ktx_texture = *maybe_metallic_roughness_ktx_texture;
   const auto& normal_ktx_texture = *maybe_normal_ktx_texture;
 
   return std::make_unique<Material>(
       Texture{.image = CreateImage(device, *base_color_ktx_texture, copy_buffer_options),
-              .sampler =
-                  CreateSampler(device, base_color_sampler, base_color_ktx_texture->numLevels, create_sampler_options)},
+              .sampler = CreateSampler(device,
+                                       base_color_texture_view.texture->sampler,
+                                       base_color_ktx_texture->numLevels,
+                                       create_sampler_options)},
       Texture{.image = CreateImage(device, *metallic_roughness_ktx_texture, copy_buffer_options),
               .sampler = CreateSampler(device,
-                                       metallic_roughness_sampler,
+                                       metallic_roughness_texture_view.texture->sampler,
                                        metallic_roughness_ktx_texture->numLevels,
                                        create_sampler_options)},
       Texture{.image = CreateImage(device, *normal_ktx_texture, copy_buffer_options),
-              .sampler = CreateSampler(device, normal_sampler, normal_ktx_texture->numLevels, create_sampler_options)},
+              .sampler = CreateSampler(device,
+                                       gltf_material.normal_texture.texture->sampler,
+                                       normal_ktx_texture->numLevels,
+                                       create_sampler_options)},
       CreateBuffer<MaterialProperties>(MaterialProperties{.base_color_factor = ToVec(base_color_factor),
                                                           .metallic_factor = metallic_factor,
                                                           .roughness_factor = roughness_factor},
@@ -642,7 +646,7 @@ void UpdateMaterialDescriptorSets(const vk::Device device,
 
   for (const auto& [descriptor_set, material] :
        std::views::zip(material_descriptor_sets, materials | std::views::values)) {
-    if (material == nullptr) continue;
+    if (material == nullptr) continue;  // TODO(matthew-rister): avoid creating descriptor set for unsupported material
 
     const auto& [base_color_image, base_color_sampler] = *material->maybe_base_color_texture;
     const auto& [metallic_roughness_image, metallic_roughness_sampler] = *material->maybe_metallic_roughness_texture;
@@ -754,7 +758,7 @@ void ValidateAttributes(const VertexAttribute<float, 3>& position_attribute,
                         const VertexAttribute<float, 2>& texture_coordinates_0_attribute,
                         VertexAttribute<float, 4>& color_0_attribute) {
   ValidateRequiredAttribute(position_attribute);
-  ValidateRequiredAttribute(normal_attribute);
+  ValidateRequiredAttribute(normal_attribute);  // TODO(matthew-rister): derive normals from positions data when missing
   ValidateRequiredAttribute(tangent_attribute);
   ValidateRequiredAttribute(texture_coordinates_0_attribute);
 
@@ -1017,7 +1021,7 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
                               .height = static_cast<float>(viewport_extent.height),
                               .minDepth = 0.0f,
                               .maxDepth = 1.0f};
-  const vk::Rect2D scissor{.offset = vk::Offset2D{0, 0}, .extent = viewport_extent};
+  const vk::Rect2D scissor{.offset = vk::Offset2D{.x = 0, .y = 0}, .extent = viewport_extent};
 
   const vk::PipelineViewportStateCreateInfo viewport_state_create_info{.viewportCount = 1,
                                                                        .pViewports = &viewport,
@@ -1112,29 +1116,20 @@ void Render(const Node& node,
 
 namespace gfx {
 
-Scene::Scene(const std::filesystem::path& gltf_filepath,
-             const vk::PhysicalDevice physical_device,
-             const vk::Bool32 enable_sampler_anisotropy,
-             const float max_sampler_anisotropy,
-             const vk::Device device,
-             const vk::Queue transfer_queue,
-             const std::uint32_t transfer_queue_family_index,
-             const vk::Extent2D viewport_extent,
-             const vk::SampleCountFlagBits msaa_sample_count,
-             const vk::RenderPass render_pass,
-             const VmaAllocator allocator,
-             const std::size_t max_render_frames) {
+GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
+                     const vk::PhysicalDevice physical_device,
+                     const vk::Bool32 enable_sampler_anisotropy,
+                     const float max_sampler_anisotropy,
+                     const vk::Device device,
+                     const vk::Queue transfer_queue,
+                     const std::uint32_t transfer_queue_family_index,
+                     const vk::Extent2D viewport_extent,
+                     const vk::SampleCountFlagBits msaa_sample_count,
+                     const vk::RenderPass render_pass,
+                     const VmaAllocator allocator,
+                     const std::size_t max_render_frames) {
   const auto gltf_data = Load(gltf_filepath.string());
   const auto gltf_directory = gltf_filepath.parent_path();
-
-  const auto staging_buffer_count = gltf_data->buffers_count + gltf_data->images_count;
-  auto copy_buffer_options =
-      CreateCopyBufferOptions(device, transfer_queue_family_index, staging_buffer_count, allocator);
-
-  std::unordered_map<vk::SamplerCreateInfo, vk::UniqueSampler> material_samplers;
-  CreateSamplerOptions create_sampler_options{.enable_anisotropy = enable_sampler_anisotropy,
-                                              .max_anisotropy = max_sampler_anisotropy,
-                                              .samplers = &material_samplers};
 
   auto material_futures =
       std::span{gltf_data->materials, gltf_data->materials_count}
@@ -1144,6 +1139,15 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
           });
         })
       | std::ranges::to<std::vector>();
+
+  const auto staging_buffer_count = gltf_data->buffers_count + gltf_data->images_count;
+  auto copy_buffer_options =
+      CreateCopyBufferOptions(device, transfer_queue_family_index, staging_buffer_count, allocator);
+
+  std::unordered_map<vk::SamplerCreateInfo, vk::UniqueSampler> material_samplers;
+  CreateSamplerOptions create_sampler_options{.enable_anisotropy = enable_sampler_anisotropy,
+                                              .max_anisotropy = max_sampler_anisotropy,
+                                              .samplers = &material_samplers};
 
   const auto copy_command_buffer = *copy_buffer_options.command_buffer;
   copy_command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
@@ -1176,8 +1180,8 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
   camera_descriptor_sets_ = CreateCameraDescriptorSets(device, static_cast<std::uint32_t>(max_render_frames));
   UpdateCameraDescriptorSets(device, camera_descriptor_sets_, camera_buffers_);
 
-  const auto descriptor_set_layouts =
-      std::array{camera_descriptor_sets_->descriptor_set_layout(), material_descriptor_sets_->descriptor_set_layout()};
+  const std::array descriptor_set_layouts{camera_descriptor_sets_.descriptor_set_layout(),
+                                          material_descriptor_sets_.descriptor_set_layout()};
   graphics_pipeline_layout_ = CreateGraphicsPipelineLayout(device, descriptor_set_layouts);
   graphics_pipeline_ =
       CreateGraphicsPipeline(device, *graphics_pipeline_layout_, viewport_extent, msaa_sample_count, render_pass);
@@ -1194,7 +1198,9 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
   vk::detail::resultCheck(result, "Copy fence failed to enter a signaled state");
 }
 
-void Scene::Render(const Camera& camera, const std::size_t frame_index, const vk::CommandBuffer command_buffer) const {
+void GltfScene::Render(const Camera& camera,
+                       const std::size_t frame_index,
+                       const vk::CommandBuffer command_buffer) const {
   command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphics_pipeline_);
   command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                     *graphics_pipeline_layout_,
