@@ -103,10 +103,10 @@ public:
 
 private:
   std::vector<Buffer> camera_buffers_;
-  std::unique_ptr<const DescriptorSets> camera_descriptor_sets_;
+  DescriptorSets camera_descriptor_sets_;
   std::vector<std::unique_ptr<Material>> materials_;
   std::vector<vk::UniqueSampler> material_samplers_;
-  std::unique_ptr<const DescriptorSets> material_descriptor_sets_;
+  DescriptorSets material_descriptor_sets_;
   vk::UniquePipelineLayout graphics_pipeline_layout_;
   vk::UniquePipeline graphics_pipeline_;
   std::vector<std::unique_ptr<const Mesh>> meshes_;
@@ -326,8 +326,7 @@ std::vector<gfx::Buffer> CreateCameraBuffers(const std::size_t max_render_frames
          | std::ranges::to<std::vector>();
 }
 
-std::unique_ptr<const gfx::DescriptorSets> CreateCameraDescriptorSets(const vk::Device device,
-                                                                      const std::uint32_t max_render_frames) {
+gfx::DescriptorSets CreateCameraDescriptorSets(const vk::Device device, const std::uint32_t max_render_frames) {
   const std::array descriptor_pool_sizes{
       vk::DescriptorPoolSize{.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = max_render_frames}};
 
@@ -337,10 +336,7 @@ std::unique_ptr<const gfx::DescriptorSets> CreateCameraDescriptorSets(const vk::
                                      .descriptorCount = 1,
                                      .stageFlags = vk::ShaderStageFlagBits::eVertex}};
 
-  return std::make_unique<const gfx::DescriptorSets>(device,
-                                                     max_render_frames,
-                                                     descriptor_pool_sizes,
-                                                     kDescriptorSetLayoutBindings);
+  return gfx::DescriptorSets{device, max_render_frames, descriptor_pool_sizes, kDescriptorSetLayoutBindings};
 }
 
 void UpdateCameraDescriptorSets(const vk::Device device,
@@ -608,8 +604,7 @@ std::unique_ptr<Material> CreateMaterial(const vk::Device device,
                                        copy_buffer_options));
 }
 
-std::unique_ptr<const gfx::DescriptorSets> CreateMaterialDescriptorSets(const vk::Device device,
-                                                                        const std::uint32_t material_count) {
+gfx::DescriptorSets CreateMaterialDescriptorSets(const vk::Device device, const std::uint32_t material_count) {
   static constexpr std::uint32_t kImagesPerMaterial = 3;
 
   const std::array descriptor_pool_sizes{
@@ -627,10 +622,7 @@ std::unique_ptr<const gfx::DescriptorSets> CreateMaterialDescriptorSets(const vk
                                      .descriptorCount = kImagesPerMaterial,
                                      .stageFlags = vk::ShaderStageFlagBits::eFragment}};
 
-  return std::make_unique<const gfx::DescriptorSets>(device,
-                                                     material_count,
-                                                     descriptor_pool_sizes,
-                                                     kDescriptorSetLayoutBindings);
+  return gfx::DescriptorSets{device, material_count, descriptor_pool_sizes, kDescriptorSetLayoutBindings};
 }
 
 void UpdateMaterialDescriptorSets(const vk::Device device,
@@ -1173,7 +1165,7 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
       | std::ranges::to<std::unordered_map>();
 
   material_descriptor_sets_ = CreateMaterialDescriptorSets(device, static_cast<std::uint32_t>(materials.size()));
-  UpdateMaterialDescriptorSets(device, *material_descriptor_sets_, materials);
+  UpdateMaterialDescriptorSets(device, material_descriptor_sets_, materials);
 
   auto meshes = std::span{gltf_data->meshes, gltf_data->meshes_count}
                 | std::views::transform([&materials, &copy_buffer_options](const auto& gltf_mesh) {
@@ -1188,7 +1180,7 @@ Scene::Scene(const std::filesystem::path& gltf_filepath,
 
   camera_buffers_ = CreateCameraBuffers(max_render_frames, allocator);
   camera_descriptor_sets_ = CreateCameraDescriptorSets(device, static_cast<std::uint32_t>(max_render_frames));
-  UpdateCameraDescriptorSets(device, *camera_descriptor_sets_, camera_buffers_);
+  UpdateCameraDescriptorSets(device, camera_descriptor_sets_, camera_buffers_);
 
   const auto descriptor_set_layouts =
       std::array{camera_descriptor_sets_->descriptor_set_layout(), material_descriptor_sets_->descriptor_set_layout()};
@@ -1211,7 +1203,7 @@ void Scene::Render(const Camera& camera, const std::size_t frame_index, const vk
   command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                     *graphics_pipeline_layout_,
                                     0,
-                                    (*camera_descriptor_sets_)[frame_index],
+                                    camera_descriptor_sets_[frame_index],
                                     nullptr);
 
   camera_buffers_[frame_index].Copy<CameraTransforms>(

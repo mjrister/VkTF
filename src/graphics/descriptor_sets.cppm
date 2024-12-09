@@ -13,8 +13,9 @@ namespace gfx {
 
 export class DescriptorSets {
 public:
+  DescriptorSets() noexcept = default;
   DescriptorSets(vk::Device device,
-                 std::uint32_t max_descriptor_sets,
+                 std::uint32_t descriptor_set_count,
                  std::span<const vk::DescriptorPoolSize> descriptor_pool_sizes,
                  std::span<const vk::DescriptorSetLayoutBinding> descriptor_set_layout_bindings);
 
@@ -41,21 +42,21 @@ module :private;
 namespace gfx {
 
 DescriptorSets::DescriptorSets(const vk::Device device,
-                               const std::uint32_t max_descriptor_sets,
+                               const std::uint32_t descriptor_set_count,
                                const std::span<const vk::DescriptorPoolSize> descriptor_pool_sizes,
                                const std::span<const vk::DescriptorSetLayoutBinding> descriptor_set_layout_bindings)
     : descriptor_pool_{device.createDescriptorPoolUnique(
-        vk::DescriptorPoolCreateInfo{.maxSets = max_descriptor_sets,
-                                     .poolSizeCount = static_cast<std::uint32_t>(descriptor_pool_sizes.size()),
-                                     .pPoolSizes = descriptor_pool_sizes.data()})},
+          vk::DescriptorPoolCreateInfo{.maxSets = descriptor_set_count,
+                                       .poolSizeCount = static_cast<std::uint32_t>(descriptor_pool_sizes.size()),
+                                       .pPoolSizes = descriptor_pool_sizes.data()})},
       descriptor_set_layout_{device.createDescriptorSetLayoutUnique(vk::DescriptorSetLayoutCreateInfo{
           .bindingCount = static_cast<std::uint32_t>(descriptor_set_layout_bindings.size()),
           .pBindings = descriptor_set_layout_bindings.data()})} {
-  const std::vector descriptor_set_layouts(max_descriptor_sets, *descriptor_set_layout_);
+  const std::vector descriptor_set_layouts(descriptor_set_count, *descriptor_set_layout_);
 
   descriptor_sets_ =
       device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo{.descriptorPool = *descriptor_pool_,
-                                                                  .descriptorSetCount = max_descriptor_sets,
+                                                                  .descriptorSetCount = descriptor_set_count,
                                                                   .pSetLayouts = descriptor_set_layouts.data()});
 }
 
