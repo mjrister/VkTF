@@ -6,7 +6,12 @@
     "cgltf",
     "glfw3",
     "glm",
-    "glslang",
+    {
+      "name": "glslang",
+      "features": [
+        "tools"
+      ]
+    },
     "gtest",
     "ktx",
     "stb",

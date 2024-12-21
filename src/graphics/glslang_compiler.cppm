@@ -19,7 +19,7 @@ export module glslang_compiler;
 
 namespace gfx::glslang {
 
-export std::vector<std::uint32_t> Compile(glslang_stage_t glslang_stage, const std::string& glsl_source);
+export std::vector<std::uint32_t> Compile(const std::string& glsl_shader, glslang_stage_t glslang_stage);
 
 }  // namespace gfx::glslang
 
@@ -88,7 +88,7 @@ using GlslangShader = std::unique_ptr<glslang_shader_t, decltype(&glslang_shader
 using GlslangProgram = std::unique_ptr<glslang_program_t, decltype(&glslang_program_delete)>;
 
 constexpr auto kGlslangMessages =
-// NOLINTBEGIN(hicpp-signed-bitwise): glslang bit flags use signed integers
+// NOLINTBEGIN(hicpp-signed-bitwise): glslang uses signed bit flags
 #ifndef NDEBUG
     GLSLANG_MSG_DEBUG_INFO_BIT |
 #endif
@@ -99,22 +99,22 @@ template <typename Fn, typename T>
   requires requires(Fn glslang_get_fn, T* glslang_element) {
     { glslang_get_fn(glslang_element) } -> std::same_as<const char*>;
   }
-void Print(std::ostream& os, Fn glslang_get_fn, T* const glslang_element) {
+void Print(std::ostream& ostream, Fn glslang_get_fn, T* const glslang_element) {
   if (const auto* const message = glslang_get_fn(glslang_element); message != nullptr) {
     if (const std::string_view message_view = message; !message_view.empty()) {
-      std::println(os, "{}", message_view);
+      std::println(ostream, "{}", message_view);
     }
   }
 }
 
-GlslangShader CreateGlslangShader(const glslang_stage_t glslang_stage, const std::string& glsl_source) {
+GlslangShader CreateGlslangShader(const std::string& glsl_shader, const glslang_stage_t glslang_stage) {
   const glslang_input_t glslang_input{.language = GLSLANG_SOURCE_GLSL,
                                       .stage = glslang_stage,
                                       .client = GLSLANG_CLIENT_VULKAN,
                                       .client_version = GLSLANG_TARGET_VULKAN_1_3,
                                       .target_language = GLSLANG_TARGET_SPV,
                                       .target_language_version = GLSLANG_TARGET_SPV_1_6,
-                                      .code = glsl_source.c_str(),
+                                      .code = glsl_shader.c_str(),
                                       .default_version = 460,
                                       .default_profile = GLSLANG_NO_PROFILE,
                                       .force_default_version_and_profile = 0,
@@ -125,7 +125,7 @@ GlslangShader CreateGlslangShader(const glslang_stage_t glslang_stage, const std
   auto glslang_shader = GlslangShader{glslang_shader_create(&glslang_input), glslang_shader_delete};
   if (glslang_shader == nullptr) {
     throw std::runtime_error{
-        std::format("Shader creation failed at {} with GLSL source:\n{}", glslang_stage, glsl_source)};
+        std::format("Shader creation failed at {} with GLSL source:\n{}", glslang_stage, glsl_shader)};
   }
 
   const auto glslang_shader_preprocess_result = glslang_shader_preprocess(glslang_shader.get(), &glslang_input);
@@ -136,7 +136,7 @@ GlslangShader CreateGlslangShader(const glslang_stage_t glslang_stage, const std
 
   if (glslang_shader_preprocess_result == 0) {
     throw std::runtime_error{
-        std::format("Shader preprocessing failed at {} with GLSL source:\n{}", glslang_stage, glsl_source)};
+        std::format("Shader preprocessing failed at {} with GLSL source:\n{}", glslang_stage, glsl_shader)};
   }
 
   const auto glslang_shader_parse_result = glslang_shader_parse(glslang_shader.get(), &glslang_input);
@@ -195,9 +195,9 @@ std::vector<std::uint32_t> GenerateSpirv(const glslang_stage_t glslang_stage, gl
 
 namespace gfx::glslang {
 
-std::vector<std::uint32_t> Compile(const glslang_stage_t glslang_stage, const std::string& glsl_source) {
+std::vector<std::uint32_t> Compile(const std::string& glsl_shader, const glslang_stage_t glslang_stage) {
   [[maybe_unused]] const auto& glslang_process = GlslangProcess::Get();
-  const auto glslang_shader = CreateGlslangShader(glslang_stage, glsl_source);
+  const auto glslang_shader = CreateGlslangShader(glsl_shader, glslang_stage);
   const auto glslang_program = CreateGlslangProgram(glslang_stage, *glslang_shader);
   return GenerateSpirv(glslang_stage, *glslang_program);
 }
