@@ -8,12 +8,10 @@ module;
 #include <memory>
 #include <print>
 #include <stdexcept>
-#include <utility>
 
 #include <GLFW/glfw3.h>
-#ifdef GLFW_INCLUDE_VULKAN
+#include <glm/glm.hpp>
 #include <vulkan/vulkan.hpp>
-#endif
 
 export module window;
 
@@ -23,10 +21,12 @@ export class Window {
 public:
   Window(const char* title, int width, int height);
 
-  [[nodiscard]] std::pair<int, int> GetSize() const noexcept;
-  [[nodiscard]] std::pair<int, int> GetFramebufferSize() const noexcept;
+  [[nodiscard]] static std::span<const char* const> GetInstanceExtensions();
+  [[nodiscard]] vk::UniqueSurfaceKHR CreateSurface(vk::Instance instance) const;
+
+  [[nodiscard]] vk::Extent2D GetFramebufferExtent() const noexcept;
   [[nodiscard]] float GetAspectRatio() const noexcept;
-  [[nodiscard]] std::pair<float, float> GetCursorPosition() const noexcept;
+  [[nodiscard]] glm::vec2 GetCursorPosition() const noexcept;
 
   [[nodiscard]] bool IsKeyPressed(const int key) const noexcept {
     return glfwGetKey(glfw_window_.get(), key) == GLFW_PRESS;
@@ -40,11 +40,6 @@ public:
   void Close() const noexcept { glfwSetWindowShouldClose(glfw_window_.get(), GLFW_TRUE); }
 
   static void Update() noexcept { glfwPollEvents(); }
-
-#ifdef GLFW_INCLUDE_VULKAN
-  [[nodiscard]] static std::span<const char* const> GetInstanceExtensions();
-  [[nodiscard]] vk::UniqueSurfaceKHR CreateSurface(vk::Instance instance) const;
-#endif
 
 private:
   using GlfwWindow = std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)>;
@@ -80,13 +75,10 @@ private:
       std::println(std::cerr, "GLFW error {}: {}", error_code, description);
     });
 #endif
-    if (glfwInit() == GLFW_FALSE) {
-      throw std::runtime_error{"GLFW initialization failed"};
-    }
-#ifdef GLFW_INCLUDE_VULKAN
+    if (glfwInit() == GLFW_FALSE) throw std::runtime_error{"GLFW initialization failed"};
+
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);  // TODO(matthew-rister): enable after implementing swapchain recreation
-#endif
   }
 };
 
@@ -126,34 +118,6 @@ Window::Window(const char* const title, int width, int height) {
   glfwSetWindowPos(glfw_window_.get(), center_x, center_y);
 }
 
-std::pair<int, int> Window::GetSize() const noexcept {
-  auto width = 0;
-  auto height = 0;
-  glfwGetWindowSize(glfw_window_.get(), &width, &height);
-  return std::pair{width, height};
-}
-
-std::pair<int, int> Window::GetFramebufferSize() const noexcept {
-  auto width = 0;
-  auto height = 0;
-  glfwGetFramebufferSize(glfw_window_.get(), &width, &height);
-  return std::pair{width, height};
-}
-
-float Window::GetAspectRatio() const noexcept {
-  const auto [width, height] = GetSize();
-  return height == 0 ? 0.0f : static_cast<float>(width) / static_cast<float>(height);
-}
-
-std::pair<float, float> Window::GetCursorPosition() const noexcept {
-  auto x = 0.0;
-  auto y = 0.0;
-  glfwGetCursorPos(glfw_window_.get(), &x, &y);
-  return std::pair{static_cast<float>(x), static_cast<float>(y)};
-}
-
-#ifdef GLFW_INCLUDE_VULKAN
-
 std::span<const char* const> Window::GetInstanceExtensions() {
   std::uint32_t required_extension_count = 0;
   const auto* const* required_extensions = glfwGetRequiredInstanceExtensions(&required_extension_count);
@@ -169,6 +133,23 @@ vk::UniqueSurfaceKHR Window::CreateSurface(const vk::Instance instance) const {
   return vk::UniqueSurfaceKHR{vk::SurfaceKHR{surface}, deleter};
 }
 
-#endif
+vk::Extent2D Window::GetFramebufferExtent() const noexcept {
+  auto width = 0;
+  auto height = 0;
+  glfwGetFramebufferSize(glfw_window_.get(), &width, &height);
+  return vk::Extent2D{.width = static_cast<std::uint32_t>(width), .height = static_cast<std::uint32_t>(height)};
+}
+
+float Window::GetAspectRatio() const noexcept {
+  const auto [width, height] = GetFramebufferExtent();
+  return height == 0 ? 0.0f : static_cast<float>(width) / static_cast<float>(height);
+}
+
+glm::vec2 Window::GetCursorPosition() const noexcept {
+  auto x = 0.0;
+  auto y = 0.0;
+  glfwGetCursorPos(glfw_window_.get(), &x, &y);
+  return glm::vec2{static_cast<float>(x), static_cast<float>(y)};
+}
 
 }  // namespace gfx
