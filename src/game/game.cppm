@@ -32,8 +32,6 @@ private:
 module :private;
 
 namespace {
-constexpr auto kWindowWidth4k = 3840;
-constexpr auto kWindowHeight4k = 2160;
 
 gfx::Camera CreateCamera(const float aspect_ratio) {
   static constexpr glm::vec3 kPosition{0.0f, 1.0f, 0.0f};
@@ -83,7 +81,7 @@ void HandleMouseEvents(const gfx::Window& window, gfx::Camera& camera) {
 namespace gfx {
 
 Game::Game()
-    : window_{"VkRender", kWindowWidth4k, kWindowHeight4k},
+    : window_{"VkRender"},
       engine_{window_},
       gltf_scene_{engine_.Load("assets/models/Main.1_Sponza/NewSponza_Main_glTF_002.gltf")},
       camera_{CreateCamera(window_.GetAspectRatio())} {}

@@ -37,7 +37,7 @@ public:
   [[nodiscard]] GltfScene Load(const std::filesystem::path& gltf_filepath) const;
 
   void Run(const Window& window, std::invocable<DeltaTime> auto&& main_loop_fn) const {
-    for (DeltaTime delta_time; !window.ShouldClose();) {
+    for (DeltaTime delta_time; !window.IsClosed();) {
       delta_time.Update();
       window.Update();
       main_loop_fn(delta_time);
