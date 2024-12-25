@@ -19,18 +19,36 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
 import game;
 
+namespace {
+
+constexpr std::string_view kDefaultErrorMessage = "An unknown error occurred\n";
+
+std::ostream& operator<<(std::ostream& ostream, const std::exception& exception) {
+  if (const auto* const system_error = dynamic_cast<const std::system_error*>(&exception)) {
+    ostream << '[' << system_error->code() << "] ";
+  }
+  ostream << exception.what() << '\n';
+  try {
+    std::rethrow_if_nested(exception);
+  } catch (const std::exception& nested_exception) {
+    ostream << nested_exception;
+  } catch (...) {
+    ostream << kDefaultErrorMessage;
+  }
+  return ostream;
+}
+
+}  // namespace
+
 int main() {  // NOLINT(bugprone-exception-escape): std::cerr is not configured to throw exceptions
   try {
     gfx::Game game;
     game.Start();
-  } catch (const std::system_error& e) {
-    std::cerr << '[' << e.code() << "] " << e.what() << '\n';
-    return EXIT_FAILURE;
-  } catch (const std::exception& e) {
-    std::cerr << e.what() << '\n';
+  } catch (const std::exception& exception) {
+    std::cerr << exception;
     return EXIT_FAILURE;
   } catch (...) {
-    std::cerr << "An unknown error occurred\n";
+    std::cerr << kDefaultErrorMessage;
     return EXIT_FAILURE;
   }
   return EXIT_SUCCESS;
