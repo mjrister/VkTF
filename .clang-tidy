@@ -1,7 +1,7 @@
 ---
 Checks: >-
   bugprone-*,
-  cert-*
+  cert-*,
   clang-analyzer-*,
   cppcoreguidelines-*,
   google-*,
@@ -19,8 +19,7 @@ Checks: >-
   -misc-no-recursion,
   -modernize-use-trailing-return-type
 CheckOptions:
-  - key: readability-identifier-length.IgnoredExceptionVariableNames
-    value: '^[e]$'
+  - hicpp-signed-bitwise.IgnorePositiveIntegerLiterals: true
   - key: readability-identifier-length.IgnoredLoopCounterNames
     value: '^[ijk]$'
   - key: readability-identifier-length.IgnoredParameterNames
