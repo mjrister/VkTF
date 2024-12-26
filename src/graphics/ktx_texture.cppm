@@ -222,7 +222,7 @@ StbImage Load(const std::filesystem::path& image_filepath) {
 
 KtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::path& image_filepath,
                                            const gfx::ColorSpace color_space) {
-  const auto& [width, height, channels, data] = Load(image_filepath);
+  const auto [width, height, channels, data] = Load(image_filepath);
   static_assert(sizeof(decltype(data)::element_type) == 1, "8-bit image data is required");
   const auto data_size_bytes = static_cast<ktx_size_t>(width) * height * channels;
 

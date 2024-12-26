@@ -44,7 +44,7 @@ gfx::Camera CreateCamera(const float aspect_ratio) {
                                       .z_far = 1.0e6f}};
 }
 
-void HandleKeyEvents(const gfx::Window& window, gfx::Camera& camera, const gfx::DeltaTime& delta_time) {
+void HandleKeyEvents(const gfx::Window& window, gfx::Camera& camera, const gfx::DeltaTime delta_time) {
   if (window.IsKeyPressed(GLFW_KEY_ESCAPE)) {
     window.Close();
     return;

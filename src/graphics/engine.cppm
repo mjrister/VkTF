@@ -82,7 +82,7 @@ vk::SampleCountFlagBits GetMsaaSampleCount(const vk::PhysicalDeviceLimits& physi
   const auto color_depth_sample_count_flags = color_sample_count_flags & depth_sample_count_flags;
 
   using enum vk::SampleCountFlagBits;
-  for (const auto& msaa_sample_count_bit : {e8, e4, e2}) {
+  for (const auto msaa_sample_count_bit : {e8, e4, e2}) {
     if (msaa_sample_count_bit & color_depth_sample_count_flags) {
       return msaa_sample_count_bit;
     }
@@ -96,7 +96,7 @@ vk::Format GetDepthAttachmentFormat(const vk::PhysicalDevice physical_device) {
   // the Vulkan specification requires VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT support for VK_FORMAT_D16_UNORM
   // and at least one of VK_FORMAT_X8_D24_UNORM_PACK32 and VK_FORMAT_D32_SFLOAT
   using enum vk::Format;
-  for (const auto& depth_attachment_format : {eD32Sfloat, eX8D24UnormPack32}) {
+  for (const auto depth_attachment_format : {eD32Sfloat, eX8D24UnormPack32}) {
     const auto format_properties = physical_device.getFormatProperties(depth_attachment_format);
     if (format_properties.optimalTilingFeatures & vk::FormatFeatureFlagBits::eDepthStencilAttachment) {
       return depth_attachment_format;
