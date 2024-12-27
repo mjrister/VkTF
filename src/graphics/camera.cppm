@@ -45,9 +45,8 @@ module :private;
 namespace gfx {
 
 Camera::Camera(const glm::vec3& position, const glm::vec3& direction, const ViewFrustum& view_frustum)
-    : position_{position}, view_frustum_{view_frustum} {
-  assert(glm::length(direction) > 0.0f);
-  orientation_ = ToSphericalCoordinates(-direction);  // spherical coordinates offset from the +z-axis
+    : position_{position}, orientation_{ToSphericalCoordinates(-direction)}, view_frustum_{view_frustum} {
+  assert(orientation_.radius > 0.0f);
 }
 
 glm::mat4 Camera::GetViewTransform() const {
@@ -70,10 +69,10 @@ void Camera::Translate(const float x, const float y, const float z) {
 }
 
 void Camera::Rotate(const float theta, const float phi) {
-  static constexpr auto kThetaMax = glm::two_pi<float>();
-  static constexpr auto kPhiMax = glm::radians(89.0f);
-  orientation_.theta = std::fmod(orientation_.theta + theta, kThetaMax);
-  orientation_.phi = std::clamp(orientation_.phi + phi, -kPhiMax, kPhiMax);
+  static constexpr auto kPhiMax = glm::two_pi<float>();
+  static constexpr auto kThetaMax = glm::radians(89.0f);
+  orientation_.theta = std::clamp(orientation_.theta + theta, -kThetaMax, kThetaMax);
+  orientation_.phi = std::fmod(orientation_.phi + phi, kPhiMax);
 }
 
 }  // namespace gfx

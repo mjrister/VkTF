@@ -66,7 +66,7 @@ void HandleMouseEvents(const gfx::Window& window, gfx::Camera& camera) {
     if (maybe_previous_cursor_position.has_value()) {
       static constexpr auto kRotationSpeed = 0.00390625f;
       const auto delta_cursor_position = cursor_position - *maybe_previous_cursor_position;
-      const auto rotation = kRotationSpeed * -delta_cursor_position;
+      const auto rotation = kRotationSpeed * glm::vec2{-delta_cursor_position.y, -delta_cursor_position.x};
       camera.Rotate(rotation.x, rotation.y);
     }
     maybe_previous_cursor_position = cursor_position;
