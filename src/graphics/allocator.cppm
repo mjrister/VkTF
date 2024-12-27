@@ -85,7 +85,6 @@ Allocator::Allocator(const vk::Instance instance, const vk::PhysicalDevice physi
                                                      .pVulkanFunctions = &vulkan_functions,
                                                      .instance = instance,
                                                      .vulkanApiVersion = Instance::kApiVersion};
-
   const auto result = vmaCreateAllocator(&allocator_create_info, &allocator_);
   vk::detail::resultCheck(static_cast<vk::Result>(result), "Allocator creation failed");
 }

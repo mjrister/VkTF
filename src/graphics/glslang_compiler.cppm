@@ -84,8 +84,8 @@ private:
   }
 };
 
-using GlslangShader = std::unique_ptr<glslang_shader_t, decltype(&glslang_shader_delete)>;
-using GlslangProgram = std::unique_ptr<glslang_program_t, decltype(&glslang_program_delete)>;
+using UniqueGlslangShader = std::unique_ptr<glslang_shader_t, decltype(&glslang_shader_delete)>;
+using UniqueGlslangProgram = std::unique_ptr<glslang_program_t, decltype(&glslang_program_delete)>;
 
 constexpr auto kGlslangMessages =
 #ifndef NDEBUG
@@ -105,7 +105,7 @@ void Print(std::ostream& ostream, Fn glslang_get_fn, T* const glslang_element) {
   }
 }
 
-GlslangShader CreateGlslangShader(const std::string& glsl_shader, const glslang_stage_t glslang_stage) {
+UniqueGlslangShader CreateGlslangShader(const std::string& glsl_shader, const glslang_stage_t glslang_stage) {
   const glslang_input_t glslang_input{.language = GLSLANG_SOURCE_GLSL,
                                       .stage = glslang_stage,
                                       .client = GLSLANG_CLIENT_VULKAN,
@@ -120,7 +120,7 @@ GlslangShader CreateGlslangShader(const std::string& glsl_shader, const glslang_
                                       .messages = static_cast<glslang_messages_t>(kGlslangMessages),
                                       .resource = glslang_default_resource()};
 
-  auto glslang_shader = GlslangShader{glslang_shader_create(&glslang_input), glslang_shader_delete};
+  auto glslang_shader = UniqueGlslangShader{glslang_shader_create(&glslang_input), glslang_shader_delete};
   if (glslang_shader == nullptr) {
     throw std::runtime_error{
         std::format("Shader creation failed at {} with GLSL source:\n{}", glslang_stage, glsl_shader)};
@@ -152,8 +152,8 @@ GlslangShader CreateGlslangShader(const std::string& glsl_shader, const glslang_
   return glslang_shader;
 }
 
-GlslangProgram CreateGlslangProgram(const glslang_stage_t glslang_stage, glslang_shader_t& glslang_shader) {
-  auto glslang_program = GlslangProgram{glslang_program_create(), glslang_program_delete};
+UniqueGlslangProgram CreateGlslangProgram(const glslang_stage_t glslang_stage, glslang_shader_t& glslang_shader) {
+  auto glslang_program = UniqueGlslangProgram{glslang_program_create(), glslang_program_delete};
   if (glslang_program == nullptr) {
     throw std::runtime_error{std::format("Shader program creation failed at {}", glslang_stage)};
   }

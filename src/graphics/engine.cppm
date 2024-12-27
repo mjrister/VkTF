@@ -256,7 +256,7 @@ Engine::Engine(const Window& window)
                                                 .usage = VMA_MEMORY_USAGE_AUTO,
                                                 .priority = 1.0f}},
       render_pass_{
-          CreateRenderPass(*device_, msaa_sample_count_, swapchain_.image_format(), depth_attachment_.format())},
+          CreateRenderPass(*device_, msaa_sample_count_, color_attachment_.format(), depth_attachment_.format())},
       framebuffers_{CreateFramebuffers(*device_,
                                        swapchain_,
                                        *render_pass_,
