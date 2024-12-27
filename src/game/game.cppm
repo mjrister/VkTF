@@ -36,6 +36,7 @@ namespace {
 gfx::Camera CreateCamera(const float aspect_ratio) {
   static constexpr glm::vec3 kPosition{0.0f, 1.0f, 0.0f};
   static constexpr glm::vec3 kDirection{1.0f, 0.0f, 0.0f};
+
   return gfx::Camera{kPosition,
                      kDirection,
                      gfx::ViewFrustum{.field_of_view_y = glm::radians(45.0f),
@@ -51,10 +52,11 @@ void HandleKeyEvents(const gfx::Window& window, gfx::Camera& camera, const gfx::
   }
 
   static constexpr auto kTranslationSpeed = 6.0f;
-  if (window.IsKeyPressed(GLFW_KEY_W)) camera.Translate(0.0f, 0.0f, -kTranslationSpeed * delta_time);
-  if (window.IsKeyPressed(GLFW_KEY_A)) camera.Translate(-kTranslationSpeed * delta_time, 0.0f, 0.0f);
-  if (window.IsKeyPressed(GLFW_KEY_S)) camera.Translate(0.0f, 0.0f, kTranslationSpeed * delta_time);
-  if (window.IsKeyPressed(GLFW_KEY_D)) camera.Translate(kTranslationSpeed * delta_time, 0.0f, 0.0f);
+  const auto translation = kTranslationSpeed * delta_time;
+  const auto dx = window.IsKeyPressed(GLFW_KEY_D) * translation - window.IsKeyPressed(GLFW_KEY_A) * translation;
+  const auto dz = window.IsKeyPressed(GLFW_KEY_S) * translation - window.IsKeyPressed(GLFW_KEY_W) * translation;
+
+  if (dx != 0.0f || dz != 0.0f) camera.Translate(dx, 0.0f, dz);
 }
 
 void HandleMouseEvents(const gfx::Window& window, gfx::Camera& camera) {

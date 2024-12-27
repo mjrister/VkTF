@@ -29,7 +29,7 @@ public:
   [[nodiscard]] glm::mat4 GetViewTransform() const;
   [[nodiscard]] glm::mat4 GetProjectionTransform() const;
 
-  void Translate(float x, float y, float z);
+  void Translate(float dx, float dy, float dz);
   void Rotate(float theta, float phi);
 
 private:
@@ -63,9 +63,9 @@ glm::mat4 Camera::GetProjectionTransform() const {
   return projection_transform;
 }
 
-void Camera::Translate(const float x, const float y, const float z) {
+void Camera::Translate(const float dx, const float dy, const float dz) {
   const glm::mat3 orientation = GetViewTransform();
-  position_ += glm::vec3{x, y, z} * orientation;
+  position_ += glm::vec3{dx, dy, dz} * orientation;
 }
 
 void Camera::Rotate(const float theta, const float phi) {
