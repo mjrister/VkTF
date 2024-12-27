@@ -47,7 +47,6 @@ std::vector<SpirvWord> ReadSpirvFile(const std::filesystem::path& spirv_filepath
 
   std::vector<SpirvWord> spirv(static_cast<std::size_t>(spirv_size) / kSpirvWordSize);
   auto* spirv_data = reinterpret_cast<char*>(spirv.data());  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
-
   spirv_ifstream.seekg(0, std::ios::beg);
   spirv_ifstream.read(spirv_data, spirv_size);
 
@@ -61,7 +60,6 @@ std::string ReadGlslFile(const std::filesystem::path& glsl_filepath) {
 
   const std::streamsize glsl_size = glsl_ifstream.tellg();
   std::string glsl_shader(static_cast<std::size_t>(glsl_size), '\0');
-
   glsl_ifstream.seekg(0, std::ios::beg);
   glsl_ifstream.read(glsl_shader.data(), glsl_size);
 

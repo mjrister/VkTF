@@ -60,7 +60,7 @@ ktxTexture* AsKtxTexture(ktxTexture2* const ktx_texture2) {
 }
 
 void DestroyKtxTexture2(ktxTexture2* const ktx_texture2) noexcept { ktxTexture_Destroy(AsKtxTexture(ktx_texture2)); }
-using KtxTexture2 = std::unique_ptr<ktxTexture2, decltype(&DestroyKtxTexture2)>;
+using UniqueKtxTexture2 = std::unique_ptr<ktxTexture2, decltype(&DestroyKtxTexture2)>;
 
 constexpr TranscodeTarget kBc1TranscodeTarget{.srgb_format = vk::Format::eBc1RgbSrgbBlock,
                                               .unorm_format = vk::Format::eBc1RgbUnormBlock,
@@ -164,10 +164,10 @@ ktx_transcode_fmt_e SelectKtxTranscodeFormat(ktxTexture2& ktx_texture2,
   }
 }
 
-KtxTexture2 CreateKtxTexture2FromKtxFile(const std::filesystem::path& ktx_filepath,
-                                         const gfx::ColorSpace color_space,
-                                         const vk::PhysicalDevice physical_device) {
-  KtxTexture2 ktx_texture2{nullptr, DestroyKtxTexture2};
+UniqueKtxTexture2 CreateKtxTexture2FromKtxFile(const std::filesystem::path& ktx_filepath,
+                                               const gfx::ColorSpace color_space,
+                                               const vk::PhysicalDevice physical_device) {
+  UniqueKtxTexture2 ktx_texture2{nullptr, DestroyKtxTexture2};
   if (const auto ktx_error_code = ktxTexture2_CreateFromNamedFile(ktx_filepath.string().c_str(),
                                                                   KTX_TEXTURE_CREATE_CHECK_GLTF_BASISU_BIT,
                                                                   std::out_ptr(ktx_texture2));
@@ -220,8 +220,8 @@ StbImage Load(const std::filesystem::path& image_filepath) {
   return StbImage{.width = width, .height = height, .channels = kRequiredChannels, .data = std::move(data)};
 }
 
-KtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::path& image_filepath,
-                                           const gfx::ColorSpace color_space) {
+UniqueKtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::path& image_filepath,
+                                                 const gfx::ColorSpace color_space) {
   const auto [width, height, channels, data] = Load(image_filepath);
   static_assert(sizeof(decltype(data)::element_type) == 1, "8-bit image data is required");
   const auto data_size_bytes = static_cast<ktx_size_t>(width) * height * channels;
@@ -229,7 +229,7 @@ KtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::path& image_fi
   const auto& [rgba32_srgb_format, rgba32_unorm_format, _] = kRgba32TranscodeTarget;
   const auto rgba32_format = color_space == gfx::ColorSpace::kLinear ? rgba32_unorm_format : rgba32_srgb_format;
 
-  KtxTexture2 ktx_texture2{nullptr, DestroyKtxTexture2};
+  UniqueKtxTexture2 ktx_texture2{nullptr, DestroyKtxTexture2};
   ktxTextureCreateInfo ktx_texture_create_info{.vkFormat = static_cast<ktx_uint32_t>(rgba32_format),
                                                .baseWidth = static_cast<ktx_uint32_t>(width),
                                                .baseHeight = static_cast<ktx_uint32_t>(height),
@@ -264,9 +264,9 @@ KtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::path& image_fi
   return ktx_texture2;
 }
 
-KtxTexture2 CreateKtxTexture2(const std::filesystem::path& texture_filepath,
-                              const gfx::ColorSpace color_space,
-                              const vk::PhysicalDevice physical_device) {
+UniqueKtxTexture2 CreateKtxTexture2(const std::filesystem::path& texture_filepath,
+                                    const gfx::ColorSpace color_space,
+                                    const vk::PhysicalDevice physical_device) {
 #ifndef NDEBUG
   // R8G8B8A8 format support for images with VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT is required by the Vulkan specification
   const auto& [rgba32_srgb_format, rgba32_unorm_format, _] = kRgba32TranscodeTarget;

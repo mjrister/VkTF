@@ -46,7 +46,7 @@ namespace gfx {
 
 Camera::Camera(const glm::vec3& position, const glm::vec3& direction, const ViewFrustum& view_frustum)
     : position_{position}, orientation_{ToSphericalCoordinates(-direction)}, view_frustum_{view_frustum} {
-  assert(orientation_.radius > 0.0f);
+  assert(orientation_.radius > 0.0f);  // assume non-zero direction length
 }
 
 glm::mat4 Camera::GetViewTransform() const {
@@ -65,7 +65,7 @@ glm::mat4 Camera::GetProjectionTransform() const {
 
 void Camera::Translate(const float dx, const float dy, const float dz) {
   const glm::mat3 orientation = GetViewTransform();
-  position_ += glm::vec3{dx, dy, dz} * orientation;
+  position_ += glm::vec3{dx, dy, dz} * orientation;  // translate along the camera's coordinate axes
 }
 
 void Camera::Rotate(const float theta, const float phi) {

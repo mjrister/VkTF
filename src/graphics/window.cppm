@@ -42,9 +42,9 @@ public:
   static void Update() noexcept { glfwPollEvents(); }
 
 private:
-  using GlfwWindow = std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)>;
+  using UniqueGlfwWindow = std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)>;
 
-  GlfwWindow glfw_window_{nullptr, nullptr};
+  UniqueGlfwWindow glfw_window_{nullptr, nullptr};
 };
 
 }  // namespace gfx
@@ -94,8 +94,9 @@ Window::Window(const char* const title) {
   const auto* const video_mode = glfwGetVideoMode(primary_monitor);
   if (video_mode == nullptr) throw std::runtime_error{"Failed to get the primary monitor video mode"};
 
-  glfw_window_ = GlfwWindow{glfwCreateWindow(video_mode->width, video_mode->height, title, primary_monitor, nullptr),
-                            glfwDestroyWindow};
+  glfw_window_ =
+      UniqueGlfwWindow{glfwCreateWindow(video_mode->width, video_mode->height, title, primary_monitor, nullptr),
+                       glfwDestroyWindow};
 
   if (glfw_window_ == nullptr) throw std::runtime_error{"GLFW window creation failed"};
 }

@@ -199,7 +199,7 @@ Value* Find(const Key* const key, const UnorderedPtrMap<Key, Value>& map) {
 
 // ======================================================= glTF ========================================================
 
-using GltfData = std::unique_ptr<cgltf_data, decltype(&cgltf_free)>;
+using UniqueGltfData = std::unique_ptr<cgltf_data, decltype(&cgltf_free)>;
 
 template <typename T>
   requires requires(T gltf_element) {
@@ -214,9 +214,9 @@ std::string_view GetName(const T& gltf_element) {
   return "unknown";
 }
 
-GltfData Load(const std::string& gltf_filepath) {
+UniqueGltfData Load(const std::string& gltf_filepath) {
   static constexpr cgltf_options kDefaultOptions{};
-  GltfData gltf_data{nullptr, cgltf_free};
+  UniqueGltfData gltf_data{nullptr, cgltf_free};
 
   if (const auto gltf_result = cgltf_parse_file(&kDefaultOptions, gltf_filepath.c_str(), std::out_ptr(gltf_data));
       gltf_result != cgltf_result_success) {

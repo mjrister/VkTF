@@ -59,23 +59,23 @@ void HandleKeyEvents(const gfx::Window& window, gfx::Camera& camera, const gfx::
   if (dx != 0.0f || dz != 0.0f) camera.Translate(dx, 0.0f, dz);
 }
 
-void HandleMouseEvents(const gfx::Window& window, gfx::Camera& camera) {
-  static std::optional<glm::vec2> maybe_previous_cursor_position;
-
-  if (window.IsMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT)) {
-    const auto cursor_position = window.GetCursorPosition();
-
-    if (maybe_previous_cursor_position.has_value()) {
-      static constexpr auto kRotationSpeed = 0.00390625f;
-      const auto delta_cursor_position = cursor_position - *maybe_previous_cursor_position;
-      const auto rotation = kRotationSpeed * glm::vec2{-delta_cursor_position.y, -delta_cursor_position.x};
-      camera.Rotate(rotation.x, rotation.y);
-    }
-    maybe_previous_cursor_position = cursor_position;
-
-  } else if (maybe_previous_cursor_position.has_value()) {
-    maybe_previous_cursor_position = std::nullopt;
+void HandleMouseEvents(const gfx::Window& window,
+                       gfx::Camera& camera,
+                       std::optional<glm::vec2>& prev_left_click_position) {
+  if (!window.IsMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT)) {
+    prev_left_click_position = std::nullopt;
+    return;
   }
+
+  const auto left_click_position = window.GetCursorPosition();
+  if (prev_left_click_position.has_value()) {
+    static constexpr auto kRotationSpeed = 0.00390625f;
+    const auto drag_direction = left_click_position - *prev_left_click_position;
+    const auto rotation = kRotationSpeed * glm::vec2{-drag_direction.y, -drag_direction.x};
+    camera.Rotate(rotation.x, rotation.y);
+  }
+
+  prev_left_click_position = left_click_position;
 }
 
 }  // namespace
@@ -89,9 +89,9 @@ Game::Game()
       camera_{CreateCamera(window_.GetAspectRatio())} {}
 
 void Game::Start() {
-  engine_.Run(window_, [this](const auto delta_time) {
+  engine_.Run(window_, [this, prev_left_click_position = std::optional<glm::vec2>{}](const auto delta_time) mutable {
     HandleKeyEvents(window_, camera_, delta_time);
-    HandleMouseEvents(window_, camera_);
+    HandleMouseEvents(window_, camera_, prev_left_click_position);
     engine_.Render(gltf_scene_, camera_);
   });
 }

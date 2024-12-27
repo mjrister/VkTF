@@ -80,9 +80,9 @@ vk::Extent2D GetSwapchainImageExtent(const vk::SurfaceCapabilitiesKHR& surface_c
       surface_capabilities.currentExtent != vk::Extent2D{.width = kUndefinedExtent, .height = kUndefinedExtent}) {
     return surface_capabilities.currentExtent;
   }
+  const auto& [framebuffer_width, framebuffer_height] = framebuffer_extent;
   const auto& [min_image_width, min_image_height] = surface_capabilities.minImageExtent;
   const auto& [max_image_width, max_image_height] = surface_capabilities.maxImageExtent;
-  const auto& [framebuffer_width, framebuffer_height] = framebuffer_extent;
   return vk::Extent2D{.width = std::clamp(framebuffer_width, min_image_width, max_image_width),
                       .height = std::clamp(framebuffer_height, min_image_height, max_image_height)};
 }
@@ -139,7 +139,7 @@ Swapchain::Swapchain(const vk::SurfaceKHR surface,
   }
 
   swapchain_ = device.createSwapchainKHRUnique(swapchain_create_info);
-  image_format_ = surface_format.format;
+  image_format_ = swapchain_create_info.imageFormat;
   image_extent_ = swapchain_create_info.imageExtent;
   image_views_ = CreateSwapchainImageViews(device, *swapchain_, image_format_);
 }

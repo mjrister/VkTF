@@ -65,7 +65,6 @@ Buffer::Buffer(const vk::DeviceSize size_bytes,
   const VkBufferCreateInfo buffer_create_info{.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
                                               .size = size_bytes,
                                               .usage = static_cast<VkBufferUsageFlags>(usage_flags)};
-
   VkBuffer buffer = nullptr;
   const auto result =
       vmaCreateBuffer(allocator_, &buffer_create_info, &allocation_create_info, &buffer, &allocation_, nullptr);

@@ -18,7 +18,7 @@ public:
   explicit Device(const PhysicalDevice& physical_device);
 
   [[nodiscard]] vk::Device operator*() const noexcept { return *device_; }
-  [[nodiscard]] const vk::Device* operator->() const noexcept { return &*device_; }
+  [[nodiscard]] const vk::Device* operator->() const noexcept { return &(*device_); }
 
 private:
   vk::UniqueDevice device_;
