@@ -42,8 +42,7 @@ std::ostream& operator<<(std::ostream& ostream, const std::exception& exception)
 
 int main() {  // NOLINT(bugprone-exception-escape): std::cerr is not configured to throw exceptions
   try {
-    gfx::Game game;
-    game.Start();
+    game::Start();
   } catch (const std::exception& exception) {
     std::cerr << exception;
     return EXIT_FAILURE;
