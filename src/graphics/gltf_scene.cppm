@@ -35,6 +35,7 @@ module;
 
 export module gltf_scene;
 
+import allocator;
 import buffer;
 import camera;
 import data_view;

@@ -7,27 +7,17 @@ module;
 
 export module game;
 
+import delta_time;
 import camera;
 import engine;
 import gltf_scene;
 import window;
 
-namespace gfx {
+namespace game {
 
-export class Game {
-public:
-  Game();
+export void Start();
 
-  void Start();
-
-private:
-  Window window_;
-  Engine engine_;
-  GltfScene gltf_scene_;
-  Camera camera_;
-};
-
-}  // namespace gfx
+}  // namespace game
 
 module :private;
 
@@ -80,20 +70,19 @@ void HandleMouseEvents(const gfx::Window& window,
 
 }  // namespace
 
-namespace gfx {
+namespace game {
 
-Game::Game()
-    : window_{"VkRender"},
-      engine_{window_},
-      gltf_scene_{engine_.Load("assets/models/Main.1_Sponza/NewSponza_Main_glTF_002.gltf")},
-      camera_{CreateCamera(window_.GetAspectRatio())} {}
+void Start() {
+  const gfx::Window window{"VkRender"};
+  gfx::Engine engine{window};
+  const auto gltf_scene = engine.Load("assets/models/Main.1_Sponza/NewSponza_Main_glTF_002.gltf");
+  auto camera = CreateCamera(window.GetAspectRatio());
 
-void Game::Start() {
-  engine_.Run(window_, [this, prev_left_click_position = std::optional<glm::vec2>{}](const auto delta_time) mutable {
-    HandleKeyEvents(window_, camera_, delta_time);
-    HandleMouseEvents(window_, camera_, prev_left_click_position);
-    engine_.Render(gltf_scene_, camera_);
+  engine.Run(window, [&, prev_left_click_position = std::optional<glm::vec2>{}](const auto delta_time) mutable {
+    HandleKeyEvents(window, camera, delta_time);
+    HandleMouseEvents(window, camera, prev_left_click_position);
+    engine.Render(gltf_scene, camera);
   });
 }
 
-}  // namespace gfx
+}  // namespace game
