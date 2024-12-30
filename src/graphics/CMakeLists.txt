@@ -33,8 +33,7 @@ target_link_libraries(graphics PUBLIC GPUOpen::VulkanMemoryAllocator
                                PRIVATE KTX::ktx
                                        glslang::glslang
                                        glslang::glslang-default-resource-limits
-                                       glslang::SPIRV
-                                       math)
+                                       glslang::SPIRV)
 
 target_compile_definitions(graphics PUBLIC GLFW_INCLUDE_VULKAN
                                            GLM_FORCE_DEFAULT_ALIGNED_GENTYPES

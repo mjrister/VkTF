@@ -3,13 +3,12 @@ module;
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <limits>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 export module camera;
-
-import spherical_coordiantes;
 
 namespace gfx {
 
@@ -24,55 +23,86 @@ export class Camera {
 public:
   Camera(const glm::vec3& position, const glm::vec3& direction, const ViewFrustum& view_frustum);
 
-  [[nodiscard]] const glm::vec3& position() const noexcept { return position_; }
+  [[nodiscard]] const glm::mat4& view_transform() const noexcept { return view_transform_; }
+  [[nodiscard]] const glm::mat4& projection_transform() const noexcept { return projection_transform_; }
 
-  [[nodiscard]] glm::mat4 GetViewTransform() const;
-  [[nodiscard]] glm::mat4 GetProjectionTransform() const;
+  [[nodiscard]] glm::vec3 GetPosition() const;
 
   void Translate(float dx, float dy, float dz);
-  void Rotate(float theta, float phi);
+  void Rotate(float pitch, float yaw);
 
 private:
-  glm::vec3 position_;
-  SphericalCoordinates orientation_;
-  ViewFrustum view_frustum_;
+  glm::mat4 view_transform_;
+  glm::mat4 projection_transform_;
 };
 
 }  // namespace gfx
 
 module :private;
 
-namespace gfx {
+namespace {
 
-Camera::Camera(const glm::vec3& position, const glm::vec3& direction, const ViewFrustum& view_frustum)
-    : position_{position}, orientation_{ToSphericalCoordinates(-direction)}, view_frustum_{view_frustum} {
-  assert(orientation_.radius > 0.0f);  // assume non-zero direction length
-}
-
-glm::mat4 Camera::GetViewTransform() const {
+glm::mat4 GetViewTransform(const glm::vec3& position, const glm::vec3& direction) {
   static constexpr glm::vec3 kUp{0.0f, 1.0f, 0.0f};
-  const auto direction = -ToCartesianCoordinates(orientation_);
-  const auto target = position_ + direction;
-  return glm::lookAt(position_, target, kUp);
+  const auto target = position + direction;
+  return glm::lookAt(position, target, kUp);
 }
 
-glm::mat4 Camera::GetProjectionTransform() const {
-  const auto& [field_of_view_y, aspect_ratio, z_near, z_far] = view_frustum_;
-  auto projection_transform = glm::perspective(field_of_view_y, aspect_ratio, z_near, z_far);
+glm::mat4 GetProjectionTransform(const gfx::ViewFrustum& view_frustum) {
+  const auto& [field_of_view_y, aspect_ratio, z_near, z_far] = view_frustum;
+  auto projection_transform = z_far == std::numeric_limits<float>::infinity()
+                                  ? glm::infinitePerspective(field_of_view_y, aspect_ratio, z_near)
+                                  : glm::perspective(field_of_view_y, aspect_ratio, z_near, z_far);
   projection_transform[1][1] *= -1;  // account for inverted y-axis convention in OpenGL
   return projection_transform;
 }
 
-void Camera::Translate(const float dx, const float dy, const float dz) {
-  const glm::mat3 orientation = GetViewTransform();
-  position_ += glm::vec3{dx, dy, dz} * orientation;  // translate along the camera's coordinate axes
+}  // namespace
+
+namespace gfx {
+
+Camera::Camera(const glm::vec3& position, const glm::vec3& direction, const ViewFrustum& view_frustum)
+    : view_transform_{GetViewTransform(position, direction)},
+      projection_transform_{GetProjectionTransform(view_frustum)} {
+  assert(glm::length(direction) > 0.0f);
 }
 
-void Camera::Rotate(const float theta, const float phi) {
-  static constexpr auto kPhiMax = glm::two_pi<float>();
-  static constexpr auto kThetaMax = glm::radians(89.0f);
-  orientation_.theta = std::clamp(orientation_.theta + theta, -kThetaMax, kThetaMax);
-  orientation_.phi = std::fmod(orientation_.phi + phi, kPhiMax);
+glm::vec3 Camera::GetPosition() const {
+  const glm::vec3 translation{view_transform_[3]};
+  const glm::mat3 rotation{view_transform_};
+  return -translation * rotation;  // invert the view transform translation vector to get the camera world position
+}
+
+void Camera::Translate(const float dx, const float dy, const float dz) {
+  view_transform_[3] -= glm::vec4{dx, dy, dz, 0.0f};
+}
+
+void Camera::Rotate(float pitch, float yaw) {
+  // accumulate pitch and yaw euler angles derived from the current camera orientation
+  yaw += std::atan2(view_transform_[0][2], view_transform_[2][2]);
+  const auto cos_yaw = std::cos(yaw);
+  const auto sin_yaw = std::sin(yaw);
+
+  static constexpr auto kPitchMax = glm::radians(89.0f);
+  pitch += std::asin(-view_transform_[1][2]);
+  pitch = std::clamp(pitch, -kPitchMax, kPitchMax);  // avoid gimbal lock
+  const auto cos_pitch = std::cos(pitch);
+  const auto sin_pitch = std::sin(pitch);
+
+  // construct a cumulative rotation matrix to represent the next camera orientation
+  const glm::mat3 euler_rotation{
+      // clang-format off
+     cos_yaw, sin_yaw * sin_pitch,  sin_yaw * cos_pitch,
+        0.0f,           cos_pitch,           -sin_pitch,
+    -sin_yaw, cos_yaw * sin_pitch,  cos_yaw * cos_pitch
+      // clang-format on
+  };
+
+  const auto translation = -GetPosition();  // extract position from its previous orientation before applying rotation
+  view_transform_[0] = glm::vec4{euler_rotation[0], 0.0f};
+  view_transform_[1] = glm::vec4{euler_rotation[1], 0.0f};
+  view_transform_[2] = glm::vec4{euler_rotation[2], 0.0f};
+  view_transform_[3] = glm::vec4{euler_rotation * translation, 1.0f};
 }
 
 }  // namespace gfx

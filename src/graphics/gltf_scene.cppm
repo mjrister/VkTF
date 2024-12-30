@@ -1210,14 +1210,14 @@ void GltfScene::Render(const Camera& camera,
                                     nullptr);
 
   camera_buffers_[frame_index].Copy<CameraTransforms>(
-      CameraTransforms{.view_transform = camera.GetViewTransform(),
-                       .projection_transform = camera.GetProjectionTransform()});
+      CameraTransforms{.view_transform = camera.view_transform(),
+                       .projection_transform = camera.projection_transform()});
 
   using CameraPosition = decltype(PushConstants::camera_position);
   command_buffer.pushConstants<CameraPosition>(*graphics_pipeline_layout_,
                                                vk::ShaderStageFlagBits::eFragment,
                                                offsetof(PushConstants, camera_position),
-                                               camera.position());
+                                               camera.GetPosition());
 
   for (const auto& root_node : root_nodes_) {
     ::Render(*root_node, *graphics_pipeline_layout_, command_buffer);
