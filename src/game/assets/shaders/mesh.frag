@@ -10,6 +10,7 @@ layout(set = 1, binding = 0) uniform Material {
   vec4 base_color_factor;
   float metallic_factor;
   float roughness_factor;
+  float normal_scale;
 } material;
 
 layout(set = 1, binding = 1) uniform sampler2D material_samplers[kSamplerCount];
@@ -32,8 +33,8 @@ vec4 GetImageColor(const uint sampler_index) {
 }
 
 vec3 GetNormal() {
-  // convert sampled RGB values from [0, 1] to [-1, 1]
-  const vec3 normal = 2.0 * GetImageColor(kNormalSamplerIndex).rgb - 1.0;
+  vec3 normal = 2.0 * GetImageColor(kNormalSamplerIndex).rgb - 1.0;  // convert sampled RGB values to the range [-1, 1]
+  normal.xy *= vec2(material.normal_scale);  // glTF supports scaling sampled normals in the x/y directions
   return normalize(fragment.normal_transform * normal);
 }
 
@@ -105,13 +106,13 @@ void main() {
   vec4 base_color = vec4(0.0);
   const vec3 material_brdf = GetMaterialBrdf(normal, view_direction, light_direction, halfway_direction, base_color);
 
-  const float light_attenuation = 1.0 / light_distance; // TODO(matthew-rister): use quadratic attenuation
+  const float light_attenuation = 1.0 / light_distance;  // TODO(matthew-rister): use quadratic attenuation
   const vec3 kLightColor = vec3(1.0);
   const vec3 radiance_in = kLightColor * light_attenuation;
 
   const float cos_theta = max(dot(normal, light_direction), 0.0);
   const vec3 radiance_out = material_brdf * radiance_in * cos_theta;
 
-  const vec3 kAmbiance = vec3(0.05) * base_color.rgb;  // TODO(matthew-rister): use a more sophisticated ambient model
-  fragment_color = vec4(kAmbiance + radiance_out, base_color.a); // TODO(matthew-rister): add alpha-mode support
+  const vec3 kAmbiance = 0.05 * base_color.rgb;  // TODO(matthew-rister): use a more sophisticated ambient model
+  fragment_color = vec4(kAmbiance + radiance_out, base_color.a);  // TODO(matthew-rister): add alpha-mode support
 }
