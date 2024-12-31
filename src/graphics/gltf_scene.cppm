@@ -517,6 +517,7 @@ struct MaterialProperties {
   glm::vec4 base_color_factor{0.0f};
   float metallic_factor = 0.0f;
   float roughness_factor = 0.0f;
+  float normal_scale = 0.0f;
 };
 
 std::optional<gfx::KtxTexture> CreateKtxTexture(const cgltf_texture_view& gltf_texture_view,
@@ -584,6 +585,7 @@ std::unique_ptr<Material> CreateMaterial(const vk::Device device,
                base_color_factor,
                metallic_factor,
                roughness_factor] = gltf_material.pbr_metallic_roughness;
+  const auto normal_texture_view = gltf_material.normal_texture;
 
   const auto& base_color_ktx_texture = *maybe_base_color_ktx_texture;
   const auto& metallic_roughness_ktx_texture = *maybe_metallic_roughness_ktx_texture;
@@ -602,12 +604,13 @@ std::unique_ptr<Material> CreateMaterial(const vk::Device device,
                                        create_sampler_options)},
       Texture{.image = CreateImage(device, *normal_ktx_texture, copy_buffer_options),
               .sampler = CreateSampler(device,
-                                       gltf_material.normal_texture.texture->sampler,
+                                       normal_texture_view.texture->sampler,
                                        normal_ktx_texture->numLevels,
                                        create_sampler_options)},
       CreateBuffer<MaterialProperties>(MaterialProperties{.base_color_factor = ToVec(base_color_factor),
                                                           .metallic_factor = metallic_factor,
-                                                          .roughness_factor = roughness_factor},
+                                                          .roughness_factor = roughness_factor,
+                                                          .normal_scale = normal_texture_view.scale},
                                        vk::BufferUsageFlagBits::eUniformBuffer,
                                        copy_buffer_options));
 }
