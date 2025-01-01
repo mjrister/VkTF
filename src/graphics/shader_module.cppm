@@ -56,7 +56,7 @@ std::vector<SpirvWord> ReadSpirvFile(const std::filesystem::path& spirv_filepath
 std::string ReadGlslFile(const std::filesystem::path& glsl_filepath) {
   std::ifstream glsl_ifstream;
   glsl_ifstream.exceptions(std::ios::failbit | std::ios::badbit);
-  glsl_ifstream.open(glsl_filepath, std::ios::ate);
+  glsl_ifstream.open(glsl_filepath, std::ios::ate | std::ios::binary);  // open in binary to avoid newline conversion
 
   const std::streamsize glsl_size = glsl_ifstream.tellg();
   std::string glsl_shader(static_cast<std::size_t>(glsl_size), '\0');
