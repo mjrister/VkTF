@@ -4,6 +4,7 @@ module;
 #include <format>
 #include <fstream>
 #include <ios>
+#include <spanstream>
 #include <stdexcept>
 #include <string>
 
@@ -40,15 +41,16 @@ std::vector<SpirvWord> ReadSpirvFile(const std::filesystem::path& spirv_filepath
   spirv_ifstream.exceptions(std::ios::failbit | std::ios::badbit);
   spirv_ifstream.open(spirv_filepath, std::ios::ate | std::ios::binary);
 
-  const std::streamsize spirv_size = spirv_ifstream.tellg();
-  if (spirv_size % kSpirvWordSize != 0) {
-    throw std::runtime_error{std::format("Invalid SPIR-V file {} with size {}", spirv_filepath.string(), spirv_size)};
+  const std::size_t spirv_size_bytes = spirv_ifstream.tellg();
+  if (spirv_size_bytes % kSpirvWordSize != 0) {  // SPIR-V file size must be a multiple of 4 bytes
+    throw std::runtime_error{std::format("Invalid SPIR-V file {}", spirv_filepath.string())};
   }
 
-  std::vector<SpirvWord> spirv(static_cast<std::size_t>(spirv_size) / kSpirvWordSize);
-  auto* spirv_data = reinterpret_cast<char*>(spirv.data());  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+  std::vector<SpirvWord> spirv(spirv_size_bytes / kSpirvWordSize);
+  std::span spirv_char_span{reinterpret_cast<char*>(spirv.data()), spirv_size_bytes};
+  std::ospanstream spirv_osstream{spirv_char_span};
   spirv_ifstream.seekg(0, std::ios::beg);
-  spirv_ifstream.read(spirv_data, spirv_size);
+  spirv_osstream << spirv_ifstream.rdbuf();
 
   return spirv;
 }
@@ -56,12 +58,12 @@ std::vector<SpirvWord> ReadSpirvFile(const std::filesystem::path& spirv_filepath
 std::string ReadGlslFile(const std::filesystem::path& glsl_filepath) {
   std::ifstream glsl_ifstream;
   glsl_ifstream.exceptions(std::ios::failbit | std::ios::badbit);
-  glsl_ifstream.open(glsl_filepath, std::ios::ate | std::ios::binary);  // open in binary to avoid newline conversion
+  glsl_ifstream.open(glsl_filepath, std::ios::ate);
 
-  const std::streamsize glsl_size = glsl_ifstream.tellg();
-  std::string glsl_shader(static_cast<std::size_t>(glsl_size), '\0');
+  std::string glsl_shader(glsl_ifstream.tellg(), '\0');
+  std::ospanstream glsl_osstream{glsl_shader};
   glsl_ifstream.seekg(0, std::ios::beg);
-  glsl_ifstream.read(glsl_shader.data(), glsl_size);
+  glsl_osstream << glsl_ifstream.rdbuf();
 
   return glsl_shader;
 }
