@@ -38,7 +38,7 @@ Instance::Instance() {
   static constexpr vk::ApplicationInfo kApplicationInfo{.apiVersion = kApiVersion};
   static constexpr std::initializer_list<const char* const> kInstanceLayers = {
 #ifndef NDEBUG
-      "VK_LAYER_KHRONOS_validation"
+  //"VK_LAYER_KHRONOS_validation"
 #endif
   };
   const auto instance_extensions = Window::GetInstanceExtensions();

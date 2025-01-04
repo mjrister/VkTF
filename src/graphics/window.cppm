@@ -2,8 +2,10 @@ module;
 
 #include <algorithm>
 #include <cassert>
+#include <concepts>
 #include <cstdint>
 #include <format>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <print>
@@ -23,6 +25,10 @@ public:
 
   [[nodiscard]] static std::span<const char* const> GetInstanceExtensions();
   [[nodiscard]] vk::UniqueSurfaceKHR CreateSurface(vk::Instance instance) const;
+
+  void OnResize(std::invocable<vk::Extent2D> auto&& on_resize_fn) noexcept {
+    on_resize_ = std::forward<decltype(on_resize_fn)>(on_resize_fn);
+  }
 
   [[nodiscard]] vk::Extent2D GetFramebufferExtent() const noexcept;
   [[nodiscard]] float GetAspectRatio() const noexcept;
@@ -45,6 +51,7 @@ private:
   using UniqueGlfwWindow = std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)>;
 
   UniqueGlfwWindow glfw_window_{nullptr, nullptr};
+  std::function<void(vk::Extent2D)> on_resize_;
 };
 
 }  // namespace gfx
@@ -94,11 +101,21 @@ Window::Window(const char* const title) {
   const auto* const video_mode = glfwGetVideoMode(primary_monitor);
   if (video_mode == nullptr) throw std::runtime_error{"Failed to get the primary monitor video mode"};
 
-  glfw_window_ =
-      UniqueGlfwWindow{glfwCreateWindow(video_mode->width, video_mode->height, title, primary_monitor, nullptr),
-                       glfwDestroyWindow};
+  glfw_window_ = UniqueGlfwWindow{glfwCreateWindow(video_mode->width, video_mode->height, title, nullptr, nullptr),
+                                  glfwDestroyWindow};
 
   if (glfw_window_ == nullptr) throw std::runtime_error{"GLFW window creation failed"};
+
+  glfwSetWindowUserPointer(glfw_window_.get(), this);
+  glfwSetFramebufferSizeCallback(glfw_window_.get(),
+                                 [](GLFWwindow* const glfw_window, const int width, const int height) {
+                                   auto* const window = static_cast<Window*>(glfwGetWindowUserPointer(glfw_window));
+                                   assert(window != nullptr);
+                                   if (window->on_resize_) {
+                                     window->on_resize_(vk::Extent2D{.width = static_cast<std::uint32_t>(width),
+                                                                     .height = static_cast<std::uint32_t>(height)});
+                                   }
+                                 });
 }
 
 std::span<const char* const> Window::GetInstanceExtensions() {

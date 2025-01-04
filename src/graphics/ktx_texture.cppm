@@ -90,7 +90,7 @@ bool IsFormatSupported(const vk::PhysicalDevice physical_device, const vk::Forma
 }
 
 std::unordered_set<vk::Format> GetSupportedTranscodeFormats(const vk::PhysicalDevice physical_device) {
-  static constexpr auto kAllTranscodeFormats = {
+  static constexpr std::array kAllTranscodeFormats{
       // clang-format off
      kBc1TranscodeTarget.srgb_format, kBc1TranscodeTarget.unorm_format,
      kBc3TranscodeTarget.srgb_format, kBc3TranscodeTarget.unorm_format,

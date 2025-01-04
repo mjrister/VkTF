@@ -73,12 +73,12 @@ void HandleMouseEvents(const gfx::Window& window,
 namespace game {
 
 void Start() {
-  const gfx::Window window{"VkRender"};
-  gfx::Engine engine{window};
+  gfx::Window window{"VkRender"};
+  gfx::Engine engine{&window};
   const auto gltf_scene = engine.Load("assets/models/Main.1_Sponza/NewSponza_Main_glTF_002.gltf");
   auto camera = CreateCamera(window.GetAspectRatio());
 
-  engine.Run(window, [&, prev_left_click_position = std::optional<glm::vec2>{}](const auto delta_time) mutable {
+  engine.Run([&, prev_left_click_position = std::optional<glm::vec2>{}](const auto delta_time) mutable {
     HandleKeyEvents(window, camera, delta_time);
     HandleMouseEvents(window, camera, prev_left_click_position);
     engine.Render(gltf_scene, camera);

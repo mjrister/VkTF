@@ -94,7 +94,6 @@ public:
             vk::Device device,
             vk::Queue transfer_queue,
             std::uint32_t transfer_queue_family_index,
-            vk::Extent2D viewport_extent,
             vk::SampleCountFlagBits msaa_sample_count,
             vk::RenderPass render_pass,
             VmaAllocator allocator,
@@ -965,7 +964,6 @@ vk::UniquePipelineLayout CreateGraphicsPipelineLayout(
 
 vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
                                           const vk::PipelineLayout graphics_pipeline_layout,
-                                          const vk::Extent2D viewport_extent,
                                           const vk::SampleCountFlagBits msaa_sample_count,
                                           const vk::RenderPass render_pass) {
   const std::filesystem::path vertex_shader_filepath{"shaders/mesh.vert.spv"};
@@ -1018,19 +1016,8 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
   static constexpr vk::PipelineInputAssemblyStateCreateInfo kInputAssemblyStateCreateInfo{
       .topology = vk::PrimitiveTopology::eTriangleList};
 
-  // TODO(matthew-rister): use dynamic viewport and scissor pipeline state when window resizing is implemented
-  const vk::Viewport viewport{.x = 0.0f,
-                              .y = 0.0f,
-                              .width = static_cast<float>(viewport_extent.width),
-                              .height = static_cast<float>(viewport_extent.height),
-                              .minDepth = 0.0f,
-                              .maxDepth = 1.0f};
-  const vk::Rect2D scissor{.offset = vk::Offset2D{.x = 0, .y = 0}, .extent = viewport_extent};
-
-  const vk::PipelineViewportStateCreateInfo viewport_state_create_info{.viewportCount = 1,
-                                                                       .pViewports = &viewport,
-                                                                       .scissorCount = 1,
-                                                                       .pScissors = &scissor};
+  static constexpr vk::PipelineViewportStateCreateInfo kPipelineViewportStateCreateInfo{.viewportCount = 1,
+                                                                                        .scissorCount = 1};
 
   static constexpr vk::PipelineRasterizationStateCreateInfo kRasterizationStateCreateInfo{
       .polygonMode = vk::PolygonMode::eFill,
@@ -1061,17 +1048,23 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
       .pAttachments = &kColorBlendAttachmentState,
       .blendConstants = std::array{0.0f, 0.0f, 0.0f, 0.0f}};
 
+  static constexpr std::array kDynamicStates{vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+  static constexpr vk::PipelineDynamicStateCreateInfo kDynamicStateCreateInfo{
+      .dynamicStateCount = static_cast<std::uint32_t>(kDynamicStates.size()),
+      .pDynamicStates = kDynamicStates.data()};
+
   auto [result, graphics_pipeline] = device.createGraphicsPipelineUnique(
       nullptr,
       vk::GraphicsPipelineCreateInfo{.stageCount = static_cast<std::uint32_t>(shader_stage_create_info.size()),
                                      .pStages = shader_stage_create_info.data(),
                                      .pVertexInputState = &kVertexInputStateCreateInfo,
                                      .pInputAssemblyState = &kInputAssemblyStateCreateInfo,
-                                     .pViewportState = &viewport_state_create_info,
+                                     .pViewportState = &kPipelineViewportStateCreateInfo,
                                      .pRasterizationState = &kRasterizationStateCreateInfo,
                                      .pMultisampleState = &multisample_state_create_info,
                                      .pDepthStencilState = &kDepthStencilStateCreateInfo,
                                      .pColorBlendState = &kColorBlendStateCreateInfo,
+                                     .pDynamicState = &kDynamicStateCreateInfo,
                                      .layout = graphics_pipeline_layout,
                                      .renderPass = render_pass,
                                      .subpass = 0});
@@ -1127,7 +1120,6 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
                      const vk::Device device,
                      const vk::Queue transfer_queue,
                      const std::uint32_t transfer_queue_family_index,
-                     const vk::Extent2D viewport_extent,
                      const vk::SampleCountFlagBits msaa_sample_count,
                      const vk::RenderPass render_pass,
                      const VmaAllocator allocator,
@@ -1187,8 +1179,7 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
   const std::array descriptor_set_layouts{camera_descriptor_sets_.descriptor_set_layout(),
                                           material_descriptor_sets_.descriptor_set_layout()};
   graphics_pipeline_layout_ = CreateGraphicsPipelineLayout(device, descriptor_set_layouts);
-  graphics_pipeline_ =
-      CreateGraphicsPipeline(device, *graphics_pipeline_layout_, viewport_extent, msaa_sample_count, render_pass);
+  graphics_pipeline_ = CreateGraphicsPipeline(device, *graphics_pipeline_layout_, msaa_sample_count, render_pass);
 
   const auto& gltf_scene = GetDefaultScene(*gltf_data);
   root_nodes_ = CreateNodes(gltf_scene.nodes, gltf_scene.nodes_count, meshes);

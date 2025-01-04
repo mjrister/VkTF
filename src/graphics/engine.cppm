@@ -32,14 +32,14 @@ namespace gfx {
 
 export class Engine {
 public:
-  explicit Engine(const Window& window);
+  explicit Engine(Window* window);
 
   [[nodiscard]] GltfScene Load(const std::filesystem::path& gltf_filepath) const;
 
-  void Run(const Window& window, std::invocable<DeltaTime> auto&& main_loop_fn) const {
-    for (DeltaTime delta_time; !window.IsClosed();) {
+  void Run(std::invocable<DeltaTime> auto&& main_loop_fn) const {
+    for (DeltaTime delta_time; !window_->IsClosed();) {
       delta_time.Update();
-      window.Update();
+      window_->Update();
       main_loop_fn(delta_time);
     }
     device_->waitIdle();
@@ -48,8 +48,11 @@ public:
   void Render(const GltfScene& gltf_scene, const Camera& camera);
 
 private:
+  void RecreateSwapchain(const vk::Extent2D& framebuffer_extent);
+
   static constexpr std::size_t kMaxRenderFrames = 2;
   std::size_t current_frame_index_ = 0;
+  Window* window_ = nullptr;
   Instance instance_;
   vk::UniqueSurfaceKHR surface_;
   PhysicalDevice physical_device_;
@@ -222,15 +225,16 @@ std::array<vk::UniqueSemaphore, N> CreateSemaphores(const vk::Device device) {
 
 namespace gfx {
 
-Engine::Engine(const Window& window)
-    : surface_{window.CreateSurface(*instance_)},
+Engine::Engine(Window* window)
+    : window_{window},
+      surface_{window_->CreateSurface(*instance_)},
       physical_device_{*instance_, *surface_},
       device_{physical_device_},
       allocator_{*instance_, *physical_device_, *device_},
       swapchain_{*surface_,
                  *physical_device_,
                  *device_,
-                 window.GetFramebufferExtent(),
+                 window_->GetFramebufferExtent(),
                  physical_device_.queue_family_indices()},
       msaa_sample_count_{GetMsaaSampleCount(physical_device_.limits())},
       color_attachment_{*device_,
@@ -256,7 +260,7 @@ Engine::Engine(const Window& window)
                                                 .usage = VMA_MEMORY_USAGE_AUTO,
                                                 .priority = 1.0f}},
       render_pass_{
-          CreateRenderPass(*device_, msaa_sample_count_, swapchain_.image_format(), depth_attachment_.format())},
+          CreateRenderPass(*device_, msaa_sample_count_, color_attachment_.format(), depth_attachment_.format())},
       framebuffers_{CreateFramebuffers(*device_,
                                        swapchain_,
                                        *render_pass_,
@@ -273,7 +277,9 @@ Engine::Engine(const Window& window)
                                                                               .commandBufferCount = kMaxRenderFrames})},
       draw_fences_{CreateFences<kMaxRenderFrames>(*device_)},
       acquire_next_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)},
-      present_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)} {}
+      present_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)} {
+  window_->OnResize([this](const vk::Extent2D framebuffer_extent) { RecreateSwapchain(framebuffer_extent); });
+}
 
 GltfScene Engine::Load(const std::filesystem::path& gltf_filepath) const {
   if (const auto extension = gltf_filepath.extension(); extension != ".gltf") {
@@ -287,7 +293,6 @@ GltfScene Engine::Load(const std::filesystem::path& gltf_filepath) const {
                    // TODO(matthew-rister): use a dedicated transfer queue to copy assets to device memory
                    graphics_queue_,
                    physical_device_.queue_family_indices().graphics_index,
-                   swapchain_.image_extent(),
                    msaa_sample_count_,
                    *render_pass_,
                    *allocator_,
@@ -308,14 +313,22 @@ void Engine::Render(const GltfScene& gltf_scene, const Camera& camera) {
   static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
   auto result = device_->waitForFences(draw_fence, vk::True, kMaxTimeout);
   vk::detail::resultCheck(result, "Draw fence failed to enter a signaled state");
-  device_->resetFences(draw_fence);
 
   std::uint32_t image_index = 0;
   std::tie(result, image_index) = device_->acquireNextImageKHR(*swapchain_, kMaxTimeout, acquire_next_image_semaphore);
-  vk::detail::resultCheck(result, "Acquire next swapchain image failed");
+  switch (result) {
+    case vk::Result::eSuccess:
+      break;
+    case vk::Result::eSuboptimalKHR:
+    case vk::Result::eErrorOutOfDateKHR:
+      return RecreateSwapchain(window_->GetFramebufferExtent());
+    default:
+      throw std::runtime_error{std::format("Acquire next swapchain image failed with error {}", vk::to_string(result))};
+  }
+  device_->resetFences(draw_fence);
 
-  const auto draw_command_buffer = *draw_command_buffers_[current_frame_index_];
-  draw_command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+  const auto command_buffer = *draw_command_buffers_[current_frame_index_];
+  command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
 
   static constexpr std::array kClearColor{0.0f, 0.0f, 0.0f, 0.0f};
   static constexpr std::array kClearValues{
@@ -323,7 +336,7 @@ void Engine::Render(const GltfScene& gltf_scene, const Camera& camera) {
       vk::ClearValue{.color = vk::ClearColorValue{kClearColor}},
       vk::ClearValue{.depthStencil = vk::ClearDepthStencilValue{.depth = 1.0f, .stencil = 0}}};
 
-  draw_command_buffer.beginRenderPass(
+  command_buffer.beginRenderPass(
       vk::RenderPassBeginInfo{
           .renderPass = *render_pass_,
           .framebuffer = *framebuffers_[image_index],
@@ -332,17 +345,28 @@ void Engine::Render(const GltfScene& gltf_scene, const Camera& camera) {
           .pClearValues = kClearValues.data()},
       vk::SubpassContents::eInline);
 
-  gltf_scene.Render(camera, current_frame_index_, draw_command_buffer);
+  command_buffer.setViewport(0,
+                             vk::Viewport{.x = 0,
+                                          .y = 0,
+                                          .width = static_cast<float>(swapchain_.image_extent().width),
+                                          .height = static_cast<float>(swapchain_.image_extent().height),
+                                          .minDepth = 0.0f,
+                                          .maxDepth = 1.0f});
 
-  draw_command_buffer.endRenderPass();
-  draw_command_buffer.end();
+  command_buffer.setScissor(0,
+                            vk::Rect2D{vk::Rect2D{.offset = vk::Offset2D{0, 0}, .extent = swapchain_.image_extent()}});
+
+  gltf_scene.Render(camera, current_frame_index_, command_buffer);
+
+  command_buffer.endRenderPass();
+  command_buffer.end();
 
   static constexpr vk::PipelineStageFlags kPipelineWaitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
   graphics_queue_.submit(vk::SubmitInfo{.waitSemaphoreCount = 1,
                                         .pWaitSemaphores = &acquire_next_image_semaphore,
                                         .pWaitDstStageMask = &kPipelineWaitStage,
                                         .commandBufferCount = 1,
-                                        .pCommandBuffers = &draw_command_buffer,
+                                        .pCommandBuffers = &command_buffer,
                                         .signalSemaphoreCount = 1,
                                         .pSignalSemaphores = &present_image_semaphore},
                          draw_fence);
@@ -353,7 +377,51 @@ void Engine::Render(const GltfScene& gltf_scene, const Camera& camera) {
                                                         .swapchainCount = 1,
                                                         .pSwapchains = &swapchain,
                                                         .pImageIndices = &image_index});
-  vk::detail::resultCheck(result, "Present swapchain image failed");
+  switch (result) {
+    case vk::Result::eSuccess:
+      break;
+    case vk::Result::eSuboptimalKHR:
+    case vk::Result::eErrorOutOfDateKHR:
+      return RecreateSwapchain(window_->GetFramebufferExtent());
+    default:
+      throw std::runtime_error{std::format("Present swapchain image failed with error {}", vk::to_string(result))};
+  }
+}
+
+void Engine::RecreateSwapchain(const vk::Extent2D& framebuffer_extent) {
+  device_->waitIdle();
+
+  swapchain_.~Swapchain();
+  swapchain_ =
+      Swapchain{*surface_, *physical_device_, *device_, framebuffer_extent, physical_device_.queue_family_indices()};
+  color_attachment_ = Image{*device_,
+                            swapchain_.image_format(),
+                            swapchain_.image_extent(),
+                            1,
+                            msaa_sample_count_,
+                            vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransientAttachment,
+                            vk::ImageAspectFlagBits::eColor,
+                            *allocator_,
+                            VmaAllocationCreateInfo{.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+                                                    .usage = VMA_MEMORY_USAGE_AUTO,
+                                                    .priority = 1.0f}};
+  depth_attachment_ =
+      Image{*device_,
+            GetDepthAttachmentFormat(*physical_device_),
+            swapchain_.image_extent(),
+            1,
+            msaa_sample_count_,
+            vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eTransientAttachment,
+            vk::ImageAspectFlagBits::eDepth,
+            *allocator_,
+            VmaAllocationCreateInfo{.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+                                    .usage = VMA_MEMORY_USAGE_AUTO,
+                                    .priority = 1.0f}};
+  framebuffers_ = CreateFramebuffers(*device_,
+                                     swapchain_,
+                                     *render_pass_,
+                                     color_attachment_.image_view(),
+                                     depth_attachment_.image_view());
 }
 
 }  // namespace gfx
