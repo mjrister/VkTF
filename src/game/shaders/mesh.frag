@@ -6,6 +6,15 @@ const int kMetallicRoughnessSamplerIndex = 1;
 const int kNormalSamplerIndex = 2;
 const int kSamplerCount = 3;
 
+struct Light {
+  vec4 position; // w-component is 0.0 for directional lights, 1.0 for point lights
+  vec4 color;
+};
+
+layout(set = 0, binding = 1) uniform Lights {
+  Light data[24];  // TODO(matthew-rister): avoid hardcoding light count
+} lights;
+
 layout(set = 1, binding = 0) uniform Material {
   vec4 base_color_factor;
   float metallic_factor;
@@ -42,10 +51,15 @@ vec3 GetViewDirection() {
   return normalize(push_constants.camera_position - fragment.position);
 }
 
-vec3 GetLightDirection(out float light_distance) {
-  // TODO(matthew-rister): import lights from a glTF scene using the KHR_lights_punctual extension
-  const vec3 light_direction = push_constants.camera_position - fragment.position;
-  light_distance = length(light_direction);
+float GetLightAttenuation(const float light_distance, const float has_position) {
+  return (1.0 - has_position) + has_position / (light_distance * light_distance); // do not attenuate directional lights
+}
+
+vec3 GetLightDirection(const Light light, out float light_attenuation) {
+  const float has_position = light.position.w;
+  const vec3 light_direction = light.position.xyz - (has_position * fragment.position);
+  const float light_distance = length(light_direction);
+  light_attenuation = GetLightAttenuation(light_distance, has_position);
   return light_direction / light_distance;
 }
 
@@ -78,7 +92,7 @@ vec3 GetFresnelApproximation(const vec3 view_direction, const vec3 halfway_direc
 
 // implementation based on https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#implementation
 vec3 GetMaterialBrdf(const vec3 normal, const vec3 view_direction, const vec3 light_direction,
-                     const vec3 halfway_direction, out vec4 base_color) {
+                     const vec3 halfway_direction) {
   const vec2 metallic_roughness = GetImageColor(kMetallicRoughnessSamplerIndex).bg;
   const float metallic_factor = material.metallic_factor * metallic_roughness[0];
   const float roughness_factor = material.roughness_factor * metallic_roughness[1];
@@ -87,7 +101,7 @@ vec3 GetMaterialBrdf(const vec3 normal, const vec3 view_direction, const vec3 li
   const float D = GetMicrofacetDistribution(normal, halfway_direction, alpha);
   const float V = GetMicrofacetVisibility(normal, view_direction, light_direction, halfway_direction, alpha);
 
-  base_color = fragment.color * material.base_color_factor * GetImageColor(kBaseColorSamplerIndex);
+  const vec4 base_color = fragment.color * material.base_color_factor * GetImageColor(kBaseColorSamplerIndex);
   const vec3 f0 = mix(vec3(0.04), base_color.rgb, metallic_factor);
   const vec3 F = GetFresnelApproximation(view_direction, halfway_direction, f0);
 
@@ -97,22 +111,21 @@ vec3 GetMaterialBrdf(const vec3 normal, const vec3 view_direction, const vec3 li
 }
 
 void main() {
-  float light_distance = 0.0;
   const vec3 normal = GetNormal();
   const vec3 view_direction = GetViewDirection();
-  const vec3 light_direction = GetLightDirection(light_distance);
-  const vec3 halfway_direction = normalize(light_direction + view_direction);
+  vec3 radiance_out = vec3(0.0f);
 
-  vec4 base_color = vec4(0.0);
-  const vec3 material_brdf = GetMaterialBrdf(normal, view_direction, light_direction, halfway_direction, base_color);
+  for (int i = 0; i < lights.data.length(); ++i) {
+    Light light = lights.data[i];
+    float light_attenuation = 0.0;
+    const vec3 light_direction = GetLightDirection(light, light_attenuation);
+    const vec3 halfway_direction = normalize(light_direction + view_direction);
 
-  const float light_attenuation = 1.0 / light_distance;  // TODO(matthew-rister): use quadratic attenuation
-  const vec3 kLightColor = vec3(1.0);
-  const vec3 radiance_in = kLightColor * light_attenuation;
+    const vec3 radiance_in = light_attenuation * light.color.xyz;
+    const vec3 material_brdf = GetMaterialBrdf(normal, view_direction, light_direction, halfway_direction);
+    const float cos_theta = max(dot(normal, light_direction), 0.0);
+    radiance_out += radiance_in * material_brdf * cos_theta;
+  }
 
-  const float cos_theta = max(dot(normal, light_direction), 0.0);
-  const vec3 radiance_out = material_brdf * radiance_in * cos_theta;
-
-  const vec3 kAmbiance = 0.05 * base_color.rgb;  // TODO(matthew-rister): use a more sophisticated ambient model
-  fragment_color = vec4(kAmbiance + radiance_out, base_color.a);  // TODO(matthew-rister): add alpha-mode support
+  fragment_color = vec4(radiance_out, 1.0);  // TODO(matthew-rister): add alpha-mode support
 }

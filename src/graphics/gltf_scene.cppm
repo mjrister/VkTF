@@ -68,16 +68,22 @@ struct IndexBuffer {
 struct Primitive {
   gfx::Buffer vertex_buffer;
   IndexBuffer index_buffer;
-  vk::DescriptorSet descriptor_set;
+  Material* material;
 };
 
 struct Mesh {
   std::vector<Primitive> primitives;
 };
 
+struct Light {
+  glm::vec4 position{0.0f};
+  glm::vec4 color{0.0f};
+};
+
 struct Node {
-  const Mesh* mesh = nullptr;  // non-owning pointer managed by the top-level scene
-  glm::mat4 world_transform{0.0f};
+  const Mesh* mesh = nullptr;
+  const Light* light = nullptr;
+  glm::mat4 transform{0.0f};
   std::vector<std::unique_ptr<const Node>> children;
 };
 
@@ -103,15 +109,17 @@ public:
   void Render(const Camera& camera, std::size_t frame_index, vk::CommandBuffer command_buffer) const;
 
 private:
-  std::vector<Buffer> camera_buffers_;
-  DescriptorSets camera_descriptor_sets_;
   std::vector<std::unique_ptr<Material>> materials_;
-  std::vector<vk::UniqueSampler> material_samplers_;
+  std::vector<vk::UniqueSampler> samplers_;
+  std::vector<std::unique_ptr<const Mesh>> meshes_;
+  std::vector<std::unique_ptr<Light>> lights_;
+  std::unique_ptr<const Node> root_node_;
+  std::vector<Buffer> camera_buffers_;
+  std::vector<Buffer> light_buffers_;
+  DescriptorSets global_descriptor_sets_;
   DescriptorSets material_descriptor_sets_;
   vk::UniquePipelineLayout graphics_pipeline_layout_;
   vk::UniquePipeline graphics_pipeline_;
-  std::vector<std::unique_ptr<const Mesh>> meshes_;
-  std::vector<std::unique_ptr<const Node>> root_nodes_;
 };
 
 }  // namespace gfx
@@ -139,6 +147,7 @@ private:
       CASE(cgltf_result_io_error)
       CASE(cgltf_result_out_of_memory)
       CASE(cgltf_result_legacy_gltf)
+      CASE(cgltf_result_max_enum)
 #undef CASE
       // clang-format on
       default:
@@ -158,6 +167,7 @@ private:
     switch (gltf_primitive_type) {
       // clang-format off
 #define CASE(kValue) case kValue: return #kValue;  // NOLINT(cppcoreguidelines-macro-usage)
+      CASE(cgltf_primitive_type_invalid)
       CASE(cgltf_primitive_type_points)
       CASE(cgltf_primitive_type_lines)
       CASE(cgltf_primitive_type_line_loop)
@@ -165,6 +175,31 @@ private:
       CASE(cgltf_primitive_type_triangles)
       CASE(cgltf_primitive_type_triangle_strip)
       CASE(cgltf_primitive_type_triangle_fan)
+      CASE(cgltf_primitive_type_max_enum)
+#undef CASE
+      // clang-format on
+      default:
+        std::unreachable();
+    }
+  }
+};
+
+template <>
+struct std::formatter<cgltf_light_type> : std::formatter<std::string_view> {
+  [[nodiscard]] auto format(const cgltf_light_type gltf_light_type, auto& format_context) const {
+    return std::formatter<std::string_view>::format(to_string(gltf_light_type), format_context);
+  }
+
+private:
+  static std::string_view to_string(const cgltf_light_type gltf_light_type) noexcept {
+    switch (gltf_light_type) {
+      // clang-format off
+#define CASE(kValue) case kValue: return #kValue;  // NOLINT(cppcoreguidelines-macro-usage)
+      CASE(cgltf_light_type_invalid)
+      CASE(cgltf_light_type_directional)
+      CASE(cgltf_light_type_point)
+      CASE(cgltf_light_type_spot)
+      CASE(cgltf_light_type_max_enum)
 #undef CASE
       // clang-format on
       default:
@@ -306,51 +341,55 @@ gfx::Buffer CreateBuffer(const gfx::DataView<const T>& data_view,
   return buffer;
 }
 
-// ====================================================== Camera =======================================================
-
-struct CameraTransforms {
-  glm::mat4 view_transform{0.0f};
-  glm::mat4 projection_transform{0.0f};
-};
-
-std::vector<gfx::Buffer> CreateCameraBuffers(const std::size_t max_render_frames, const VmaAllocator allocator) {
-  return std::views::iota(0u, max_render_frames)  //
-         | std::views::transform([allocator](const auto /*frame_index*/) {
-             static constexpr auto kSizeBytes = sizeof(CameraTransforms);
-             gfx::Buffer camera_buffer{kSizeBytes,
-                                       vk::BufferUsageFlagBits::eUniformBuffer,
-                                       allocator,
-                                       gfx::kHostVisibleAllocationCreateInfo};
-             camera_buffer.MapMemory();  // enable persistent mapping for per-frame uniform buffer updates
-             return camera_buffer;
+std::vector<gfx::Buffer> CreateMappedUniformBuffers(const std::size_t buffer_count,
+                                                    const std::size_t buffer_size_bytes,
+                                                    const VmaAllocator allocator) {
+  return std::views::iota(0u, buffer_count)  //
+         | std::views::transform([buffer_size_bytes, allocator](const auto /*frame_index*/) {
+             gfx::Buffer buffer{buffer_size_bytes,
+                                vk::BufferUsageFlagBits::eUniformBuffer,
+                                allocator,
+                                gfx::kHostVisibleAllocationCreateInfo};
+             buffer.MapMemory();  // enable persistent mapping
+             return buffer;
            })
          | std::ranges::to<std::vector>();
 }
 
-gfx::DescriptorSets CreateCameraDescriptorSets(const vk::Device device, const std::uint32_t max_render_frames) {
+// ============================================= Global Descriptor Sets ================================================
+
+gfx::DescriptorSets CreateGlobalDescriptorSets(const vk::Device device, const std::uint32_t max_render_frames) {
   const std::array descriptor_pool_sizes{
-      vk::DescriptorPoolSize{.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = max_render_frames}};
+      vk::DescriptorPoolSize{.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = 2 * max_render_frames}};
 
   static constexpr std::array kDescriptorSetLayoutBindings{
-      vk::DescriptorSetLayoutBinding{.binding = 0,
+      vk::DescriptorSetLayoutBinding{.binding = 0,  // camera buffer
                                      .descriptorType = vk::DescriptorType::eUniformBuffer,
                                      .descriptorCount = 1,
-                                     .stageFlags = vk::ShaderStageFlagBits::eVertex}};
+                                     .stageFlags = vk::ShaderStageFlagBits::eVertex},
+      vk::DescriptorSetLayoutBinding{.binding = 1,  // light buffer
+                                     .descriptorType = vk::DescriptorType::eUniformBuffer,
+                                     .descriptorCount = 1,
+                                     .stageFlags = vk::ShaderStageFlagBits::eFragment}};
 
   return gfx::DescriptorSets{device, max_render_frames, descriptor_pool_sizes, kDescriptorSetLayoutBindings};
 }
 
-void UpdateCameraDescriptorSets(const vk::Device device,
-                                const gfx::DescriptorSets& camera_descriptor_sets,
-                                const std::vector<gfx::Buffer>& camera_buffers) {
+void UpdateGlobalDescriptorSets(const vk::Device device,
+                                const gfx::DescriptorSets& global_descriptor_sets,
+                                const std::vector<gfx::Buffer>& camera_buffers,
+                                const std::vector<gfx::Buffer>& light_buffers) {
+  assert(camera_buffers.size() == light_buffers.size());
+
   std::vector<vk::DescriptorBufferInfo> descriptor_buffer_infos;
-  descriptor_buffer_infos.reserve(camera_buffers.size());
+  descriptor_buffer_infos.reserve(camera_buffers.size() + light_buffers.size());
 
   std::vector<vk::WriteDescriptorSet> descriptor_set_writes;
-  descriptor_set_writes.reserve(camera_buffers.size());
+  descriptor_set_writes.reserve(camera_buffers.size() + light_buffers.size());
 
-  for (const auto& [descriptor_set, camera_buffer] : std::views::zip(camera_descriptor_sets, camera_buffers)) {
-    const auto& descriptor_buffer_info = descriptor_buffer_infos.emplace_back(
+  for (const auto& [descriptor_set, camera_buffer, light_buffer] :
+       std::views::zip(global_descriptor_sets, camera_buffers, light_buffers)) {
+    const auto& camera_descriptor_buffer_info = descriptor_buffer_infos.emplace_back(
         vk::DescriptorBufferInfo{.buffer = *camera_buffer, .range = vk::WholeSize});
 
     descriptor_set_writes.push_back(vk::WriteDescriptorSet{.dstSet = descriptor_set,
@@ -358,7 +397,17 @@ void UpdateCameraDescriptorSets(const vk::Device device,
                                                            .dstArrayElement = 0,
                                                            .descriptorCount = 1,
                                                            .descriptorType = vk::DescriptorType::eUniformBuffer,
-                                                           .pBufferInfo = &descriptor_buffer_info});
+                                                           .pBufferInfo = &camera_descriptor_buffer_info});
+
+    const auto& light_descriptor_buffer_info =
+        descriptor_buffer_infos.emplace_back(vk::DescriptorBufferInfo{.buffer = *light_buffer, .range = vk::WholeSize});
+
+    descriptor_set_writes.push_back(vk::WriteDescriptorSet{.dstSet = descriptor_set,
+                                                           .dstBinding = 1,
+                                                           .dstArrayElement = 0,
+                                                           .descriptorCount = 1,
+                                                           .descriptorType = vk::DescriptorType::eUniformBuffer,
+                                                           .pBufferInfo = &light_descriptor_buffer_info});
   }
 
   device.updateDescriptorSets(descriptor_set_writes, nullptr);
@@ -907,7 +956,7 @@ std::unique_ptr<const Mesh> CreateMesh(const cgltf_mesh& gltf_mesh,
     const auto vertices = CreateVertices(gltf_primitive);
     primitives.emplace_back(CreateBuffer<Vertex>(vertices, vk::BufferUsageFlagBits::eVertexBuffer, copy_buffer_options),
                             CreateIndexBuffer(*gltf_primitive.indices, copy_buffer_options),
-                            material->descriptor_set);
+                            material);
     ++index;
   }
 
@@ -916,23 +965,23 @@ std::unique_ptr<const Mesh> CreateMesh(const cgltf_mesh& gltf_mesh,
 
 // ======================================================= Nodes =======================================================
 
-glm::mat4 GetLocalTransform(const cgltf_node& gltf_node) {
-  glm::mat4 local_transform{0.0f};
-  cgltf_node_transform_local(&gltf_node, glm::value_ptr(local_transform));
-  return local_transform;
+glm::mat4 GetTransform(const cgltf_node& gltf_node) {
+  glm::mat4 transform{0.0f};
+  cgltf_node_transform_local(&gltf_node, glm::value_ptr(transform));
+  return transform;
 }
 
 std::vector<std::unique_ptr<const Node>> CreateNodes(const cgltf_node* const* const gltf_nodes,
                                                      const cgltf_size gltf_nodes_count,
                                                      const UnorderedPtrMap<cgltf_mesh, const Mesh>& meshes,
-                                                     const glm::mat4& parent_transform = glm::mat4{1.0f}) {
+                                                     const UnorderedPtrMap<cgltf_light, Light>& lights) {
   return std::span{gltf_nodes, gltf_nodes_count}  //
-         | std::views::transform([&parent_transform, &meshes](const auto* const gltf_node) {
-             const auto node_transform = parent_transform * GetLocalTransform(*gltf_node);
+         | std::views::transform([&meshes, &lights](const auto* const gltf_node) {
              return std::make_unique<const Node>(
                  Find(gltf_node->mesh, meshes),
-                 node_transform,
-                 CreateNodes(gltf_node->children, gltf_node->children_count, meshes, node_transform));
+                 Find(gltf_node->light, lights),
+                 GetTransform(*gltf_node),
+                 CreateNodes(gltf_node->children, gltf_node->children_count, meshes, lights));
            })
          | std::ranges::to<std::vector>();
 }
@@ -971,7 +1020,7 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
   const std::filesystem::path vertex_shader_filepath{"shaders/mesh.vert.spv"};
   const gfx::ShaderModule vertex_shader_module{device, vertex_shader_filepath, vk::ShaderStageFlagBits::eVertex};
 
-  const std::filesystem::path fragment_shader_filepath{"shaders/mesh.frag.spv"};
+  const std::filesystem::path fragment_shader_filepath{"shaders/mesh.frag"};
   const gfx::ShaderModule fragment_shader_module{device, fragment_shader_filepath, vk::ShaderStageFlagBits::eFragment};
 
   const std::array shader_stage_create_info{
@@ -1083,20 +1132,20 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
 // ==================================================== Rendering ======================================================
 
 void Render(const Mesh& mesh,
-            const glm::mat4& model_transform,
+            const glm::mat4& node_transform,
             const vk::PipelineLayout graphics_pipeline_layout,
             const vk::CommandBuffer command_buffer) {
   using ModelTransform = decltype(PushConstants::model_transform);
   command_buffer.pushConstants<ModelTransform>(graphics_pipeline_layout,
                                                vk::ShaderStageFlagBits::eVertex,
                                                offsetof(PushConstants, model_transform),
-                                               model_transform);
+                                               node_transform);
 
-  for (const auto& [vertex_buffer, index_buffer, descriptor_set] : mesh.primitives) {
+  for (const auto& [vertex_buffer, index_buffer, material] : mesh.primitives) {
     command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                       graphics_pipeline_layout,
                                       1,
-                                      descriptor_set,
+                                      material->descriptor_set,
                                       nullptr);
     command_buffer.bindVertexBuffers(0, *vertex_buffer, static_cast<vk::DeviceSize>(0));
     command_buffer.bindIndexBuffer(*index_buffer.buffer, 0, index_buffer.index_type);
@@ -1105,20 +1154,40 @@ void Render(const Mesh& mesh,
 }
 
 void Render(const Node& node,
+            const glm::mat4& parent_transform,
             const vk::PipelineLayout graphics_pipeline_layout,
-            const vk::CommandBuffer command_buffer) {
+            const vk::CommandBuffer command_buffer,
+            std::vector<Light>& lights_buffer) {
+  const auto node_transform = parent_transform * node.transform;
+
+  if (node.light != nullptr) {
+    if (node.light->position.w == 0.0f) {
+      const auto& direction = node_transform[2];  // light direction is derived from the node orientation z-axis
+      lights_buffer.emplace_back(glm::normalize(direction), node.light->color);
+    } else {
+      assert(node.light->position.w == 1.0f);
+      const auto& position = node_transform[3];  // light position derived from the node translation vector
+      lights_buffer.emplace_back(position, node.light->color);
+    }
+  }
+
   if (const auto* const mesh = node.mesh; mesh != nullptr) {
-    Render(*mesh, node.world_transform, graphics_pipeline_layout, command_buffer);
+    Render(*mesh, node_transform, graphics_pipeline_layout, command_buffer);
   }
 
   for (const auto& child_node : node.children) {
-    Render(*child_node, graphics_pipeline_layout, command_buffer);
+    Render(*child_node, node_transform, graphics_pipeline_layout, command_buffer, lights_buffer);
   }
 }
 
 }  // namespace
 
 namespace gfx {
+
+struct CameraTransforms {
+  glm::mat4 view_transform{0.0f};
+  glm::mat4 projection_transform{0.0f};
+};
 
 GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
                      const vk::PhysicalDevice physical_device,
@@ -1132,8 +1201,8 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
                      const vk::RenderPass render_pass,
                      const VmaAllocator allocator,
                      const std::size_t max_render_frames) {
-  const auto gltf_data = Load(gltf_filepath.string());
   const auto gltf_directory = gltf_filepath.parent_path();
+  const auto gltf_data = Load(gltf_filepath.string());
 
   auto material_futures =
       std::span{gltf_data->materials, gltf_data->materials_count}
@@ -1144,14 +1213,14 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
         })
       | std::ranges::to<std::vector>();
 
+  std::unordered_map<vk::SamplerCreateInfo, vk::UniqueSampler> samplers;
+  CreateSamplerOptions create_sampler_options{.enable_anisotropy = enable_sampler_anisotropy,
+                                              .max_anisotropy = max_sampler_anisotropy,
+                                              .samplers = &samplers};
+
   const auto staging_buffer_count = gltf_data->buffers_count + gltf_data->images_count;
   auto copy_buffer_options =
       CreateCopyBufferOptions(device, transfer_queue_family_index, staging_buffer_count, allocator);
-
-  std::unordered_map<vk::SamplerCreateInfo, vk::UniqueSampler> material_samplers;
-  CreateSamplerOptions create_sampler_options{.enable_anisotropy = enable_sampler_anisotropy,
-                                              .max_anisotropy = max_sampler_anisotropy,
-                                              .samplers = &material_samplers};
 
   const auto copy_command_buffer = *copy_buffer_options.command_buffer;
   copy_command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
@@ -1166,36 +1235,61 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
         })
       | std::ranges::to<std::unordered_map>();
 
-  material_descriptor_sets_ = CreateMaterialDescriptorSets(device, static_cast<std::uint32_t>(materials.size()));
-  UpdateMaterialDescriptorSets(device, material_descriptor_sets_, materials);
-
   auto meshes = std::span{gltf_data->meshes, gltf_data->meshes_count}
                 | std::views::transform([&materials, &copy_buffer_options](const auto& gltf_mesh) {
                     return std::pair{&gltf_mesh, CreateMesh(gltf_mesh, materials, copy_buffer_options)};
                   })
                 | std::ranges::to<std::unordered_map>();
 
+  auto lights =
+      std::span{gltf_data->lights, gltf_data->lights_count}  //
+      | std::views::filter([](const auto& gltf_light) {
+          switch (gltf_light.type) {
+            case cgltf_light_type_directional:
+            case cgltf_light_type_point:
+              return true;
+            default:
+              std::println(std::cerr, "Unsupported light {} with type {}", GetName(gltf_light), gltf_light.type);
+              return false;
+          }
+        })
+      | std::views::transform([](const auto& gltf_light) {
+          const glm::vec4 light_position{glm::vec3{0.0f},  // light position set dynamically based on node transform
+                                         static_cast<float>(gltf_light.type == cgltf_light_type_point)};
+          const glm::vec4 light_color{ToVec(gltf_light.color), 1.0f};
+          return std::pair{&gltf_light, std::make_unique<Light>(light_position, light_color)};
+        })
+      | std::ranges::to<std::unordered_map>();
+
+  const auto& gltf_scene = GetDefaultScene(*gltf_data);
+  root_node_ = std::make_unique<const Node>(nullptr,
+                                            nullptr,
+                                            glm::mat4{1.0f},
+                                            CreateNodes(gltf_scene.nodes, gltf_scene.nodes_count, meshes, lights));
+
   copy_command_buffer.end();
 
   const auto copy_fence = device.createFenceUnique(vk::FenceCreateInfo{});
   transfer_queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &copy_command_buffer}, *copy_fence);
 
-  camera_buffers_ = CreateCameraBuffers(max_render_frames, allocator);
-  camera_descriptor_sets_ = CreateCameraDescriptorSets(device, static_cast<std::uint32_t>(max_render_frames));
-  UpdateCameraDescriptorSets(device, camera_descriptor_sets_, camera_buffers_);
+  camera_buffers_ = CreateMappedUniformBuffers(max_render_frames, sizeof(CameraTransforms), allocator);
+  light_buffers_ = CreateMappedUniformBuffers(max_render_frames, sizeof(Light) * lights.size(), allocator);
+  global_descriptor_sets_ = CreateGlobalDescriptorSets(device, static_cast<std::uint32_t>(max_render_frames));
+  UpdateGlobalDescriptorSets(device, global_descriptor_sets_, camera_buffers_, light_buffers_);
 
-  const std::array descriptor_set_layouts{camera_descriptor_sets_.descriptor_set_layout(),
-                                          material_descriptor_sets_.descriptor_set_layout()};
-  graphics_pipeline_layout_ = CreateGraphicsPipelineLayout(device, descriptor_set_layouts);
+  material_descriptor_sets_ = CreateMaterialDescriptorSets(device, static_cast<std::uint32_t>(material_futures.size()));
+  UpdateMaterialDescriptorSets(device, material_descriptor_sets_, materials);
+
+  graphics_pipeline_layout_ = CreateGraphicsPipelineLayout(
+      device,
+      std::array{global_descriptor_sets_.descriptor_set_layout(), material_descriptor_sets_.descriptor_set_layout()});
   graphics_pipeline_ =
       CreateGraphicsPipeline(device, *graphics_pipeline_layout_, viewport_extent, msaa_sample_count, render_pass);
 
-  const auto& gltf_scene = GetDefaultScene(*gltf_data);
-  root_nodes_ = CreateNodes(gltf_scene.nodes, gltf_scene.nodes_count, meshes);
-
-  meshes_ = meshes | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
   materials_ = materials | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
-  material_samplers_ = material_samplers | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
+  samplers_ = samplers | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
+  meshes_ = meshes | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
+  lights_ = lights | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
 
   static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
   const auto result = device.waitForFences(*copy_fence, vk::True, kMaxTimeout);
@@ -1209,7 +1303,7 @@ void GltfScene::Render(const Camera& camera,
   command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                     *graphics_pipeline_layout_,
                                     0,
-                                    camera_descriptor_sets_[frame_index],
+                                    global_descriptor_sets_[frame_index],
                                     nullptr);
 
   camera_buffers_[frame_index].Copy<CameraTransforms>(
@@ -1222,9 +1316,14 @@ void GltfScene::Render(const Camera& camera,
                                                offsetof(PushConstants, camera_position),
                                                camera.GetPosition());
 
-  for (const auto& root_node : root_nodes_) {
-    ::Render(*root_node, *graphics_pipeline_layout_, command_buffer);
+  std::vector<Light> lights_buffer;
+  lights_buffer.reserve(lights_.size());
+
+  for (const auto& child_node : root_node_->children) {
+    ::Render(*child_node, root_node_->transform, *graphics_pipeline_layout_, command_buffer, lights_buffer);
   }
+
+  light_buffers_[frame_index].Copy<Light>(lights_buffer);
 }
 
 }  // namespace gfx
