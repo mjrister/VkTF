@@ -20,7 +20,7 @@ add_custom_target(create_assets_symlink ALL
 set(SHADERS_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/shaders)
 set(SHADERS_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders)
 
-# compile GLSL shaders in the source directory to SPIR-V modules in the binary directory
+# compile GLSL shaders from the source directory to SPIR-V modules in the binary directory
 function(compile_shader GLSL_FILENAME)
   set(GLSL_SOURCE_FILEPATH ${SHADERS_SOURCE_DIR}/${GLSL_FILENAME})
   set(GLSL_BINARY_FILEPATH ${SHADERS_BINARY_DIR}/${GLSL_FILENAME})

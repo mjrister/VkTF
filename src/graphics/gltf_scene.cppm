@@ -819,7 +819,7 @@ void ValidateAttributes(const VertexAttribute<float, 3>& position_attribute,
   ValidateOptionalAttribute(color_0_attribute, position_count, glm::vec4{1.0f});
 
 #ifndef NDEBUG
-  // the glTF specification requires that all attribute for a given primitive have the same count
+  // the glTF specification requires all primitive attributes have the same count
   for (const auto& attribute_count : {normal_attribute.maybe_data->size(),
                                       tangent_attribute.maybe_data->size(),
                                       texture_coordinates_0_attribute.maybe_data->size(),
@@ -1277,7 +1277,7 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
   global_descriptor_sets_ = CreateGlobalDescriptorSets(device, static_cast<std::uint32_t>(max_render_frames));
   UpdateGlobalDescriptorSets(device, global_descriptor_sets_, camera_buffers_, light_buffers_);
 
-  material_descriptor_sets_ = CreateMaterialDescriptorSets(device, static_cast<std::uint32_t>(material_futures.size()));
+  material_descriptor_sets_ = CreateMaterialDescriptorSets(device, static_cast<std::uint32_t>(materials.size()));
   UpdateMaterialDescriptorSets(device, material_descriptor_sets_, materials);
 
   graphics_pipeline_layout_ = CreateGraphicsPipelineLayout(

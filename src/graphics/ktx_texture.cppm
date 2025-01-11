@@ -202,6 +202,7 @@ StbImage Load(const std::filesystem::path& image_filepath) {
   std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> data{
       stbi_load(image_filepath.string().c_str(), &width, &height, &channels, kRequiredChannels),
       stbi_image_free};
+
   if (data == nullptr) {
     throw std::runtime_error{
         std::format("Failed to load {} with error {}", image_filepath.string(), stbi_failure_reason())};

@@ -16,11 +16,10 @@ concept DataRange = std::ranges::contiguous_range<R> &&  //
 export template <typename T>
 class DataView {
 public:
-  // NOLINTBEGIN(*-explicit-*): implicit construction follows a similar convention to view types in the standard library
-  constexpr DataView(T& data) noexcept : data_{&data}, size_{1} {}
+  constexpr DataView(T& data) noexcept : data_{&data}, size_{1} {}  // NOLINT(*-explicit-*)
   constexpr DataView(T* data, const std::size_t size) noexcept : data_{data}, size_{size} {}
-  constexpr DataView(DataRange<T> auto&& range) : data_{std::ranges::data(range)}, size_{std::ranges::size(range)} {}
-  // NOLINTEND(*-explicit-*)
+  constexpr DataView(DataRange<T> auto&& range)  // NOLINT(*-explicit-*)
+      : data_{std::ranges::data(range)}, size_{std::ranges::size(range)} {}
 
   [[nodiscard]] constexpr T* data() const noexcept { return data_; }
   [[nodiscard]] constexpr std::size_t size() const noexcept { return size_; }

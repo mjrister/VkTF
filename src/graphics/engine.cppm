@@ -277,7 +277,7 @@ Engine::Engine(const Window& window)
 
 GltfScene Engine::Load(const std::filesystem::path& gltf_filepath) const {
   if (const auto extension = gltf_filepath.extension(); extension != ".gltf") {
-    throw std::runtime_error{std::format("Unsupported file extension: {}", extension.string())};
+    throw std::invalid_argument{std::format("Unsupported file extension: {}", extension.string())};
   }
   return GltfScene{gltf_filepath,
                    *physical_device_,

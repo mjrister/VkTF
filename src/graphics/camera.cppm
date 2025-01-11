@@ -89,8 +89,8 @@ void Camera::Rotate(float pitch, float yaw) {
   const auto cos_pitch = std::cos(pitch);
   const auto sin_pitch = std::sin(pitch);
 
-  // construct a cumulative rotation matrix to represent the next camera orientation
-  const glm::mat3 euler_rotation{
+  // construct a cumulative euler rotation matrix to represent the next camera orientation
+  const glm::mat3 rotation{
       // clang-format off
      cos_yaw, sin_yaw * sin_pitch,  sin_yaw * cos_pitch,
         0.0f,           cos_pitch,           -sin_pitch,
@@ -98,11 +98,11 @@ void Camera::Rotate(float pitch, float yaw) {
       // clang-format on
   };
 
-  const auto translation = -GetPosition();  // extract position from its previous orientation before applying rotation
-  view_transform_[0] = glm::vec4{euler_rotation[0], 0.0f};
-  view_transform_[1] = glm::vec4{euler_rotation[1], 0.0f};
-  view_transform_[2] = glm::vec4{euler_rotation[2], 0.0f};
-  view_transform_[3] = glm::vec4{euler_rotation * translation, 1.0f};
+  const auto translation = -GetPosition();  // use previous orientation to derive position before applying rotation
+  view_transform_[0] = glm::vec4{rotation[0], 0.0f};
+  view_transform_[1] = glm::vec4{rotation[1], 0.0f};
+  view_transform_[2] = glm::vec4{rotation[2], 0.0f};
+  view_transform_[3] = glm::vec4{rotation * translation, 1.0f};
 }
 
 }  // namespace gfx
