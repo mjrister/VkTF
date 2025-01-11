@@ -28,12 +28,11 @@ find_package(glm CONFIG REQUIRED)
 
 target_link_libraries(graphics PUBLIC GPUOpen::VulkanMemoryAllocator
                                       Vulkan::Headers
+                                      KTX::ktx
                                       glfw
                                       glm::glm
-                               PRIVATE KTX::ktx
-                                       glslang::glslang
-                                       glslang::glslang-default-resource-limits
-                                       glslang::SPIRV)
+                                      glslang::glslang
+                                      glslang::glslang-default-resource-limits)
 
 target_compile_definitions(graphics PUBLIC GLFW_INCLUDE_VULKAN
                                            GLM_FORCE_DEFAULT_ALIGNED_GENTYPES

@@ -1,7 +1,8 @@
-add_executable(game main.cpp)
+add_executable(game)
 
 target_sources(game PRIVATE FILE_SET CXX_MODULES
-                            FILES game.cppm)
+                            FILES game.cppm
+                    PUBLIC main.cpp)
 
 target_link_libraries(game PRIVATE graphics)
 
