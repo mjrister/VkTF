@@ -20,6 +20,7 @@ target_sources(graphics PUBLIC FILE_SET CXX_MODULES
                                      window.cppm)
 
 find_package(Ktx CONFIG REQUIRED)
+find_package(SPIRV-Tools-opt CONFIG REQUIRED)
 find_package(VulkanHeaders CONFIG REQUIRED)
 find_package(VulkanMemoryAllocator CONFIG REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
@@ -27,8 +28,9 @@ find_package(glslang CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 
 target_link_libraries(graphics PUBLIC GPUOpen::VulkanMemoryAllocator
-                                      Vulkan::Headers
                                       KTX::ktx
+                                      SPIRV-Tools-opt
+                                      Vulkan::Headers
                                       glfw
                                       glm::glm
                                       glslang::glslang

@@ -14,6 +14,7 @@
     },
     "gtest",
     "ktx",
+    "spirv-tools",
     "stb",
     "vulkan-headers",
     "vulkan-memory-allocator"

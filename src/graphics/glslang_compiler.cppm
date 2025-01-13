@@ -1,5 +1,6 @@
 module;
 
+#include <cassert>
 #include <concepts>
 #include <cstdint>
 #include <format>
@@ -14,12 +15,17 @@ module;
 
 #include <glslang/Include/glslang_c_interface.h>
 #include <glslang/Public/resource_limits_c.h>
+#include <spirv-tools/optimizer.hpp>
 
 export module glslang_compiler;
 
 namespace gfx::glslang {
 
-export std::vector<std::uint32_t> Compile(const std::string& glsl_shader, glslang_stage_t glslang_stage);
+export enum class SpirvOptimization : std::uint8_t { kNone, kSize, kSpeed };
+
+export std::vector<std::uint32_t> Compile(const std::string& glsl_shader,
+                                          glslang_stage_t glslang_stage,
+                                          SpirvOptimization spirv_optimization);
 
 }  // namespace gfx::glslang
 
@@ -174,30 +180,64 @@ UniqueGlslangProgram CreateGlslangProgram(const glslang_stage_t glslang_stage, g
   return glslang_program;
 }
 
-std::vector<std::uint32_t> GenerateSpirv(const glslang_stage_t glslang_stage, glslang_program_t& glslang_program) {
+std::vector<std::uint32_t> OptimizeSpirvBinary(const std::vector<std::uint32_t>& spirv_binary,
+                                               const gfx::glslang::SpirvOptimization spirv_optimization) {
+  spvtools::Optimizer spirv_optimizer{SPV_ENV_VULKAN_1_3};
+
+  switch (spirv_optimization) {
+    using enum gfx::glslang::SpirvOptimization;
+    case kNone:
+      assert(false);  // avoid redundant copy when SPIR-V optimization is disabled
+      return spirv_binary;
+    case kSize:
+      spirv_optimizer.RegisterSizePasses();
+      break;
+    case kSpeed:
+      spirv_optimizer.RegisterPerformancePasses();
+      break;
+    default:
+      std::unreachable();
+  }
+
+  std::vector<uint32_t> spirv_optimized_binary;
+  if (!spirv_optimizer.Run(spirv_binary.data(), spirv_binary.size(), &spirv_optimized_binary)) {
+    std::println(std::cerr, "SPIR-V optimization failed");
+    return spirv_binary;
+  }
+
+  return spirv_optimized_binary;
+}
+
+std::vector<std::uint32_t> GenerateSpirvBinary(const glslang_stage_t glslang_stage,
+                                               glslang_program_t& glslang_program,
+                                               const gfx::glslang::SpirvOptimization spirv_optimization) {
   glslang_program_SPIRV_generate(&glslang_program, glslang_stage);
 
   const auto spirv_size = glslang_program_SPIRV_get_size(&glslang_program);
   if (spirv_size == 0) throw std::runtime_error{std::format("SPIR-V generation failed at {}", glslang_stage)};
 
-  std::vector<std::uint32_t> spirv(spirv_size);
-  glslang_program_SPIRV_get(&glslang_program, spirv.data());
+  std::vector<std::uint32_t> spirv_binary(spirv_size);
+  glslang_program_SPIRV_get(&glslang_program, spirv_binary.data());
 #ifndef NDEBUG
   Print(std::clog, glslang_program_SPIRV_get_messages, &glslang_program);
 #endif
 
-  return spirv;
+  return spirv_optimization == gfx::glslang::SpirvOptimization::kNone
+             ? spirv_binary
+             : OptimizeSpirvBinary(spirv_binary, spirv_optimization);
 }
 
 }  // namespace
 
 namespace gfx::glslang {
 
-std::vector<std::uint32_t> Compile(const std::string& glsl_shader, const glslang_stage_t glslang_stage) {
+std::vector<std::uint32_t> Compile(const std::string& glsl_shader,
+                                   const glslang_stage_t glslang_stage,
+                                   const SpirvOptimization spirv_optimization) {
   [[maybe_unused]] const auto& glslang_process = GlslangProcess::Get();
   const auto glslang_shader = CreateGlslangShader(glsl_shader, glslang_stage);
   const auto glslang_program = CreateGlslangProgram(glslang_stage, *glslang_shader);
-  return GenerateSpirv(glslang_stage, *glslang_program);
+  return GenerateSpirvBinary(glslang_stage, *glslang_program, spirv_optimization);
 }
 
 }  // namespace gfx::glslang
