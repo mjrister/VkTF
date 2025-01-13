@@ -76,6 +76,11 @@ module :private;
 
 namespace {
 
+constexpr VmaAllocationCreateInfo kDedicatedMemoryAllocationCreateInfo{
+    .flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+    .usage = VMA_MEMORY_USAGE_AUTO,
+    .priority = 1.0f};
+
 vk::SampleCountFlagBits GetMsaaSampleCount(const vk::PhysicalDeviceLimits& physical_device_limits) {
   const auto color_sample_count_flags = physical_device_limits.framebufferColorSampleCounts;
   const auto depth_sample_count_flags = physical_device_limits.framebufferDepthSampleCounts;
@@ -241,9 +246,7 @@ Engine::Engine(const Window& window)
                         vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransientAttachment,
                         vk::ImageAspectFlagBits::eColor,
                         *allocator_,
-                        VmaAllocationCreateInfo{.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
-                                                .usage = VMA_MEMORY_USAGE_AUTO,
-                                                .priority = 1.0f}},
+                        kDedicatedMemoryAllocationCreateInfo},
       depth_attachment_{*device_,
                         GetDepthAttachmentFormat(*physical_device_),
                         swapchain_.image_extent(),
@@ -252,9 +255,7 @@ Engine::Engine(const Window& window)
                         vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eTransientAttachment,
                         vk::ImageAspectFlagBits::eDepth,
                         *allocator_,
-                        VmaAllocationCreateInfo{.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
-                                                .usage = VMA_MEMORY_USAGE_AUTO,
-                                                .priority = 1.0f}},
+                        kDedicatedMemoryAllocationCreateInfo},
       render_pass_{
           CreateRenderPass(*device_, msaa_sample_count_, color_attachment_.format(), depth_attachment_.format())},
       framebuffers_{CreateFramebuffers(*device_,

@@ -291,6 +291,10 @@ struct CopyBufferOptions {
   VmaAllocator allocator = nullptr;
 };
 
+constexpr VmaAllocationCreateInfo kHostVisibleAllocationCreateInfo{
+    .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+    .usage = VMA_MEMORY_USAGE_AUTO};
+
 CopyBufferOptions CreateCopyBufferOptions(const vk::Device device,
                                           const std::uint32_t transfer_queue_family_index,
                                           const std::size_t staging_buffer_count,
@@ -319,7 +323,7 @@ vk::Buffer CreateStagingBuffer(const gfx::DataView<const T> data_view,
   auto& staging_buffer = staging_buffers.emplace_back(data_view.size_bytes(),
                                                       vk::BufferUsageFlagBits::eTransferSrc,
                                                       allocator,
-                                                      gfx::kHostVisibleAllocationCreateInfo);
+                                                      kHostVisibleAllocationCreateInfo);
 
   staging_buffer.MapMemory();
   staging_buffer.Copy(data_view);
@@ -349,7 +353,7 @@ std::vector<gfx::Buffer> CreateMappedUniformBuffers(const std::size_t buffer_cou
              gfx::Buffer buffer{buffer_size_bytes,
                                 vk::BufferUsageFlagBits::eUniformBuffer,
                                 allocator,
-                                gfx::kHostVisibleAllocationCreateInfo};
+                                kHostVisibleAllocationCreateInfo};
              buffer.MapMemory();  // enable persistent mapping
              return buffer;
            })
