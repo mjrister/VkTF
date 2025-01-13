@@ -72,7 +72,7 @@ std::optional<gfx::QueueFamilyIndices> FindQueueFamilyIndices(const vk::Physical
   return std::nullopt;
 }
 
-// TODO(matthew-rister): implement a more robust ranking system based on device features, limits, and format support
+// TODO: implement a more robust ranking system based on device features, limits, and format support
 gfx::RankedPhysicalDevice GetRankedPhysicalDevice(const vk::PhysicalDevice physical_device,
                                                   const vk::SurfaceKHR surface) {
   return FindQueueFamilyIndices(physical_device, surface)

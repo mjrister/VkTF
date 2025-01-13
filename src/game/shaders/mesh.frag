@@ -12,7 +12,7 @@ struct Light {
 };
 
 layout(set = 0, binding = 1) uniform Lights {
-  Light data[24];  // TODO(matthew-rister): avoid hardcoding light count
+  Light data[24];  // TODO: avoid hardcoding light count
 } lights;
 
 layout(set = 1, binding = 0) uniform Material {
@@ -30,7 +30,7 @@ layout(push_constant, std430) uniform PushConstants {
 
 layout(location = 0) in Fragment {
   vec3 position;
-  mat3 normal_transform;  // TODO(matthew-rister): prefer normal transform matrix multplication in the vertex shader
+  mat3 normal_transform;  // TODO: prefer normal transform matrix multplication in the vertex shader
   vec2 texture_coordinates_0;
   vec4 color;
 } fragment;
@@ -127,5 +127,5 @@ void main() {
     radiance_out += radiance_in * material_brdf * cos_theta;
   }
 
-  fragment_color = vec4(radiance_out, 1.0);  // TODO(matthew-rister): add alpha-mode support
+  fragment_color = vec4(radiance_out, 1.0);  // TODO: add alpha-mode support
 }

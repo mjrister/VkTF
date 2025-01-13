@@ -278,7 +278,7 @@ const cgltf_scene& GetDefaultScene(const cgltf_data& gltf_data) {
   if (const std::span gltf_scenes{gltf_data.scenes, gltf_data.scenes_count}; !gltf_scenes.empty()) {
     return gltf_scenes.front();
   }
-  // TODO(matthew-rister): glTF files not containing scene data should be treated as a library of individual entities
+  // TODO: glTF files not containing scene data should be treated as a library of individual entities
   throw std::runtime_error{"At least one glTF scene is required to render"};
 }
 
@@ -598,7 +598,7 @@ std::optional<gfx::KtxTexture> CreateKtxTexture(const cgltf_texture_view& gltf_t
 MaterialKtxTextures CreateKtxTextures(const cgltf_material& gltf_material,
                                       const std::filesystem::path& gltf_directory,
                                       const vk::PhysicalDevice physical_device) {
-  // TODO(matthew-rister): add support for non PBR metallic-roughness materials
+  // TODO: add support for non PBR metallic-roughness materials
   if (gltf_material.has_pbr_metallic_roughness == 0) return {};
 
   const auto& [base_color_texture_view,
@@ -630,7 +630,7 @@ std::unique_ptr<Material> CreateMaterial(const vk::Device device,
     std::println(std::cerr,
                  "Failed to create material {} because it's missing required PBR metallic-roughness textures",
                  GetName(gltf_material));
-    return nullptr;  // TODO(matthew-rister): add support for optional material textures
+    return nullptr;  // TODO: add support for optional material textures
   }
 
   const auto& [base_color_texture_view,
@@ -703,7 +703,7 @@ void UpdateMaterialDescriptorSets(const vk::Device device,
 
   for (const auto& [descriptor_set, material] :
        std::views::zip(material_descriptor_sets, materials | std::views::values)) {
-    if (material == nullptr) continue;  // TODO(matthew-rister): avoid creating descriptor set for unsupported material
+    if (material == nullptr) continue;  // TODO: avoid creating descriptor set for unsupported material
 
     const auto& [base_color_image, base_color_sampler] = *material->maybe_base_color_texture;
     const auto& [metallic_roughness_image, metallic_roughness_sampler] = *material->maybe_metallic_roughness_texture;
@@ -804,7 +804,7 @@ void ValidateOptionalAttribute(VertexAttribute<float, N>& vertex_attribute,
                                const std::size_t attribute_count,
                                const glm::vec<N, float>& default_value) {
   if (auto& maybe_attribute_data = vertex_attribute.maybe_data; !maybe_attribute_data.has_value()) {
-    // TODO(matthew-rister): avoid filling the vertex buffer with default values when an attribute is missing
+    // TODO: avoid filling the vertex buffer with default values when an attribute is missing
     maybe_attribute_data = std::vector<glm::vec<N, float>>(attribute_count, default_value);
   }
 }
@@ -815,7 +815,7 @@ void ValidateAttributes(const VertexAttribute<float, 3>& position_attribute,
                         const VertexAttribute<float, 2>& texture_coordinates_0_attribute,
                         VertexAttribute<float, 4>& color_0_attribute) {
   ValidateRequiredAttribute(position_attribute);
-  ValidateRequiredAttribute(normal_attribute);  // TODO(matthew-rister): derive normals from positions data when missing
+  ValidateRequiredAttribute(normal_attribute);  // TODO: derive normals from positions data when missing
   ValidateRequiredAttribute(tangent_attribute);
   ValidateRequiredAttribute(texture_coordinates_0_attribute);
 
@@ -941,20 +941,20 @@ std::unique_ptr<const Mesh> CreateMesh(const cgltf_mesh& gltf_mesh,
     if (gltf_primitive.type != cgltf_primitive_type_triangles) {
       static constexpr auto kMessageFormat = "Mesh {} primitive {} with type {} is unsupported";
       std::println(std::cerr, kMessageFormat, GetName(gltf_mesh), index++, gltf_primitive.type);
-      continue;  // TODO(matthew-rister): add support for other primitive types
+      continue;  // TODO: add support for other primitive types
     }
 
     if (gltf_primitive.indices == nullptr || gltf_primitive.indices->count == 0) {
       static constexpr auto kMessageFormat = "Mesh {} primitive {} without an indices accessor is unsupported";
       std::println(std::cerr, kMessageFormat, GetName(gltf_mesh), index++);
-      continue;  // TODO(matthew-rister): add support for non-indexed triangle meshes
+      continue;  // TODO: add support for non-indexed triangle meshes
     }
 
     auto* const material = Find(gltf_primitive.material, materials);
     if (material == nullptr) {
       static constexpr auto kMessageFormat = "Mesh {} primitive {} with material {} is unsupported";
       std::println(std::cerr, kMessageFormat, GetName(gltf_mesh), index++, GetName(*gltf_primitive.material));
-      continue;  // TODO(matthew-rister): add default material support
+      continue;  // TODO: add default material support
     }
 
     const auto vertices = CreateVertices(gltf_primitive);
@@ -1071,7 +1071,7 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
   static constexpr vk::PipelineInputAssemblyStateCreateInfo kInputAssemblyStateCreateInfo{
       .topology = vk::PrimitiveTopology::eTriangleList};
 
-  // TODO(matthew-rister): use dynamic viewport and scissor pipeline state when window resizing is implemented
+  // TODO: use dynamic viewport and scissor pipeline state when window resizing is implemented
   const vk::Viewport viewport{.x = 0.0f,
                               .y = 0.0f,
                               .width = static_cast<float>(viewport_extent.width),

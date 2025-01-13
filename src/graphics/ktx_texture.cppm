@@ -131,7 +131,7 @@ ktx_transcode_fmt_e SelectKtxTranscodeFormat(ktxTexture2& ktx_texture2,
                                              const gfx::ColorSpace color_space,
                                              const vk::PhysicalDevice physical_device) {
   const auto components = ktxTexture2_GetNumComponents(&ktx_texture2);
-  if (components != 3 && components != 4) {  // TODO(matthew-rister): add support for one and two component images
+  if (components != 3 && components != 4) {  // TODO: add support for one and two component images
     throw std::runtime_error{std::format("Unsupported image format with {} components", components)};
   }
 
@@ -239,8 +239,7 @@ UniqueKtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::path& im
                                                .numLevels = 1,
                                                .numLayers = 1,
                                                .numFaces = 1,
-                                               // TODO(matthew-rister): implement runtime mipmap generation
-                                               .generateMipmaps = true};
+                                               .generateMipmaps = true};  // TODO: implement runtime mipmap generation
   if (const auto result =
           ktxTexture2_Create(&ktx_texture_create_info, KTX_TEXTURE_CREATE_ALLOC_STORAGE, std::out_ptr(ktx_texture2));
       result != KTX_SUCCESS) {

@@ -111,8 +111,7 @@ constexpr gfx::glslang::SpirvOptimization GetSpirvOptimization() {
 #ifndef NDEBUG
   return gfx::glslang::SpirvOptimization::kNone;
 #endif
-  // TODO(matthew-rister): enable size optimizations when targeting mobile devices
-  return gfx::glslang::SpirvOptimization::kSpeed;
+  return gfx::glslang::SpirvOptimization::kSpeed;  // TODO: enable size optimizations when targeting mobile devices
 }
 
 std::vector<SpirvWord> GetSpirvBinary(const std::filesystem::path& shader_filepath,

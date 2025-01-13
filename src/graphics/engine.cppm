@@ -285,8 +285,7 @@ GltfScene Engine::Load(const std::filesystem::path& gltf_filepath) const {
                    physical_device_.features().samplerAnisotropy,
                    physical_device_.limits().maxSamplerAnisotropy,
                    *device_,
-                   // TODO(matthew-rister): use a dedicated transfer queue to copy assets to device memory
-                   graphics_queue_,
+                   graphics_queue_,  // TODO: use a dedicated transfer queue to copy assets to device memory
                    physical_device_.queue_family_indices().graphics_index,
                    swapchain_.image_extent(),
                    msaa_sample_count_,
