@@ -77,7 +77,7 @@ struct Mesh {
 
 struct Light {
   glm::vec4 position{0.0f};
-  glm::vec4 color{0.0f};
+  glm::vec4 color{0.0f};  // padding applied to conform to std140 layout requirements
 };
 
 struct Node {
@@ -568,8 +568,7 @@ struct MaterialKtxTextures {
 
 struct MaterialProperties {
   glm::vec4 base_color_factor{0.0f};
-  float metallic_factor = 0.0f;
-  float roughness_factor = 0.0f;
+  glm::vec2 metallic_roughness_factor{0.0f};
   float normal_scale = 0.0f;
 };
 
@@ -660,12 +659,12 @@ std::unique_ptr<Material> CreateMaterial(const vk::Device device,
                                        normal_texture_view.texture->sampler,
                                        normal_ktx_texture->numLevels,
                                        create_sampler_options)},
-      CreateBuffer<MaterialProperties>(MaterialProperties{.base_color_factor = ToVec(base_color_factor),
-                                                          .metallic_factor = metallic_factor,
-                                                          .roughness_factor = roughness_factor,
-                                                          .normal_scale = normal_texture_view.scale},
-                                       vk::BufferUsageFlagBits::eUniformBuffer,
-                                       copy_buffer_options));
+      CreateBuffer<MaterialProperties>(
+          MaterialProperties{.base_color_factor = ToVec(base_color_factor),
+                             .metallic_roughness_factor = glm::vec2{metallic_factor, roughness_factor},
+                             .normal_scale = normal_texture_view.scale},
+          vk::BufferUsageFlagBits::eUniformBuffer,
+          copy_buffer_options));
 }
 
 gfx::DescriptorSets CreateMaterialDescriptorSets(const vk::Device device, const std::uint32_t material_count) {
