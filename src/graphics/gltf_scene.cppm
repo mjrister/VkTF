@@ -1019,12 +1019,23 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
                                           const vk::PipelineLayout graphics_pipeline_layout,
                                           const vk::Extent2D viewport_extent,
                                           const vk::SampleCountFlagBits msaa_sample_count,
-                                          const vk::RenderPass render_pass) {
+                                          const vk::RenderPass render_pass,
+                                          const std::uint32_t light_count) {
   const std::filesystem::path vertex_shader_filepath{"shaders/mesh.vert"};
   const gfx::ShaderModule vertex_shader_module{device, vertex_shader_filepath, vk::ShaderStageFlagBits::eVertex};
 
   const std::filesystem::path fragment_shader_filepath{"shaders/mesh.frag"};
   const gfx::ShaderModule fragment_shader_module{device, fragment_shader_filepath, vk::ShaderStageFlagBits::eFragment};
+
+  static constexpr auto kLightCountSize = sizeof(decltype(light_count));
+  static constexpr vk::SpecializationMapEntry kSpecializationMapEntry{.constantID = 0,
+                                                                      .offset = 0,
+                                                                      .size = kLightCountSize};
+
+  const vk::SpecializationInfo specialization_info{.mapEntryCount = 1,
+                                                   .pMapEntries = &kSpecializationMapEntry,
+                                                   .dataSize = kLightCountSize,
+                                                   .pData = &light_count};
 
   const std::array shader_stage_create_info{
       vk::PipelineShaderStageCreateInfo{.stage = vk::ShaderStageFlagBits::eVertex,
@@ -1032,7 +1043,8 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
                                         .pName = "main"},
       vk::PipelineShaderStageCreateInfo{.stage = vk::ShaderStageFlagBits::eFragment,
                                         .module = *fragment_shader_module,
-                                        .pName = "main"}};
+                                        .pName = "main",
+                                        .pSpecializationInfo = &specialization_info}};
 
   static constexpr vk::VertexInputBindingDescription kVertexInputBindingDescription{
       .binding = 0,
@@ -1286,8 +1298,12 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
   graphics_pipeline_layout_ = CreateGraphicsPipelineLayout(
       device,
       std::array{global_descriptor_sets_.descriptor_set_layout(), material_descriptor_sets_.descriptor_set_layout()});
-  graphics_pipeline_ =
-      CreateGraphicsPipeline(device, *graphics_pipeline_layout_, viewport_extent, msaa_sample_count, render_pass);
+  graphics_pipeline_ = CreateGraphicsPipeline(device,
+                                              *graphics_pipeline_layout_,
+                                              viewport_extent,
+                                              msaa_sample_count,
+                                              render_pass,
+                                              static_cast<std::uint32_t>(lights.size()));
 
   materials_ = materials | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
   samplers_ = samplers | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();

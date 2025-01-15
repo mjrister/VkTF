@@ -1,13 +1,13 @@
 #version 460
 
-// TODO: use specialized constants to avoid hardcoding values known when creating graphics pipelines
 const uint kBaseColorSamplerIndex = 0;
 const uint kMetallicRoughnessSamplerIndex = 1;
 const uint kNormalSamplerIndex = 2;
 const uint kSamplerCount = 3;
-const uint kLightCount = 24;
-const float kMinLightDistance = 0.1;
 const float kPi = 3.141592653589793;
+const float kMinLightDistance = 0.1;
+
+layout (constant_id = 0) const uint kLightCount = 1;
 
 layout(push_constant) uniform PushConstants {
   layout(offset = 64) vec3 camera_position;
@@ -70,7 +70,7 @@ float GetLightAttenuation(const float light_distance, const float has_position) 
 vec3 GetLightDirection(const Light light, out float light_attenuation) {
   const float has_position = light.position.w;
   const vec3 light_direction = light.position.xyz - (has_position * fragment.position);
-  const float light_distance = max(length(light_direction), kMinLightDistance); // avoid division by zero
+  const float light_distance = max(length(light_direction), kMinLightDistance);  // avoid division by zero
   light_attenuation = GetLightAttenuation(light_distance, has_position);
   return light_direction / light_distance;
 }
