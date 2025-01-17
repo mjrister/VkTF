@@ -158,7 +158,7 @@ UniqueGlslangShader CreateGlslangShader(const std::string& glsl_shader, const gl
   return glslang_shader;
 }
 
-UniqueGlslangProgram CreateGlslangProgram(const glslang_stage_t glslang_stage, glslang_shader_t& glslang_shader) {
+UniqueGlslangProgram CreateGlslangProgram(glslang_shader_t& glslang_shader, const glslang_stage_t glslang_stage) {
   auto glslang_program = UniqueGlslangProgram{glslang_program_create(), glslang_program_delete};
   if (glslang_program == nullptr) {
     throw std::runtime_error{std::format("Shader program creation failed at {}", glslang_stage)};
@@ -208,8 +208,8 @@ std::vector<std::uint32_t> OptimizeSpirvBinary(const std::vector<std::uint32_t>&
   return spirv_optimized_binary;
 }
 
-std::vector<std::uint32_t> GenerateSpirvBinary(const glslang_stage_t glslang_stage,
-                                               glslang_program_t& glslang_program,
+std::vector<std::uint32_t> GenerateSpirvBinary(glslang_program_t& glslang_program,
+                                               const glslang_stage_t glslang_stage,
                                                const gfx::glslang::SpirvOptimization spirv_optimization) {
   glslang_program_SPIRV_generate(&glslang_program, glslang_stage);
 
@@ -236,8 +236,8 @@ std::vector<std::uint32_t> Compile(const std::string& glsl_shader,
                                    const SpirvOptimization spirv_optimization) {
   [[maybe_unused]] const auto& glslang_process = GlslangProcess::Get();
   const auto glslang_shader = CreateGlslangShader(glsl_shader, glslang_stage);
-  const auto glslang_program = CreateGlslangProgram(glslang_stage, *glslang_shader);
-  return GenerateSpirvBinary(glslang_stage, *glslang_program, spirv_optimization);
+  const auto glslang_program = CreateGlslangProgram(*glslang_shader, glslang_stage);
+  return GenerateSpirvBinary(*glslang_program, glslang_stage, spirv_optimization);
 }
 
 }  // namespace gfx::glslang

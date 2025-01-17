@@ -17,9 +17,9 @@ layout(location = 4) in vec4 color_0;
 
 layout(location = 0) out Fragment {
   vec3 position;
-  mat3 normal_transform;
   vec2 texture_coordinates_0;
   vec4 color_0;
+  mat3 normal_transform;
 } fragment;
 
 mat3 GetNormalTransform(const mat4 model_transform) {
