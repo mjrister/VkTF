@@ -14,18 +14,20 @@ Checks: >-
   -*-braces-around-statements,
   -*-uppercase-literal-suffix,
   -bugprone-easily-swappable-parameters,
+  -google-readability-todo,
   -misc-include-cleaner,
   -misc-misplaced-const,
   -misc-no-recursion,
   -modernize-use-trailing-return-type
 CheckOptions:
-  - hicpp-signed-bitwise.IgnorePositiveIntegerLiterals: true
+  - key: hicpp-signed-bitwise.IgnorePositiveIntegerLiterals
+    value: true
   - key: readability-identifier-length.IgnoredLoopCounterNames
-    value: '^[ijk]$'
+    value: ^[ijk]$
   - key: readability-identifier-length.IgnoredParameterNames
-    value: '^[xyz]$'
+    value: ^d?[xyz]$
   - key: readability-identifier-length.IgnoredVariableNames
-    value: '^[xyz]$'
+    value: ^d?[xyz]$
   - key: readability-identifier-naming.ClassCase
     value: CamelCase
   - key: readability-identifier-naming.ClassMemberCase
@@ -46,6 +48,8 @@ CheckOptions:
     value: CamelCase
   - key: readability-identifier-naming.GlobalConstantPrefix
     value: k
+  - key: readability-identifier-naming.MacroDefinitionCase
+    value: UPPER_CASE
   - key: readability-identifier-naming.MemberConstantCase
     value: CamelCase
   - key: readability-identifier-naming.MemberConstantPrefix

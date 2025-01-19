@@ -42,11 +42,10 @@ void HandleKeyEvents(const gfx::Window& window, gfx::Camera& camera, const gfx::
   }
 
   static constexpr auto kTranslationSpeed = 6.0f;
-  const auto translation = kTranslationSpeed * delta_time;
-  const auto dx = window.IsKeyPressed(GLFW_KEY_D) * translation - window.IsKeyPressed(GLFW_KEY_A) * translation;
-  const auto dz = window.IsKeyPressed(GLFW_KEY_S) * translation - window.IsKeyPressed(GLFW_KEY_W) * translation;
-
-  if (dx != 0.0f || dz != 0.0f) camera.Translate(dx, 0.0f, dz);
+  const auto translation_step = kTranslationSpeed * delta_time;
+  camera.Translate(translation_step * (window.IsKeyPressed(GLFW_KEY_D) - window.IsKeyPressed(GLFW_KEY_A)),
+                   0.0f,
+                   translation_step * (window.IsKeyPressed(GLFW_KEY_S) - window.IsKeyPressed(GLFW_KEY_W)));
 }
 
 void HandleMouseEvents(const gfx::Window& window,

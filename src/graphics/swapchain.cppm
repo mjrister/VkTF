@@ -33,6 +33,8 @@ public:
   }
 
 private:
+  Swapchain(vk::Device device, const vk::SwapchainCreateInfoKHR& swapchain_create_info);
+
   vk::UniqueSwapchainKHR swapchain_;
   vk::Format image_format_ = vk::Format::eUndefined;
   vk::Extent2D image_extent_;
@@ -87,31 +89,10 @@ vk::Extent2D GetSwapchainImageExtent(const vk::SurfaceCapabilitiesKHR& surface_c
                       .height = std::clamp(framebuffer_height, min_image_height, max_image_height)};
 }
 
-std::vector<vk::UniqueImageView> CreateSwapchainImageViews(const vk::Device device,
-                                                           const vk::SwapchainKHR swapchain,
-                                                           const vk::Format image_format) {
-  return device.getSwapchainImagesKHR(swapchain)  //
-         | std::views::transform([device, image_format](const auto image) {
-             return device.createImageViewUnique(vk::ImageViewCreateInfo{
-                 .image = image,
-                 .viewType = vk::ImageViewType::e2D,
-                 .format = image_format,
-                 .subresourceRange = vk::ImageSubresourceRange{.aspectMask = vk::ImageAspectFlagBits::eColor,
-                                                               .levelCount = 1,
-                                                               .layerCount = 1}});
-           })
-         | std::ranges::to<std::vector>();
-}
-
-}  // namespace
-
-namespace gfx {
-
-Swapchain::Swapchain(const vk::SurfaceKHR surface,
-                     const vk::PhysicalDevice physical_device,
-                     const vk::Device device,
-                     const vk::Extent2D framebuffer_extent,
-                     const QueueFamilyIndices& queue_family_indices) {
+vk::SwapchainCreateInfoKHR GetSwapchainCreateInfo(const vk::SurfaceKHR surface,
+                                                  const vk::PhysicalDevice physical_device,
+                                                  const vk::Extent2D framebuffer_extent,
+                                                  const gfx::QueueFamilyIndices& queue_family_indices) {
   const auto surface_capabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
   const auto surface_format = GetSwapchainSurfaceFormat(physical_device, surface);
 
@@ -138,10 +119,40 @@ Swapchain::Swapchain(const vk::SurfaceKHR surface,
     swapchain_create_info.pQueueFamilyIndices = &graphics_index;
   }
 
-  swapchain_ = device.createSwapchainKHRUnique(swapchain_create_info);
-  image_format_ = swapchain_create_info.imageFormat;
-  image_extent_ = swapchain_create_info.imageExtent;
-  image_views_ = CreateSwapchainImageViews(device, *swapchain_, image_format_);
+  return swapchain_create_info;
 }
+
+std::vector<vk::UniqueImageView> CreateSwapchainImageViews(const vk::Device device,
+                                                           const vk::SwapchainKHR swapchain,
+                                                           const vk::Format image_format) {
+  return device.getSwapchainImagesKHR(swapchain)  //
+         | std::views::transform([device, image_format](const auto image) {
+             return device.createImageViewUnique(vk::ImageViewCreateInfo{
+                 .image = image,
+                 .viewType = vk::ImageViewType::e2D,
+                 .format = image_format,
+                 .subresourceRange = vk::ImageSubresourceRange{.aspectMask = vk::ImageAspectFlagBits::eColor,
+                                                               .levelCount = 1,
+                                                               .layerCount = 1}});
+           })
+         | std::ranges::to<std::vector>();
+}
+
+}  // namespace
+
+namespace gfx {
+
+Swapchain::Swapchain(const vk::SurfaceKHR surface,
+                     const vk::PhysicalDevice physical_device,
+                     const vk::Device device,
+                     const vk::Extent2D framebuffer_extent,
+                     const QueueFamilyIndices& queue_family_indices)
+    : Swapchain{device, GetSwapchainCreateInfo(surface, physical_device, framebuffer_extent, queue_family_indices)} {}
+
+Swapchain::Swapchain(const vk::Device device, const vk::SwapchainCreateInfoKHR& swapchain_create_info)
+    : swapchain_{device.createSwapchainKHRUnique(swapchain_create_info)},
+      image_format_{swapchain_create_info.imageFormat},
+      image_extent_{swapchain_create_info.imageExtent},
+      image_views_{CreateSwapchainImageViews(device, *swapchain_, image_format_)} {}
 
 }  // namespace gfx

@@ -6,6 +6,7 @@ module;
 #include <limits>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 export module camera;
@@ -78,18 +79,17 @@ void Camera::Translate(const float dx, const float dy, const float dz) {
 }
 
 void Camera::Rotate(float pitch, float yaw) {
-  // accumulate pitch and yaw euler angles derived from the current camera orientation
+  // accumulate euler angles derived from the current camera orientation
+  static constexpr auto kPitchLimit = glm::half_pi<float>() - std::numeric_limits<float>::epsilon();
+  pitch = std::clamp(std::asin(-view_transform_[1][2]) + pitch, -kPitchLimit, kPitchLimit);  // avoid gimbal lock
+  const auto cos_pitch = std::cos(pitch);
+  const auto sin_pitch = std::sin(pitch);
+
   yaw += std::atan2(view_transform_[0][2], view_transform_[2][2]);
   const auto cos_yaw = std::cos(yaw);
   const auto sin_yaw = std::sin(yaw);
 
-  static constexpr auto kPitchMax = glm::radians(89.0f);
-  pitch += std::asin(-view_transform_[1][2]);
-  pitch = std::clamp(pitch, -kPitchMax, kPitchMax);  // avoid gimbal lock
-  const auto cos_pitch = std::cos(pitch);
-  const auto sin_pitch = std::sin(pitch);
-
-  // construct a cumulative euler rotation matrix to represent the next camera orientation
+  // construct a cumulative rotation matrix to represent the next camera orientation
   const glm::mat3 rotation{
       // clang-format off
      cos_yaw, sin_yaw * sin_pitch,  sin_yaw * cos_pitch,
@@ -98,7 +98,7 @@ void Camera::Rotate(float pitch, float yaw) {
       // clang-format on
   };
 
-  const auto translation = -GetPosition();  // use previous orientation to derive position before applying rotation
+  const auto translation = -GetPosition();
   view_transform_[0] = glm::vec4{rotation[0], 0.0f};
   view_transform_[1] = glm::vec4{rotation[1], 0.0f};
   view_transform_[2] = glm::vec4{rotation[2], 0.0f};

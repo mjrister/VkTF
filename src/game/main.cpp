@@ -40,7 +40,7 @@ std::ostream& operator<<(std::ostream& ostream, const std::exception& exception)
 
 }  // namespace
 
-int main() {  // NOLINT(bugprone-exception-escape): std::cerr is not configured to throw exceptions
+int main() {
   try {
     std::ios_base::sync_with_stdio(false);  // avoid synchronizing with stdio because only standard C++ streams are used
     game::Start();
