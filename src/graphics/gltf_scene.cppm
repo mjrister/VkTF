@@ -98,8 +98,8 @@ public:
             vk::Bool32 enable_sampler_anisotropy,
             float max_sampler_anisotropy,
             vk::Device device,
-            vk::Queue transfer_queue,
-            std::uint32_t transfer_queue_family_index,
+            vk::Queue queue,
+            std::uint32_t queue_family_index,
             vk::Extent2D viewport_extent,
             vk::SampleCountFlagBits msaa_sample_count,
             vk::RenderPass render_pass,
@@ -597,22 +597,35 @@ std::optional<gfx::KtxTexture> CreateKtxTexture(const cgltf_texture_view& gltf_t
 MaterialKtxTextures CreateKtxTextures(const cgltf_material& gltf_material,
                                       const std::filesystem::path& gltf_directory,
                                       const vk::PhysicalDevice physical_device) {
-  // TODO: add support for non PBR metallic-roughness materials
-  if (gltf_material.has_pbr_metallic_roughness == 0) return {};
+  if (gltf_material.has_pbr_metallic_roughness == 0) {
+    return {};  // TODO: add support for non PBR metallic-roughness materials
+  }
 
-  const auto& [base_color_texture_view,
-               metallic_roughness_texture_view,
-               base_color_factor,
-               metallic_factor,
-               roughness_factor] = gltf_material.pbr_metallic_roughness;
+  const auto& pbr_metallic_roughness = gltf_material.pbr_metallic_roughness;
+  auto base_color_texture_future = std::async(std::launch::async,
+                                              CreateKtxTexture,
+                                              pbr_metallic_roughness.base_color_texture,
+                                              gfx::ColorSpace::kSrgb,
+                                              gltf_directory,
+                                              physical_device);
 
-  return MaterialKtxTextures{
-      .maybe_base_color_texture =
-          CreateKtxTexture(base_color_texture_view, gfx::ColorSpace::kSrgb, gltf_directory, physical_device),
-      .maybe_metallic_roughness_texture =
-          CreateKtxTexture(metallic_roughness_texture_view, gfx::ColorSpace::kLinear, gltf_directory, physical_device),
-      .maybe_normal_texture =
-          CreateKtxTexture(gltf_material.normal_texture, gfx::ColorSpace::kLinear, gltf_directory, physical_device)};
+  auto metallic_roughness_texture_future = std::async(std::launch::async,
+                                                      CreateKtxTexture,
+                                                      pbr_metallic_roughness.metallic_roughness_texture,
+                                                      gfx::ColorSpace::kLinear,
+                                                      gltf_directory,
+                                                      physical_device);
+
+  auto normal_texture_future = std::async(std::launch::async,
+                                          CreateKtxTexture,
+                                          gltf_material.normal_texture,
+                                          gfx::ColorSpace::kLinear,
+                                          gltf_directory,
+                                          physical_device);
+
+  return MaterialKtxTextures{.maybe_base_color_texture = base_color_texture_future.get(),
+                             .maybe_metallic_roughness_texture = metallic_roughness_texture_future.get(),
+                             .maybe_normal_texture = normal_texture_future.get()};
 }
 
 std::unique_ptr<Material> CreateMaterial(const vk::Device device,
@@ -993,7 +1006,7 @@ std::vector<std::unique_ptr<const Node>> CreateNodes(const cgltf_node* const* co
 
 struct PushConstants {
   glm::mat4 model_transform{0.0f};
-  glm::vec3 camera_position{0.0f};
+  glm::vec3 view_position{0.0f};
 };
 
 template <std::size_t N>
@@ -1005,8 +1018,8 @@ vk::UniquePipelineLayout CreateGraphicsPipelineLayout(
                             .offset = offsetof(PushConstants, model_transform),
                             .size = sizeof(PushConstants::model_transform)},
       vk::PushConstantRange{.stageFlags = vk::ShaderStageFlagBits::eFragment,
-                            .offset = offsetof(PushConstants, camera_position),
-                            .size = sizeof(PushConstants::camera_position)}};
+                            .offset = offsetof(PushConstants, view_position),
+                            .size = sizeof(PushConstants::view_position)}};
 
   return device.createPipelineLayoutUnique(
       vk::PipelineLayoutCreateInfo{.setLayoutCount = static_cast<std::uint32_t>(descriptor_set_layouts.size()),
@@ -1209,8 +1222,8 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
                      const vk::Bool32 enable_sampler_anisotropy,
                      const float max_sampler_anisotropy,
                      const vk::Device device,
-                     const vk::Queue transfer_queue,
-                     const std::uint32_t transfer_queue_family_index,
+                     const vk::Queue queue,
+                     const std::uint32_t queue_family_index,
                      const vk::Extent2D viewport_extent,
                      const vk::SampleCountFlagBits msaa_sample_count,
                      const vk::RenderPass render_pass,
@@ -1234,8 +1247,7 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
                                               .samplers = &samplers};
 
   const auto staging_buffer_count = gltf_data->buffers_count + gltf_data->images_count;
-  auto copy_buffer_options =
-      CreateCopyBufferOptions(device, transfer_queue_family_index, staging_buffer_count, allocator);
+  auto copy_buffer_options = CreateCopyBufferOptions(device, queue_family_index, staging_buffer_count, allocator);
 
   const auto copy_command_buffer = *copy_buffer_options.command_buffer;
   copy_command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
@@ -1256,6 +1268,11 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
                   })
                 | std::ranges::to<std::unordered_map>();
 
+  copy_command_buffer.end();
+
+  const auto copy_fence = device.createFenceUnique(vk::FenceCreateInfo{});
+  queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &copy_command_buffer}, *copy_fence);
+
   auto lights =
       std::span{gltf_data->lights, gltf_data->lights_count}  //
       | std::views::filter([](const auto& gltf_light) {
@@ -1265,7 +1282,7 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
               return true;
             default:
               std::println(std::cerr, "Unsupported light {} with type {}", GetName(gltf_light), gltf_light.type);
-              return false;
+              return false;  // TODO: add spot light support
           }
         })
       | std::views::transform([](const auto& gltf_light) {
@@ -1281,11 +1298,6 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
                                             nullptr,
                                             glm::mat4{1.0f},
                                             CreateNodes(gltf_scene.nodes, gltf_scene.nodes_count, meshes, lights));
-
-  copy_command_buffer.end();
-
-  const auto copy_fence = device.createFenceUnique(vk::FenceCreateInfo{});
-  transfer_queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &copy_command_buffer}, *copy_fence);
 
   camera_buffers_ = CreateMappedUniformBuffers(max_render_frames, sizeof(CameraTransforms), allocator);
   light_buffers_ = CreateMappedUniformBuffers(max_render_frames, sizeof(Light) * lights.size(), allocator);
@@ -1325,15 +1337,15 @@ void GltfScene::Render(const Camera& camera,
                                     global_descriptor_sets_[frame_index],
                                     nullptr);
 
+  using ViewPosition = decltype(PushConstants::view_position);
+  command_buffer.pushConstants<ViewPosition>(*graphics_pipeline_layout_,
+                                             vk::ShaderStageFlagBits::eFragment,
+                                             offsetof(PushConstants, view_position),
+                                             camera.GetPosition());
+
   camera_buffers_[frame_index].Copy<CameraTransforms>(
       CameraTransforms{.view_transform = camera.view_transform(),
                        .projection_transform = camera.projection_transform()});
-
-  using CameraPosition = decltype(PushConstants::camera_position);
-  command_buffer.pushConstants<CameraPosition>(*graphics_pipeline_layout_,
-                                               vk::ShaderStageFlagBits::eFragment,
-                                               offsetof(PushConstants, camera_position),
-                                               camera.GetPosition());
 
   std::vector<Light> lights_buffer;
   lights_buffer.reserve(lights_.size());
