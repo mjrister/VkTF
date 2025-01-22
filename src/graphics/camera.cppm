@@ -48,8 +48,9 @@ module :private;
 
 namespace {
 
+constexpr glm::vec3 kUp{0.0f, 1.0f, 0.0f};
+
 glm::mat4 GetViewTransform(const glm::vec3& position, const glm::vec3& direction) {
-  static constexpr glm::vec3 kUp{0.0f, 1.0f, 0.0f};
   const auto target = position + direction;
   return glm::lookAt(position, target, kUp);
 }
@@ -59,7 +60,7 @@ glm::mat4 GetProjectionTransform(const gfx::ViewFrustum& view_frustum) {
   auto projection_transform = z_far == std::numeric_limits<float>::infinity()
                                   ? glm::infinitePerspective(field_of_view_y, aspect_ratio, z_near)
                                   : glm::perspective(field_of_view_y, aspect_ratio, z_near, z_far);
-  projection_transform[1][1] *= -1;  // account for inverted y-axis convention in OpenGL
+  projection_transform[1][1] *= -1.0f;  // account for inverted y-axis convention in OpenGL
   return projection_transform;
 }
 
@@ -76,6 +77,7 @@ Camera::Camera(const glm::vec3& position, const glm::vec3& direction, const View
     : view_transform_{GetViewTransform(position, direction)},
       projection_transform_{GetProjectionTransform(view_frustum)} {
   assert(glm::length(direction) > 0.0f);
+  assert(std::abs(glm::dot(direction, kUp)) < 1.0f);
 }
 
 glm::vec3 Camera::GetPosition() const {
@@ -93,8 +95,6 @@ void Camera::Rotate(const EulerAngles& rotation) {
   const auto [pitch, yaw] = GetOrientation() + rotation;
   const auto cos_pitch = std::cos(pitch);
   const auto sin_pitch = std::sin(pitch);
-
-  yaw += std::atan2(view_transform_[0][2], view_transform_[2][2]);
   const auto cos_yaw = std::cos(yaw);
   const auto sin_yaw = std::sin(yaw);
 

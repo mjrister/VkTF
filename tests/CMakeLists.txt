@@ -1,4 +1,4 @@
-add_executable(tests graphics/data_view_test.cpp)
+add_executable(tests graphics/camera_test.cpp graphics/data_view_test.cpp)
 
 find_package(GTest CONFIG REQUIRED)
 
