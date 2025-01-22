@@ -6,7 +6,6 @@ module;
 #include <limits>
 
 #include <glm/glm.hpp>
-#include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 export module camera;
@@ -20,6 +19,11 @@ export struct ViewFrustum {
   float z_far = 0.0f;
 };
 
+export struct EulerAngles {
+  float pitch = 0.0f;
+  float yaw = 0.0f;
+};
+
 export class Camera {
 public:
   Camera(const glm::vec3& position, const glm::vec3& direction, const ViewFrustum& view_frustum);
@@ -28,9 +32,10 @@ public:
   [[nodiscard]] const glm::mat4& projection_transform() const noexcept { return projection_transform_; }
 
   [[nodiscard]] glm::vec3 GetPosition() const;
+  [[nodiscard]] EulerAngles GetOrientation() const;
 
-  void Translate(float dx, float dy, float dz);
-  void Rotate(float pitch, float yaw);
+  void Translate(const glm::vec3& translation) { view_transform_[3] -= glm::vec4{translation, 0.0f}; }
+  void Rotate(const EulerAngles& rotation);
 
 private:
   glm::mat4 view_transform_;
@@ -58,6 +63,11 @@ glm::mat4 GetProjectionTransform(const gfx::ViewFrustum& view_frustum) {
   return projection_transform;
 }
 
+gfx::EulerAngles operator+(const gfx::EulerAngles& orientation, const gfx::EulerAngles rotation) {
+  static constexpr auto kPitchLimit = glm::radians(89.0f);
+  return gfx::EulerAngles{.pitch = std::clamp(orientation.pitch + rotation.pitch, -kPitchLimit, kPitchLimit),
+                          .yaw = orientation.yaw + rotation.yaw};
+}
 }  // namespace
 
 namespace gfx {
@@ -71,17 +81,16 @@ Camera::Camera(const glm::vec3& position, const glm::vec3& direction, const View
 glm::vec3 Camera::GetPosition() const {
   const glm::vec3 translation{view_transform_[3]};
   const glm::mat3 rotation{view_transform_};
-  return -translation * rotation;  // invert the view transform translation vector to get the camera world position
+  return -translation * rotation;  // invert the view-space translation vector to get the world-space position
 }
 
-void Camera::Translate(const float dx, const float dy, const float dz) {
-  view_transform_[3] -= glm::vec4{dx, dy, dz, 0.0f};
+EulerAngles Camera::GetOrientation() const {
+  return EulerAngles{.pitch = std::asin(-view_transform_[1][2]),
+                     .yaw = std::atan2(view_transform_[0][2], view_transform_[2][2])};
 }
 
-void Camera::Rotate(float pitch, float yaw) {
-  // accumulate euler angles derived from the current camera orientation
-  static constexpr auto kPitchLimit = glm::half_pi<float>() - std::numeric_limits<float>::epsilon();
-  pitch = std::clamp(std::asin(-view_transform_[1][2]) + pitch, -kPitchLimit, kPitchLimit);  // avoid gimbal lock
+void Camera::Rotate(const EulerAngles& rotation) {
+  const auto [pitch, yaw] = GetOrientation() + rotation;
   const auto cos_pitch = std::cos(pitch);
   const auto sin_pitch = std::sin(pitch);
 
@@ -89,8 +98,7 @@ void Camera::Rotate(float pitch, float yaw) {
   const auto cos_yaw = std::cos(yaw);
   const auto sin_yaw = std::sin(yaw);
 
-  // construct a cumulative rotation matrix to represent the next camera orientation
-  const glm::mat3 rotation{
+  const glm::mat3 euler_rotation{
       // clang-format off
      cos_yaw, sin_yaw * sin_pitch,  sin_yaw * cos_pitch,
         0.0f,           cos_pitch,           -sin_pitch,
@@ -99,10 +107,10 @@ void Camera::Rotate(float pitch, float yaw) {
   };
 
   const auto translation = -GetPosition();
-  view_transform_[0] = glm::vec4{rotation[0], 0.0f};
-  view_transform_[1] = glm::vec4{rotation[1], 0.0f};
-  view_transform_[2] = glm::vec4{rotation[2], 0.0f};
-  view_transform_[3] = glm::vec4{rotation * translation, 1.0f};
+  view_transform_[0] = glm::vec4{euler_rotation[0], 0.0f};
+  view_transform_[1] = glm::vec4{euler_rotation[1], 0.0f};
+  view_transform_[2] = glm::vec4{euler_rotation[2], 0.0f};
+  view_transform_[3] = glm::vec4{euler_rotation * translation, 1.0f};
 }
 
 }  // namespace gfx

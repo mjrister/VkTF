@@ -41,11 +41,11 @@ void HandleKeyEvents(const gfx::Window& window, gfx::Camera& camera, const gfx::
     return;
   }
 
-  static constexpr auto kTranslationSpeed = 6.0f;
-  const auto translation_step = kTranslationSpeed * delta_time;
-  camera.Translate(translation_step * (window.IsKeyPressed(GLFW_KEY_D) - window.IsKeyPressed(GLFW_KEY_A)),
-                   0.0f,
-                   translation_step * (window.IsKeyPressed(GLFW_KEY_S) - window.IsKeyPressed(GLFW_KEY_W)));
+  static constexpr auto kTranslateSpeed = 6.0f;
+  const auto translation_step = kTranslateSpeed * delta_time;
+  camera.Translate(glm::vec3{translation_step * (window.IsKeyPressed(GLFW_KEY_D) - window.IsKeyPressed(GLFW_KEY_A)),
+                             0.0f,
+                             translation_step * (window.IsKeyPressed(GLFW_KEY_S) - window.IsKeyPressed(GLFW_KEY_W))});
 }
 
 void HandleMouseEvents(const gfx::Window& window,
@@ -58,10 +58,9 @@ void HandleMouseEvents(const gfx::Window& window,
 
   const auto left_click_position = window.GetCursorPosition();
   if (prev_left_click_position.has_value()) {
-    static constexpr auto kRotationSpeed = 0.00390625f;
+    static constexpr auto kRotateSpeed = 0.00390625f;
     const auto drag_direction = left_click_position - *prev_left_click_position;
-    const auto rotation = kRotationSpeed * glm::vec2{-drag_direction.y, -drag_direction.x};
-    camera.Rotate(rotation.x, rotation.y);
+    camera.Rotate(gfx::EulerAngles{.pitch = kRotateSpeed * -drag_direction.y, .yaw = kRotateSpeed * -drag_direction.x});
   }
 
   prev_left_click_position = left_click_position;
