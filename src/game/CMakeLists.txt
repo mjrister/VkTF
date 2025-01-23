@@ -21,13 +21,13 @@ set(SHADERS_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/shaders)
 set(SHADERS_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders)
 
 # compile GLSL shaders from the source directory to SPIR-V modules in the binary directory
-function(compile_shader GLSL_FILENAME)
+function(compile_shader GLSL_FILENAME GLSL_STAGE)
   set(GLSL_SOURCE_FILEPATH ${SHADERS_SOURCE_DIR}/${GLSL_FILENAME})
   set(GLSL_BINARY_FILEPATH ${SHADERS_BINARY_DIR}/${GLSL_FILENAME})
   set(SPIRV_BINARY_FILEPATH ${GLSL_BINARY_FILEPATH}.spv)
 
   add_custom_command(OUTPUT  ${SPIRV_BINARY_FILEPATH} ${GLSL_BINARY_FILEPATH}
-                     COMMAND ${GLSLANG_EXECUTABLE} -V -o ${SPIRV_BINARY_FILEPATH} ${GLSL_SOURCE_FILEPATH}
+                     COMMAND ${GLSLANG_EXECUTABLE} -S ${GLSL_STAGE} -V -o ${SPIRV_BINARY_FILEPATH} ${GLSL_SOURCE_FILEPATH}
                      # create a symlink to the original source file to enable runtime glslang compilation
                      COMMAND ${CMAKE_COMMAND} -E create_symlink ${GLSL_SOURCE_FILEPATH} ${GLSL_BINARY_FILEPATH}
                      DEPENDS ${GLSL_SOURCE_FILEPATH}
@@ -37,8 +37,8 @@ function(compile_shader GLSL_FILENAME)
   return(PROPAGATE SPIRV_BINARY_FILEPATHS)
 endfunction()
 
-compile_shader(mesh.vert)
-compile_shader(mesh.frag)
+compile_shader(vertex.glsl vert)
+compile_shader(fragment.glsl frag)
 
 add_custom_target(compile_shaders DEPENDS ${SPIRV_BINARY_FILEPATHS})
 add_dependencies(game compile_shaders)
