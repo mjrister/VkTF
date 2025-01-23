@@ -25,6 +25,7 @@ else()
   endif()
 endif()
 
+set(CMAKE_SCRIPTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 add_subdirectory(src)
 
 enable_testing()

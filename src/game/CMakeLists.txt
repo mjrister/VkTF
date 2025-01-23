@@ -1,13 +1,9 @@
-add_executable(game)
+add_executable(game main.cpp)
 
 target_sources(game PRIVATE FILE_SET CXX_MODULES
-                            FILES game.cppm
-                    PUBLIC main.cpp)
+                            FILES game.cppm)
 
 target_link_libraries(game PRIVATE graphics)
-
-find_package(glslang CONFIG REQUIRED)
-get_target_property(GLSLANG_EXECUTABLE glslang::glslang-standalone LOCATION)
 
 set(ASSETS_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/assets)
 set(ASSETS_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/assets)
@@ -21,22 +17,7 @@ set(SHADERS_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/shaders)
 set(SHADERS_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders)
 
 # compile GLSL shaders from the source directory to SPIR-V modules in the binary directory
-function(compile_shader GLSL_FILENAME GLSL_STAGE)
-  set(GLSL_SOURCE_FILEPATH ${SHADERS_SOURCE_DIR}/${GLSL_FILENAME})
-  set(GLSL_BINARY_FILEPATH ${SHADERS_BINARY_DIR}/${GLSL_FILENAME})
-  set(SPIRV_BINARY_FILEPATH ${GLSL_BINARY_FILEPATH}.spv)
-
-  add_custom_command(OUTPUT  ${SPIRV_BINARY_FILEPATH} ${GLSL_BINARY_FILEPATH}
-                     COMMAND ${GLSLANG_EXECUTABLE} -S ${GLSL_STAGE} -V -o ${SPIRV_BINARY_FILEPATH} ${GLSL_SOURCE_FILEPATH}
-                     # create a symlink to the original source file to enable runtime glslang compilation
-                     COMMAND ${CMAKE_COMMAND} -E create_symlink ${GLSL_SOURCE_FILEPATH} ${GLSL_BINARY_FILEPATH}
-                     DEPENDS ${GLSL_SOURCE_FILEPATH}
-                     COMMENT "Compiling ${GLSL_SOURCE_FILEPATH}")
-
-  list(APPEND SPIRV_BINARY_FILEPATHS ${SPIRV_BINARY_FILEPATH})
-  return(PROPAGATE SPIRV_BINARY_FILEPATHS)
-endfunction()
-
+include(${CMAKE_SCRIPTS_DIR}/compile_shader.cmake)
 compile_shader(vertex.glsl vert)
 compile_shader(fragment.glsl frag)
 

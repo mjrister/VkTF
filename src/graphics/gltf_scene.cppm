@@ -1034,10 +1034,10 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
                                           const vk::SampleCountFlagBits msaa_sample_count,
                                           const vk::RenderPass render_pass,
                                           const std::uint32_t light_count) {
-  const std::filesystem::path vertex_shader_filepath{"shaders/vertex.glsl"};
+  const std::filesystem::path vertex_shader_filepath{"shaders/vertex.glsl.spv"};
   const gfx::ShaderModule vertex_shader_module{device, vertex_shader_filepath, vk::ShaderStageFlagBits::eVertex};
 
-  const std::filesystem::path fragment_shader_filepath{"shaders/fragment.glsl"};
+  const std::filesystem::path fragment_shader_filepath{"shaders/fragment.glsl.spv"};
   const gfx::ShaderModule fragment_shader_module{device, fragment_shader_filepath, vk::ShaderStageFlagBits::eFragment};
 
   static constexpr auto kLightCountSize = sizeof(decltype(light_count));
