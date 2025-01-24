@@ -1,10 +1,10 @@
-# VkRender
+# VkTF
 
-A work in progress Vulkan renderer written in C++.
+A cross-platform Vulkan glTF Physically Based Renderer written in C++23.
 
 ## Requirements
 
-This project requires CMake 3.30 and a compiler that supports the C++23 language standard. To assist with CMake configuration, building, and testing, [CMake Presets](https://cmake.org/cmake/help/v3.22/manual/cmake-presets.7.html) are used with [ninja](https://ninja-build.org/) as a build generator.
+This project requires CMake 3.31 and a compiler that supports the C++23 language standard. To assist with CMake configuration, building, and testing, [CMake Presets](https://cmake.org/cmake/help/v3.22/manual/cmake-presets.7.html) are used with [ninja](https://ninja-build.org/) as a build generator.
 
 ### Vulkan
 
@@ -20,21 +20,21 @@ This project enables [Address Sanitizer](https://clang.llvm.org/docs/AddressSani
 
 ## Build
 
-The simplest way to build the project is to use an IDE with CMake integration. Alternatively, the project can be built from the command line using CMake presets. To use the `windows-x64-release` preset, run:
+The simplest way to build the project is to use an IDE with CMake integration. Alternatively, the project can be built from the command line using CMake presets. To use the `windows-release` preset, run:
 
 ```bash
-cmake --preset windows-x64-release
-cmake --build --preset windows-x64-release
+cmake --preset windows-release
+cmake --build --preset windows-release
 ```
 
 A list of available configuration and build presets can be displayed by running  `cmake --list-presets` and `cmake --build --list-presets` respectively. At this time, only x64 builds are supported. Note that on Windows, `cl` and `ninja` are expected to be available in your environment path which are available by default when using the Developer Command Prompt for Visual Studio.
 
 ## Test
 
-This project uses [Google Test](https://github.com/google/googletest) for unit testing which can be run after building the project with [CTest](https://cmake.org/cmake/help/book/mastering-cmake/chapter/Testing%20With%20CMake%20and%20CTest.html). To use the `windows-x64-release` preset, run:
+This project uses [Google Test](https://github.com/google/googletest) for unit testing which can be run after building the project with [CTest](https://cmake.org/cmake/help/book/mastering-cmake/chapter/Testing%20With%20CMake%20and%20CTest.html). To use the `windows-release` preset, run:
 
 ```bash
-ctest --preset windows-x64-release
+ctest --preset windows-release
 ```
 
 To see what test presets are available, run `ctest --list-presets`.  Alternatively, tests can be run from the separate `tests` executable which is built with the project.

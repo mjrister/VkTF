@@ -28,7 +28,7 @@ import physical_device;
 import swapchain;
 import window;
 
-namespace gfx {
+namespace vktf {
 
 export class Engine {
 public:
@@ -70,7 +70,7 @@ private:
   std::array<vk::UniqueSemaphore, kMaxRenderFrames> present_image_semaphores_;
 };
 
-}  // namespace gfx
+}  // namespace vktf
 
 module :private;
 
@@ -188,7 +188,7 @@ vk::UniqueRenderPass CreateRenderPass(const vk::Device device,
 }
 
 std::vector<vk::UniqueFramebuffer> CreateFramebuffers(const vk::Device device,
-                                                      const gfx::Swapchain& swapchain,
+                                                      const vktf::Swapchain& swapchain,
                                                       const vk::RenderPass render_pass,
                                                       const vk::ImageView color_attachment,
                                                       const vk::ImageView depth_attachment) {
@@ -225,7 +225,7 @@ std::array<vk::UniqueSemaphore, N> CreateSemaphores(const vk::Device device) {
 
 }  // namespace
 
-namespace gfx {
+namespace vktf {
 
 Engine::Engine(const Window& window)
     : surface_{window.CreateSurface(*instance_)},
@@ -356,4 +356,4 @@ void Engine::Render(const GltfScene& gltf_scene, const Camera& camera) {
   vk::detail::resultCheck(result, "Present swapchain image failed");
 }
 
-}  // namespace gfx
+}  // namespace vktf

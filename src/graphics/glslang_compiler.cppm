@@ -19,7 +19,7 @@ module;
 
 export module glslang_compiler;
 
-namespace gfx::glslang {
+namespace vktf::glslang {
 
 export enum class SpirvOptimization : std::uint8_t { kNone, kSize, kSpeed };
 
@@ -27,7 +27,7 @@ export std::vector<std::uint32_t> Compile(const std::string& glsl_shader,
                                           glslang_stage_t glslang_stage,
                                           SpirvOptimization spirv_optimization);
 
-}  // namespace gfx::glslang
+}  // namespace vktf::glslang
 
 module :private;
 
@@ -181,11 +181,11 @@ UniqueGlslangProgram CreateGlslangProgram(glslang_shader_t& glslang_shader, cons
 }
 
 std::vector<std::uint32_t> OptimizeSpirvBinary(const std::vector<std::uint32_t>& spirv_binary,
-                                               const gfx::glslang::SpirvOptimization spirv_optimization) {
+                                               const vktf::glslang::SpirvOptimization spirv_optimization) {
   spvtools::Optimizer spirv_optimizer{SPV_ENV_VULKAN_1_3};
 
   switch (spirv_optimization) {
-    using enum gfx::glslang::SpirvOptimization;
+    using enum vktf::glslang::SpirvOptimization;
     case kNone:
       assert(false);  // avoid redundant copy when SPIR-V optimization is disabled
       return spirv_binary;
@@ -210,7 +210,7 @@ std::vector<std::uint32_t> OptimizeSpirvBinary(const std::vector<std::uint32_t>&
 
 std::vector<std::uint32_t> GenerateSpirvBinary(glslang_program_t& glslang_program,
                                                const glslang_stage_t glslang_stage,
-                                               const gfx::glslang::SpirvOptimization spirv_optimization) {
+                                               const vktf::glslang::SpirvOptimization spirv_optimization) {
   glslang_program_SPIRV_generate(&glslang_program, glslang_stage);
 
   const auto spirv_size = glslang_program_SPIRV_get_size(&glslang_program);
@@ -222,14 +222,14 @@ std::vector<std::uint32_t> GenerateSpirvBinary(glslang_program_t& glslang_progra
   Print(std::clog, glslang_program_SPIRV_get_messages, &glslang_program);
 #endif
 
-  return spirv_optimization == gfx::glslang::SpirvOptimization::kNone
+  return spirv_optimization == vktf::glslang::SpirvOptimization::kNone
              ? spirv_binary
              : OptimizeSpirvBinary(spirv_binary, spirv_optimization);
 }
 
 }  // namespace
 
-namespace gfx::glslang {
+namespace vktf::glslang {
 
 std::vector<std::uint32_t> Compile(const std::string& glsl_shader,
                                    const glslang_stage_t glslang_stage,
@@ -240,4 +240,4 @@ std::vector<std::uint32_t> Compile(const std::string& glsl_shader,
   return GenerateSpirvBinary(*glslang_program, glslang_stage, spirv_optimization);
 }
 
-}  // namespace gfx::glslang
+}  // namespace vktf::glslang

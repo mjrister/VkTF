@@ -23,19 +23,21 @@ module :private;
 
 namespace {
 
-gfx::Camera CreateCamera(const float aspect_ratio) {
+constexpr auto* kProjectName = "VkTF";
+
+vktf::Camera CreateCamera(const float aspect_ratio) {
   static constexpr glm::vec3 kPosition{0.0f, 1.0f, 0.0f};
   static constexpr glm::vec3 kDirection{1.0f, 0.0f, 0.0f};
 
-  return gfx::Camera{kPosition,
-                     kDirection,
-                     gfx::ViewFrustum{.field_of_view_y = glm::radians(45.0f),
-                                      .aspect_ratio = aspect_ratio,
-                                      .z_near = 0.1f,
-                                      .z_far = 1.0e6f}};
+  return vktf::Camera{kPosition,
+                      kDirection,
+                      vktf::ViewFrustum{.field_of_view_y = glm::radians(45.0f),
+                                        .aspect_ratio = aspect_ratio,
+                                        .z_near = 0.1f,
+                                        .z_far = 1.0e6f}};
 }
 
-void HandleKeyEvents(const gfx::Window& window, gfx::Camera& camera, const gfx::DeltaTime delta_time) {
+void HandleKeyEvents(const vktf::Window& window, vktf::Camera& camera, const vktf::DeltaTime delta_time) {
   if (window.IsKeyPressed(GLFW_KEY_ESCAPE)) {
     window.Close();
     return;
@@ -48,8 +50,8 @@ void HandleKeyEvents(const gfx::Window& window, gfx::Camera& camera, const gfx::
                              translation_step * (window.IsKeyPressed(GLFW_KEY_S) - window.IsKeyPressed(GLFW_KEY_W))});
 }
 
-void HandleMouseEvents(const gfx::Window& window,
-                       gfx::Camera& camera,
+void HandleMouseEvents(const vktf::Window& window,
+                       vktf::Camera& camera,
                        std::optional<glm::vec2>& prev_left_click_position) {
   if (!window.IsMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT)) {
     prev_left_click_position = std::nullopt;
@@ -58,9 +60,9 @@ void HandleMouseEvents(const gfx::Window& window,
 
   const auto left_click_position = window.GetCursorPosition();
   if (prev_left_click_position.has_value()) {
-    static constexpr auto kRotateSpeed = 0.00390625f;
-    const auto drag_direction = left_click_position - *prev_left_click_position;
-    camera.Rotate(gfx::EulerAngles{.pitch = kRotateSpeed * -drag_direction.y, .yaw = kRotateSpeed * -drag_direction.x});
+    static constexpr auto kDragSpeed = 0.00390625f;
+    const auto drag_direction = kDragSpeed * (left_click_position - *prev_left_click_position);
+    camera.Rotate(vktf::EulerAngles{.pitch = -drag_direction.y, .yaw = -drag_direction.x});
   }
 
   prev_left_click_position = left_click_position;
@@ -70,8 +72,8 @@ void HandleMouseEvents(const gfx::Window& window,
 namespace game {
 
 void Start() {
-  const gfx::Window window{"VkRender"};
-  gfx::Engine engine{window};
+  const vktf::Window window{kProjectName};
+  vktf::Engine engine{window};
   const auto gltf_scene = engine.Load("assets/Main.1_Sponza/NewSponza_Main_glTF_002.gltf");
   auto camera = CreateCamera(window.GetAspectRatio());
 

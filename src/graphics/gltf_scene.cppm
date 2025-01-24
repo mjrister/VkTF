@@ -47,7 +47,7 @@ import shader_module;
 namespace {
 
 struct Texture {
-  gfx::Image image;
+  vktf::Image image;
   vk::Sampler sampler;
 };
 
@@ -55,18 +55,18 @@ struct Material {
   std::optional<Texture> maybe_base_color_texture;
   std::optional<Texture> maybe_metallic_roughness_texture;
   std::optional<Texture> maybe_normal_texture;
-  std::optional<gfx::Buffer> maybe_properties_buffer;
+  std::optional<vktf::Buffer> maybe_properties_buffer;
   vk::DescriptorSet descriptor_set;
 };
 
 struct IndexBuffer {
   std::uint32_t index_count = 0;
   vk::IndexType index_type = vk::IndexType::eUint16;
-  gfx::Buffer buffer;
+  vktf::Buffer buffer;
 };
 
 struct Primitive {
-  gfx::Buffer vertex_buffer;
+  vktf::Buffer vertex_buffer;
   IndexBuffer index_buffer;
   Material* material;
 };
@@ -89,7 +89,7 @@ struct Node {
 
 }  // namespace
 
-namespace gfx {
+namespace vktf {
 
 export class GltfScene {
 public:
@@ -122,7 +122,7 @@ private:
   vk::UniquePipeline graphics_pipeline_;
 };
 
-}  // namespace gfx
+}  // namespace vktf
 
 module :private;
 
@@ -287,7 +287,7 @@ const cgltf_scene& GetDefaultScene(const cgltf_data& gltf_data) {
 struct CopyBufferOptions {
   vk::UniqueCommandPool command_pool;
   vk::UniqueCommandBuffer command_buffer;
-  std::vector<gfx::Buffer> staging_buffers;  // staging buffers must remain in scope until copy commands complete
+  std::vector<vktf::Buffer> staging_buffers;  // staging buffers must remain in scope until copy commands complete
   VmaAllocator allocator = nullptr;
 };
 
@@ -307,7 +307,7 @@ CopyBufferOptions CreateCopyBufferOptions(const vk::Device device,
                                                                         .level = vk::CommandBufferLevel::ePrimary,
                                                                         .commandBufferCount = 1});
 
-  std::vector<gfx::Buffer> staging_buffers;
+  std::vector<vktf::Buffer> staging_buffers;
   staging_buffers.reserve(staging_buffer_count);
 
   return CopyBufferOptions{.command_pool = std::move(copy_command_pool),
@@ -317,9 +317,9 @@ CopyBufferOptions CreateCopyBufferOptions(const vk::Device device,
 }
 
 template <typename T>
-vk::Buffer CreateStagingBuffer(const gfx::DataView<const T> data_view,
+vk::Buffer CreateStagingBuffer(const vktf::DataView<const T> data_view,
                                const VmaAllocator allocator,
-                               std::vector<gfx::Buffer>& staging_buffers) {
+                               std::vector<vktf::Buffer>& staging_buffers) {
   auto& staging_buffer = staging_buffers.emplace_back(data_view.size_bytes(),
                                                       vk::BufferUsageFlagBits::eTransferSrc,
                                                       allocator,
@@ -333,27 +333,27 @@ vk::Buffer CreateStagingBuffer(const gfx::DataView<const T> data_view,
 }
 
 template <typename T>
-gfx::Buffer CreateBuffer(const gfx::DataView<const T>& data_view,
-                         const vk::BufferUsageFlags usage_flags,
-                         CopyBufferOptions& copy_buffer_options) {
+vktf::Buffer CreateBuffer(const vktf::DataView<const T>& data_view,
+                          const vk::BufferUsageFlags usage_flags,
+                          CopyBufferOptions& copy_buffer_options) {
   auto& [_, command_buffer, staging_buffers, allocator] = copy_buffer_options;
   const auto staging_buffer = CreateStagingBuffer(data_view, allocator, staging_buffers);
 
-  gfx::Buffer buffer{data_view.size_bytes(), usage_flags | vk::BufferUsageFlagBits::eTransferDst, allocator};
+  vktf::Buffer buffer{data_view.size_bytes(), usage_flags | vk::BufferUsageFlagBits::eTransferDst, allocator};
   command_buffer->copyBuffer(staging_buffer, *buffer, vk::BufferCopy{.size = data_view.size_bytes()});
 
   return buffer;
 }
 
-std::vector<gfx::Buffer> CreateMappedUniformBuffers(const std::size_t buffer_count,
-                                                    const std::size_t buffer_size_bytes,
-                                                    const VmaAllocator allocator) {
+std::vector<vktf::Buffer> CreateMappedUniformBuffers(const std::size_t buffer_count,
+                                                     const std::size_t buffer_size_bytes,
+                                                     const VmaAllocator allocator) {
   return std::views::iota(0u, buffer_count)  //
          | std::views::transform([buffer_size_bytes, allocator](const auto /*frame_index*/) {
-             gfx::Buffer buffer{buffer_size_bytes,
-                                vk::BufferUsageFlagBits::eUniformBuffer,
-                                allocator,
-                                kHostVisibleAllocationCreateInfo};
+             vktf::Buffer buffer{buffer_size_bytes,
+                                 vk::BufferUsageFlagBits::eUniformBuffer,
+                                 allocator,
+                                 kHostVisibleAllocationCreateInfo};
              buffer.MapMemory();  // enable persistent mapping
              return buffer;
            })
@@ -362,7 +362,7 @@ std::vector<gfx::Buffer> CreateMappedUniformBuffers(const std::size_t buffer_cou
 
 // ============================================= Global Descriptor Sets ================================================
 
-gfx::DescriptorSets CreateGlobalDescriptorSets(const vk::Device device, const std::uint32_t max_render_frames) {
+vktf::DescriptorSets CreateGlobalDescriptorSets(const vk::Device device, const std::uint32_t max_render_frames) {
   const std::array descriptor_pool_sizes{
       vk::DescriptorPoolSize{.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = 2 * max_render_frames}};
 
@@ -376,13 +376,13 @@ gfx::DescriptorSets CreateGlobalDescriptorSets(const vk::Device device, const st
                                      .descriptorCount = 1,
                                      .stageFlags = vk::ShaderStageFlagBits::eFragment}};
 
-  return gfx::DescriptorSets{device, max_render_frames, descriptor_pool_sizes, kDescriptorSetLayoutBindings};
+  return vktf::DescriptorSets{device, max_render_frames, descriptor_pool_sizes, kDescriptorSetLayoutBindings};
 }
 
 void UpdateGlobalDescriptorSets(const vk::Device device,
-                                const gfx::DescriptorSets& global_descriptor_sets,
-                                const std::vector<gfx::Buffer>& camera_buffers,
-                                const std::vector<gfx::Buffer>& light_buffers) {
+                                const vktf::DescriptorSets& global_descriptor_sets,
+                                const std::vector<vktf::Buffer>& camera_buffers,
+                                const std::vector<vktf::Buffer>& light_buffers) {
   assert(camera_buffers.size() == light_buffers.size());
 
   std::vector<vk::DescriptorBufferInfo> descriptor_buffer_infos;
@@ -534,23 +534,23 @@ std::vector<vk::BufferImageCopy> GetBufferImageCopies(const ktxTexture2& ktx_tex
          | std::ranges::to<std::vector>();
 }
 
-gfx::Image CreateImage(const vk::Device device,
-                       const ktxTexture2& ktx_texture2,
-                       CopyBufferOptions& copy_buffer_options) {
+vktf::Image CreateImage(const vk::Device device,
+                        const ktxTexture2& ktx_texture2,
+                        CopyBufferOptions& copy_buffer_options) {
   auto& [_, command_buffer, staging_buffers, allocator] = copy_buffer_options;
   const auto& staging_buffer =
-      CreateStagingBuffer(gfx::DataView<const ktx_uint8_t>{ktx_texture2.pData, ktx_texture2.dataSize},
+      CreateStagingBuffer(vktf::DataView<const ktx_uint8_t>{ktx_texture2.pData, ktx_texture2.dataSize},
                           allocator,
                           staging_buffers);
 
-  gfx::Image image{device,
-                   static_cast<vk::Format>(ktx_texture2.vkFormat),
-                   vk::Extent2D{ktx_texture2.baseWidth, ktx_texture2.baseHeight},
-                   ktx_texture2.numLevels,
-                   vk::SampleCountFlagBits::e1,
-                   vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
-                   vk::ImageAspectFlagBits::eColor,
-                   allocator};
+  vktf::Image image{device,
+                    static_cast<vk::Format>(ktx_texture2.vkFormat),
+                    vk::Extent2D{ktx_texture2.baseWidth, ktx_texture2.baseHeight},
+                    ktx_texture2.numLevels,
+                    vk::SampleCountFlagBits::e1,
+                    vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
+                    vk::ImageAspectFlagBits::eColor,
+                    allocator};
 
   const auto buffer_image_copies = GetBufferImageCopies(ktx_texture2);
   image.Copy(staging_buffer, buffer_image_copies, *command_buffer);
@@ -561,9 +561,9 @@ gfx::Image CreateImage(const vk::Device device,
 // ===================================================== Materials =====================================================
 
 struct MaterialKtxTextures {
-  std::optional<gfx::KtxTexture> maybe_base_color_texture;
-  std::optional<gfx::KtxTexture> maybe_metallic_roughness_texture;
-  std::optional<gfx::KtxTexture> maybe_normal_texture;
+  std::optional<vktf::KtxTexture> maybe_base_color_texture;
+  std::optional<vktf::KtxTexture> maybe_metallic_roughness_texture;
+  std::optional<vktf::KtxTexture> maybe_normal_texture;
 };
 
 struct MaterialProperties {
@@ -572,10 +572,10 @@ struct MaterialProperties {
   float normal_scale = 0.0f;
 };
 
-std::optional<gfx::KtxTexture> CreateKtxTexture(const cgltf_texture_view& gltf_texture_view,
-                                                const gfx::ColorSpace color_space,
-                                                const std::filesystem::path& gltf_directory,
-                                                const vk::PhysicalDevice physical_device) {
+std::optional<vktf::KtxTexture> CreateKtxTexture(const cgltf_texture_view& gltf_texture_view,
+                                                 const vktf::ColorSpace color_space,
+                                                 const std::filesystem::path& gltf_directory,
+                                                 const vk::PhysicalDevice physical_device) {
   const auto* const gltf_texture = gltf_texture_view.texture;
   if (gltf_texture == nullptr) return std::nullopt;
 
@@ -591,7 +591,7 @@ std::optional<gfx::KtxTexture> CreateKtxTexture(const cgltf_texture_view& gltf_t
     return std::nullopt;
   }
 
-  return gfx::KtxTexture{gltf_directory / gltf_image_uri, color_space, physical_device};
+  return vktf::KtxTexture{gltf_directory / gltf_image_uri, color_space, physical_device};
 }
 
 MaterialKtxTextures CreateKtxTextures(const cgltf_material& gltf_material,
@@ -605,21 +605,21 @@ MaterialKtxTextures CreateKtxTextures(const cgltf_material& gltf_material,
   auto base_color_texture_future = std::async(std::launch::async,
                                               CreateKtxTexture,
                                               pbr_metallic_roughness.base_color_texture,
-                                              gfx::ColorSpace::kSrgb,
+                                              vktf::ColorSpace::kSrgb,
                                               gltf_directory,
                                               physical_device);
 
   auto metallic_roughness_texture_future = std::async(std::launch::async,
                                                       CreateKtxTexture,
                                                       pbr_metallic_roughness.metallic_roughness_texture,
-                                                      gfx::ColorSpace::kLinear,
+                                                      vktf::ColorSpace::kLinear,
                                                       gltf_directory,
                                                       physical_device);
 
   auto normal_texture_future = std::async(std::launch::async,
                                           CreateKtxTexture,
                                           gltf_material.normal_texture,
-                                          gfx::ColorSpace::kLinear,
+                                          vktf::ColorSpace::kLinear,
                                           gltf_directory,
                                           physical_device);
 
@@ -680,7 +680,7 @@ std::unique_ptr<Material> CreateMaterial(const vk::Device device,
           copy_buffer_options));
 }
 
-gfx::DescriptorSets CreateMaterialDescriptorSets(const vk::Device device, const std::uint32_t material_count) {
+vktf::DescriptorSets CreateMaterialDescriptorSets(const vk::Device device, const std::uint32_t material_count) {
   static constexpr std::uint32_t kImagesPerMaterial = 3;
 
   const std::array descriptor_pool_sizes{
@@ -698,11 +698,11 @@ gfx::DescriptorSets CreateMaterialDescriptorSets(const vk::Device device, const 
                                      .descriptorCount = kImagesPerMaterial,
                                      .stageFlags = vk::ShaderStageFlagBits::eFragment}};
 
-  return gfx::DescriptorSets{device, material_count, descriptor_pool_sizes, kDescriptorSetLayoutBindings};
+  return vktf::DescriptorSets{device, material_count, descriptor_pool_sizes, kDescriptorSetLayoutBindings};
 }
 
 void UpdateMaterialDescriptorSets(const vk::Device device,
-                                  const gfx::DescriptorSets& material_descriptor_sets,
+                                  const vktf::DescriptorSets& material_descriptor_sets,
                                   UnorderedPtrMap<cgltf_material, Material>& materials) {
   std::vector<vk::DescriptorBufferInfo> descriptor_buffer_infos;
   descriptor_buffer_infos.resize(materials.size());
@@ -1035,10 +1035,10 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
                                           const vk::RenderPass render_pass,
                                           const std::uint32_t light_count) {
   const std::filesystem::path vertex_shader_filepath{"shaders/vertex.glsl.spv"};
-  const gfx::ShaderModule vertex_shader_module{device, vertex_shader_filepath, vk::ShaderStageFlagBits::eVertex};
+  const vktf::ShaderModule vertex_shader_module{device, vertex_shader_filepath, vk::ShaderStageFlagBits::eVertex};
 
   const std::filesystem::path fragment_shader_filepath{"shaders/fragment.glsl.spv"};
-  const gfx::ShaderModule fragment_shader_module{device, fragment_shader_filepath, vk::ShaderStageFlagBits::eFragment};
+  const vktf::ShaderModule fragment_shader_module{device, fragment_shader_filepath, vk::ShaderStageFlagBits::eFragment};
 
   static constexpr auto kLightCountSize = sizeof(decltype(light_count));
   static constexpr vk::SpecializationMapEntry kSpecializationMapEntry{.constantID = 0,
@@ -1210,7 +1210,7 @@ void Render(const Node& node,
 
 }  // namespace
 
-namespace gfx {
+namespace vktf {
 
 struct CameraTransforms {
   glm::mat4 view_transform{0.0f};
@@ -1357,4 +1357,4 @@ void GltfScene::Render(const Camera& camera,
   light_buffers_[frame_index].Copy<Light>(lights_buffer);
 }
 
-}  // namespace gfx
+}  // namespace vktf

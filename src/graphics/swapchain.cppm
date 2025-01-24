@@ -14,7 +14,7 @@ export module swapchain;
 
 import physical_device;
 
-namespace gfx {
+namespace vktf {
 
 export class Swapchain {
 public:
@@ -41,26 +41,27 @@ private:
   std::vector<vk::UniqueImageView> image_views_;
 };
 
-}  // namespace gfx
+}  // namespace vktf
 
 module :private;
 
 namespace {
 
 vk::SurfaceFormatKHR GetSwapchainSurfaceFormat(const vk::PhysicalDevice physical_device, const vk::SurfaceKHR surface) {
+  static constexpr vk::SurfaceFormatKHR kTargetSurfaceFormat{.format = vk::Format::eB8G8R8A8Srgb,
+                                                             .colorSpace = vk::ColorSpaceKHR::eSrgbNonlinear};
   const auto surface_formats = physical_device.getSurfaceFormatsKHR(surface);
-  if (static constexpr vk::SurfaceFormatKHR kTargetFormat{vk::Format::eB8G8R8A8Srgb, vk::ColorSpaceKHR::eSrgbNonlinear};
-      std::ranges::contains(surface_formats, kTargetFormat)) {
-    return kTargetFormat;
+  if (std::ranges::contains(surface_formats, kTargetSurfaceFormat)) {
+    return kTargetSurfaceFormat;
   }
   assert(!surface_formats.empty());  // required by the Vulkan specification
   return surface_formats.front();
 }
 
 vk::PresentModeKHR GetSwapchainPresentMode(const vk::PhysicalDevice physical_device, const vk::SurfaceKHR surface) {
+  static constexpr auto kTargetPresentMode = vk::PresentModeKHR::eFifoRelaxed;
   const auto present_modes = physical_device.getSurfacePresentModesKHR(surface);
-  if (static constexpr auto kTargetPresentMode = vk::PresentModeKHR::eFifoRelaxed;
-      std::ranges::contains(present_modes, kTargetPresentMode)) {
+  if (std::ranges::contains(present_modes, kTargetPresentMode)) {
     return kTargetPresentMode;
   }
   assert(std::ranges::contains(present_modes, vk::PresentModeKHR::eFifo));  // required by the Vulkan specification
@@ -92,7 +93,7 @@ vk::Extent2D GetSwapchainImageExtent(const vk::SurfaceCapabilitiesKHR& surface_c
 vk::SwapchainCreateInfoKHR GetSwapchainCreateInfo(const vk::SurfaceKHR surface,
                                                   const vk::PhysicalDevice physical_device,
                                                   const vk::Extent2D framebuffer_extent,
-                                                  const gfx::QueueFamilyIndices& queue_family_indices) {
+                                                  const vktf::QueueFamilyIndices& queue_family_indices) {
   const auto surface_capabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
   const auto surface_format = GetSwapchainSurfaceFormat(physical_device, surface);
 
@@ -140,7 +141,7 @@ std::vector<vk::UniqueImageView> CreateSwapchainImageViews(const vk::Device devi
 
 }  // namespace
 
-namespace gfx {
+namespace vktf {
 
 Swapchain::Swapchain(const vk::SurfaceKHR surface,
                      const vk::PhysicalDevice physical_device,
@@ -155,4 +156,4 @@ Swapchain::Swapchain(const vk::Device device, const vk::SwapchainCreateInfoKHR& 
       image_extent_{swapchain_create_info.imageExtent},
       image_views_{CreateSwapchainImageViews(device, *swapchain_, image_format_)} {}
 
-}  // namespace gfx
+}  // namespace vktf

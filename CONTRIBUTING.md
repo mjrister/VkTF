@@ -2,10 +2,6 @@
 
 Welcome 👋 This document outlines standards and guidelines for contributing to this project.
 
-## Issue Templates
-
-This project makes use of GitHub issue templates. If you encounter a problem, please use the Bug Report issue template. Similarly, feature requests should be made through the Work Item template.
-
 ## Getting Started
 
 In addition to the dependencies listed in the [Requirements](README.md#Requirements) section of the README, contributing to this project will require:
@@ -113,3 +109,7 @@ and then setting CMake cache variables to use them in CMakePresets.json.
 
 Closes #13
 ```
+
+## Issue Templates
+
+This project makes use of GitHub issue templates. If you encounter a problem, please use the Bug Report issue template. Similarly, feature requests should be made through the Work Item template.

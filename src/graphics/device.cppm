@@ -11,7 +11,7 @@ export module device;
 
 import physical_device;
 
-namespace gfx {
+namespace vktf {
 
 export class Device {
 public:
@@ -24,13 +24,13 @@ private:
   vk::UniqueDevice device_;
 };
 
-}  // namespace gfx
+}  // namespace vktf
 
 module :private;
 
 namespace {
 
-std::vector<vk::DeviceQueueCreateInfo> GetDeviceQueueCreateInfo(const gfx::QueueFamilyIndices& queue_family_indices) {
+std::vector<vk::DeviceQueueCreateInfo> GetDeviceQueueCreateInfo(const vktf::QueueFamilyIndices& queue_family_indices) {
   const auto& [graphics_index, present_index] = queue_family_indices;
   return std::unordered_set{graphics_index, present_index}  //
          | std::views::transform([](const auto queue_family_index) {
@@ -42,7 +42,7 @@ std::vector<vk::DeviceQueueCreateInfo> GetDeviceQueueCreateInfo(const gfx::Queue
          | std::ranges::to<std::vector>();
 }
 
-vk::PhysicalDeviceFeatures GetEnabledFeatures(const gfx::PhysicalDevice& physical_device) {
+vk::PhysicalDeviceFeatures GetEnabledFeatures(const vktf::PhysicalDevice& physical_device) {
   const auto& physical_device_features = physical_device.features();
   return vk::PhysicalDeviceFeatures{.samplerAnisotropy = physical_device_features.samplerAnisotropy,
                                     .textureCompressionETC2 = physical_device_features.textureCompressionETC2,
@@ -52,7 +52,7 @@ vk::PhysicalDeviceFeatures GetEnabledFeatures(const gfx::PhysicalDevice& physica
 
 }  // namespace
 
-namespace gfx {
+namespace vktf {
 
 Device::Device(const PhysicalDevice& physical_device) {
   static constexpr std::array kDeviceExtensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
@@ -71,4 +71,4 @@ Device::Device(const PhysicalDevice& physical_device) {
 #endif
 }
 
-}  // namespace gfx
+}  // namespace vktf

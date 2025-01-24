@@ -1,5 +1,6 @@
 module;
 
+#include <exception>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -15,7 +16,7 @@ export module shader_module;
 
 import glslang_compiler;
 
-namespace gfx {
+namespace vktf {
 
 export class ShaderModule {
 public:
@@ -27,7 +28,7 @@ private:
   vk::UniqueShaderModule shader_module_;
 };
 
-}  // namespace gfx
+}  // namespace vktf
 
 module :private;
 
@@ -107,11 +108,11 @@ glslang_stage_t GetGlslangStage(const vk::ShaderStageFlagBits shader_stage) {
   }
 }
 
-constexpr gfx::glslang::SpirvOptimization GetSpirvOptimization() {
+constexpr vktf::glslang::SpirvOptimization GetSpirvOptimization() {
 #ifndef NDEBUG
-  return gfx::glslang::SpirvOptimization::kNone;
+  return vktf::glslang::SpirvOptimization::kNone;
 #endif
-  return gfx::glslang::SpirvOptimization::kSpeed;  // TODO: enable size optimizations when targeting mobile devices
+  return vktf::glslang::SpirvOptimization::kSpeed;  // TODO: enable size optimizations when targeting mobile devices
 }
 
 std::vector<SpirvWord> GetSpirvBinary(const std::filesystem::path& shader_filepath,
@@ -122,7 +123,7 @@ std::vector<SpirvWord> GetSpirvBinary(const std::filesystem::path& shader_filepa
     static constexpr auto kSpirvOptimization = GetSpirvOptimization();
     const auto glsl_shader = ReadGlslFile(shader_filepath);
     const auto glslang_stage = GetGlslangStage(shader_stage);
-    return gfx::glslang::Compile(glsl_shader, glslang_stage, kSpirvOptimization);
+    return vktf::glslang::Compile(glsl_shader, glslang_stage, kSpirvOptimization);
 
   } catch (const std::ios::failure&) {
     std::throw_with_nested(std::runtime_error{std::format("Failed to read {}", shader_filepath.string())});
@@ -131,7 +132,7 @@ std::vector<SpirvWord> GetSpirvBinary(const std::filesystem::path& shader_filepa
 
 }  // namespace
 
-namespace gfx {
+namespace vktf {
 
 ShaderModule::ShaderModule(const vk::Device device,
                            const std::filesystem::path& shader_filepath,
@@ -142,4 +143,4 @@ ShaderModule::ShaderModule(const vk::Device device,
       vk::ShaderModuleCreateInfo{.codeSize = spirv_binary.size() * kSpirvWordSize, .pCode = spirv_binary.data()});
 }
 
-}  // namespace gfx
+}  // namespace vktf

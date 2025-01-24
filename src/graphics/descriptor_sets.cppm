@@ -9,7 +9,7 @@ module;
 
 export module descriptor_sets;
 
-namespace gfx {
+namespace vktf {
 
 export class DescriptorSets {
 public:
@@ -35,11 +35,11 @@ private:
   std::vector<vk::DescriptorSet> descriptor_sets_;  // descriptor sets are freed when the descriptor pool is destroyed
 };
 
-}  // namespace gfx
+}  // namespace vktf
 
 module :private;
 
-namespace gfx {
+namespace vktf {
 
 DescriptorSets::DescriptorSets(const vk::Device device,
                                const std::uint32_t descriptor_set_count,
@@ -60,4 +60,4 @@ DescriptorSets::DescriptorSets(const vk::Device device,
                                                                   .pSetLayouts = descriptor_set_layouts.data()});
 }
 
-}  // namespace gfx
+}  // namespace vktf

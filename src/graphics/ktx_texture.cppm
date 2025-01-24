@@ -20,7 +20,7 @@ module;
 
 export module ktx_texture;
 
-namespace gfx {
+namespace vktf {
 
 export enum class ColorSpace : std::uint8_t { kLinear, kSrgb };
 
@@ -35,7 +35,7 @@ private:
   std::unique_ptr<ktxTexture2, void (*)(ktxTexture2*)> ktx_texture2_;
 };
 
-}  // namespace gfx
+}  // namespace vktf
 
 module :private;
 
@@ -109,11 +109,11 @@ std::unordered_set<vk::Format> GetSupportedTranscodeFormats(const vk::PhysicalDe
 
 template <std::size_t N>
 ktx_transcode_fmt_e FindSupportedKtxTranscodeFormat(const std::array<TranscodeTarget, N>& transcode_targets,
-                                                    const gfx::ColorSpace color_space,
+                                                    const vktf::ColorSpace color_space,
                                                     const vk::PhysicalDevice physical_device) {
   static const auto kSupportTranscodeFormats = GetSupportedTranscodeFormats(physical_device);
   for (const auto& [srgb_format, unorm_format, ktx_transcode_format] : transcode_targets) {
-    if (const auto transcode_format = color_space == gfx::ColorSpace::kSrgb ? srgb_format : unorm_format;
+    if (const auto transcode_format = color_space == vktf::ColorSpace::kSrgb ? srgb_format : unorm_format;
         kSupportTranscodeFormats.contains(transcode_format)) {
       return ktx_transcode_format;
     }
@@ -128,7 +128,7 @@ ktx_transcode_fmt_e FindSupportedKtxTranscodeFormat(const std::array<TranscodeTa
 }
 
 ktx_transcode_fmt_e SelectKtxTranscodeFormat(ktxTexture2& ktx_texture2,
-                                             const gfx::ColorSpace color_space,
+                                             const vktf::ColorSpace color_space,
                                              const vk::PhysicalDevice physical_device) {
   const auto components = ktxTexture2_GetNumComponents(&ktx_texture2);
   if (components != 3 && components != 4) {  // TODO: add support for one and two component images
@@ -165,7 +165,7 @@ ktx_transcode_fmt_e SelectKtxTranscodeFormat(ktxTexture2& ktx_texture2,
 }
 
 UniqueKtxTexture2 CreateKtxTexture2FromKtxFile(const std::filesystem::path& ktx_filepath,
-                                               const gfx::ColorSpace color_space,
+                                               const vktf::ColorSpace color_space,
                                                const vk::PhysicalDevice physical_device) {
   UniqueKtxTexture2 ktx_texture2{nullptr, DestroyKtxTexture2};
   if (const auto ktx_error_code = ktxTexture2_CreateFromNamedFile(ktx_filepath.string().c_str(),
@@ -222,13 +222,13 @@ StbImage Load(const std::filesystem::path& image_filepath) {
 }
 
 UniqueKtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::path& image_filepath,
-                                                 const gfx::ColorSpace color_space) {
+                                                 const vktf::ColorSpace color_space) {
   const auto [width, height, channels, data] = Load(image_filepath);
   static_assert(sizeof(decltype(data)::element_type) == 1, "8-bit image data is required");
   const auto data_size_bytes = static_cast<ktx_size_t>(width) * height * channels;
 
   const auto& [rgba32_srgb_format, rgba32_unorm_format, _] = kRgba32TranscodeTarget;
-  const auto rgba32_format = color_space == gfx::ColorSpace::kLinear ? rgba32_unorm_format : rgba32_srgb_format;
+  const auto rgba32_format = color_space == vktf::ColorSpace::kLinear ? rgba32_unorm_format : rgba32_srgb_format;
 
   UniqueKtxTexture2 ktx_texture2{nullptr, DestroyKtxTexture2};
   ktxTextureCreateInfo ktx_texture_create_info{.vkFormat = static_cast<ktx_uint32_t>(rgba32_format),
@@ -265,7 +265,7 @@ UniqueKtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::path& im
 }
 
 UniqueKtxTexture2 CreateKtxTexture2(const std::filesystem::path& texture_filepath,
-                                    const gfx::ColorSpace color_space,
+                                    const vktf::ColorSpace color_space,
                                     const vk::PhysicalDevice physical_device) {
 #ifndef NDEBUG
   // R8G8B8A8 format support for images with VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT is required by the Vulkan specification
@@ -280,11 +280,11 @@ UniqueKtxTexture2 CreateKtxTexture2(const std::filesystem::path& texture_filepat
 
 }  // namespace
 
-namespace gfx {
+namespace vktf {
 
 KtxTexture::KtxTexture(const std::filesystem::path& texture_filepath,
                        const ColorSpace color_space,
                        const vk::PhysicalDevice physical_device)
     : ktx_texture2_{CreateKtxTexture2(texture_filepath, color_space, physical_device)} {}
 
-}  // namespace gfx
+}  // namespace vktf

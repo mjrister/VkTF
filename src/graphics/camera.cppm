@@ -10,7 +10,7 @@ module;
 
 export module camera;
 
-namespace gfx {
+namespace vktf {
 
 export struct ViewFrustum {
   float field_of_view_y = 0.0f;
@@ -42,7 +42,7 @@ private:
   glm::mat4 projection_transform_;
 };
 
-}  // namespace gfx
+}  // namespace vktf
 
 module :private;
 
@@ -55,7 +55,7 @@ glm::mat4 GetViewTransform(const glm::vec3& position, const glm::vec3& direction
   return glm::lookAt(position, target, kUp);
 }
 
-glm::mat4 GetProjectionTransform(const gfx::ViewFrustum& view_frustum) {
+glm::mat4 GetProjectionTransform(const vktf::ViewFrustum& view_frustum) {
   const auto& [field_of_view_y, aspect_ratio, z_near, z_far] = view_frustum;
   auto projection_transform = z_far == std::numeric_limits<float>::infinity()
                                   ? glm::infinitePerspective(field_of_view_y, aspect_ratio, z_near)
@@ -64,14 +64,15 @@ glm::mat4 GetProjectionTransform(const gfx::ViewFrustum& view_frustum) {
   return projection_transform;
 }
 
-gfx::EulerAngles operator+(const gfx::EulerAngles& orientation, const gfx::EulerAngles rotation) {
+vktf::EulerAngles operator+(const vktf::EulerAngles& orientation, const vktf::EulerAngles rotation) {
   static constexpr auto kPitchLimit = glm::radians(89.0f);
-  return gfx::EulerAngles{.pitch = std::clamp(orientation.pitch + rotation.pitch, -kPitchLimit, kPitchLimit),
-                          .yaw = orientation.yaw + rotation.yaw};
+  return vktf::EulerAngles{.pitch = std::clamp(orientation.pitch + rotation.pitch, -kPitchLimit, kPitchLimit),
+                           .yaw = orientation.yaw + rotation.yaw};
 }
+
 }  // namespace
 
-namespace gfx {
+namespace vktf {
 
 Camera::Camera(const glm::vec3& position, const glm::vec3& direction, const ViewFrustum& view_frustum)
     : view_transform_{GetViewTransform(position, direction)},
@@ -113,4 +114,4 @@ void Camera::Rotate(const EulerAngles& rotation) {
   view_transform_[3] = glm::vec4{euler_rotation * translation, 1.0f};
 }
 
-}  // namespace gfx
+}  // namespace vktf

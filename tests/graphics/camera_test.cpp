@@ -29,21 +29,21 @@ constexpr auto kBackward = kZAxis;
 
 constexpr auto kDefaultPosition = kOrigin;
 constexpr auto kDefaultDirection = kForward;
-constexpr gfx::ViewFrustum kDefaultViewFrustum{.field_of_view_y = kQuarterPi,
-                                               .aspect_ratio = 16.0f / 9.0f,
-                                               .z_near = 0.1f,
-                                               .z_far = 1.0e6f};
+constexpr vktf::ViewFrustum kDefaultViewFrustum{.field_of_view_y = kQuarterPi,
+                                                .aspect_ratio = 16.0f / 9.0f,
+                                                .z_near = 0.1f,
+                                                .z_far = 1.0e6f};
 
 constexpr auto kEpsilon = 1.0e-5f;
 constexpr auto* kInvalidTestNameChar = "?";  // emit a compiler error for unknown values when generating test names
 
 class CameraTest : public testing::Test {
 protected:
-  gfx::Camera camera_{kDefaultPosition, kDefaultDirection, kDefaultViewFrustum};
+  vktf::Camera camera_{kDefaultPosition, kDefaultDirection, kDefaultViewFrustum};
 };
 
 class CameraTranslateTest : public CameraTest, public testing::WithParamInterface<glm::vec3> {};
-class CameraRotateTest : public CameraTest, public testing::WithParamInterface<gfx::EulerAngles> {};
+class CameraRotateTest : public CameraTest, public testing::WithParamInterface<vktf::EulerAngles> {};
 
 void ExpectNearEqual(const glm::vec3& lhs, const glm::vec3& rhs) {
   EXPECT_NEAR(lhs.x, rhs.x, kEpsilon);
@@ -51,7 +51,7 @@ void ExpectNearEqual(const glm::vec3& lhs, const glm::vec3& rhs) {
   EXPECT_NEAR(lhs.z, rhs.z, kEpsilon);
 }
 
-void ExpectNearEqual(const gfx::EulerAngles& lhs, const gfx::EulerAngles& rhs) {
+void ExpectNearEqual(const vktf::EulerAngles& lhs, const vktf::EulerAngles& rhs) {
   EXPECT_NEAR(lhs.pitch, rhs.pitch, kEpsilon);
   EXPECT_NEAR(lhs.yaw, rhs.yaw, kEpsilon);
 }
@@ -92,35 +92,36 @@ TEST_P(CameraRotateTest, TestOrientationWhenRotated) {
   static constexpr auto kPitchLimit = glm::radians(89.0f);
   const auto& rotation = GetParam();
   camera_.Rotate(rotation);
-  ExpectNearEqual(gfx::EulerAngles{.pitch = std::clamp(rotation.pitch, -kPitchLimit, kPitchLimit), .yaw = rotation.yaw},
-                  camera_.GetOrientation());
+  ExpectNearEqual(
+      vktf::EulerAngles{.pitch = std::clamp(rotation.pitch, -kPitchLimit, kPitchLimit), .yaw = rotation.yaw},
+      camera_.GetOrientation());
 }
 
 INSTANTIATE_TEST_SUITE_P(CameraRotateTestSuite,
                          CameraRotateTest,
-                         testing::Values(gfx::EulerAngles{.pitch = 0.0f, .yaw = 0.0f},
-                                         gfx::EulerAngles{.pitch = kQuarterPi, .yaw = 0.0f},
-                                         gfx::EulerAngles{.pitch = -kQuarterPi, .yaw = 0.0f},
-                                         gfx::EulerAngles{.pitch = kHalfPi, .yaw = 0.0f},
-                                         gfx::EulerAngles{.pitch = -kHalfPi, .yaw = 0.0f},
-                                         gfx::EulerAngles{.pitch = 0.0f, .yaw = kHalfPi},
-                                         gfx::EulerAngles{.pitch = 0.0f, .yaw = -kHalfPi},
-                                         gfx::EulerAngles{.pitch = kQuarterPi, .yaw = kHalfPi},
-                                         gfx::EulerAngles{.pitch = kQuarterPi, .yaw = -kHalfPi},
-                                         gfx::EulerAngles{.pitch = -kQuarterPi, .yaw = kHalfPi},
-                                         gfx::EulerAngles{.pitch = -kQuarterPi, .yaw = -kHalfPi}),
+                         testing::Values(vktf::EulerAngles{.pitch = 0.0f, .yaw = 0.0f},
+                                         vktf::EulerAngles{.pitch = kQuarterPi, .yaw = 0.0f},
+                                         vktf::EulerAngles{.pitch = -kQuarterPi, .yaw = 0.0f},
+                                         vktf::EulerAngles{.pitch = kHalfPi, .yaw = 0.0f},
+                                         vktf::EulerAngles{.pitch = -kHalfPi, .yaw = 0.0f},
+                                         vktf::EulerAngles{.pitch = 0.0f, .yaw = kHalfPi},
+                                         vktf::EulerAngles{.pitch = 0.0f, .yaw = -kHalfPi},
+                                         vktf::EulerAngles{.pitch = kQuarterPi, .yaw = kHalfPi},
+                                         vktf::EulerAngles{.pitch = kQuarterPi, .yaw = -kHalfPi},
+                                         vktf::EulerAngles{.pitch = -kQuarterPi, .yaw = kHalfPi},
+                                         vktf::EulerAngles{.pitch = -kQuarterPi, .yaw = -kHalfPi}),
                          [](const auto& test_param_info) {
                            const auto& rotation = test_param_info.param;
                            return std::format("Pitch{}Yaw{}", GetAngleName(rotation.pitch), GetAngleName(rotation.yaw));
                          });
 
 TEST(CameraDeathTest, TestDebugAssertWhenCameraDirectionIsTheZeroVector) {
-  EXPECT_DEBUG_DEATH({ (gfx::Camera{kDefaultPosition, kZeroVector, kDefaultViewFrustum}); }, "");
+  EXPECT_DEBUG_DEATH({ (vktf::Camera{kDefaultPosition, kZeroVector, kDefaultViewFrustum}); }, "");
 }
 
 TEST(CameraDeathTest, TestDebugAssertWhenCameraDirectionIsCollinearWithUpDirection) {
-  EXPECT_DEBUG_DEATH({ (gfx::Camera{kDefaultPosition, kUp, kDefaultViewFrustum}); }, "");
-  EXPECT_DEBUG_DEATH({ (gfx::Camera{kDefaultPosition, kDown, kDefaultViewFrustum}); }, "");
+  EXPECT_DEBUG_DEATH({ (vktf::Camera{kDefaultPosition, kUp, kDefaultViewFrustum}); }, "");
+  EXPECT_DEBUG_DEATH({ (vktf::Camera{kDefaultPosition, kDown, kDefaultViewFrustum}); }, "");
 }
 
 }  // namespace

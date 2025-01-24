@@ -12,7 +12,7 @@ export module buffer;
 import allocator;
 import data_view;
 
-namespace gfx {
+namespace vktf {
 
 export class Buffer {
 public:
@@ -51,11 +51,11 @@ private:
   VmaAllocation allocation_ = nullptr;
 };
 
-}  // namespace gfx
+}  // namespace vktf
 
 module :private;
 
-namespace gfx {
+namespace vktf {
 
 Buffer::Buffer(const vk::DeviceSize size_bytes,
                const vk::BufferUsageFlags usage_flags,
@@ -105,4 +105,4 @@ void Buffer::UnmapMemory() noexcept {
   }
 }
 
-}  // namespace gfx
+}  // namespace vktf

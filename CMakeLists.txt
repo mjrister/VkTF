@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.31)
-project(vkrender VERSION 0.0.4 LANGUAGES CXX)
+project(VkTF VERSION 0.0.4 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

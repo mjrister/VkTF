@@ -9,7 +9,7 @@ export module allocator;
 
 import instance;
 
-namespace gfx {
+namespace vktf {
 
 export class Allocator {
 public:
@@ -31,7 +31,7 @@ private:
 
 export constexpr VmaAllocationCreateInfo kDefaultAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO};
 
-}  // namespace gfx
+}  // namespace vktf
 
 module :private;
 
@@ -72,7 +72,7 @@ VmaVulkanFunctions GetVulkanFunctions() {
 
 }  // namespace
 
-namespace gfx {
+namespace vktf {
 
 Allocator::Allocator(const vk::Instance instance, const vk::PhysicalDevice physical_device, const vk::Device device) {
   const auto vulkan_functions = GetVulkanFunctions();
@@ -92,4 +92,4 @@ Allocator& Allocator::operator=(Allocator&& allocator) noexcept {
   return *this;
 }
 
-}  // namespace gfx
+}  // namespace vktf

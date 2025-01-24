@@ -9,7 +9,7 @@ export module instance;
 
 import window;
 
-namespace gfx {
+namespace vktf {
 
 export class Instance {
 public:
@@ -23,11 +23,11 @@ private:
   vk::UniqueInstance instance_;
 };
 
-}  // namespace gfx
+}  // namespace vktf
 
 module :private;
 
-namespace gfx {
+namespace vktf {
 
 Instance::Instance() {
 #if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1
@@ -55,4 +55,4 @@ Instance::Instance() {
 #endif
 }
 
-}  // namespace gfx
+}  // namespace vktf

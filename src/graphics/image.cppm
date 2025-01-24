@@ -10,7 +10,7 @@ export module image;
 
 import allocator;
 
-namespace gfx {
+namespace vktf {
 
 export class Image {
 public:
@@ -49,7 +49,7 @@ private:
   VmaAllocation allocation_ = nullptr;
 };
 
-}  // namespace gfx
+}  // namespace vktf
 
 module :private;
 
@@ -80,7 +80,7 @@ void TransitionImageLayout(const vk::Image image,
 
 }  // namespace
 
-namespace gfx {
+namespace vktf {
 
 Image::Image(const vk::Device device,
              const vk::Format format,
@@ -157,4 +157,4 @@ void Image::Copy(const vk::Buffer buffer,
                         command_buffer);
 }
 
-}  // namespace gfx
+}  // namespace vktf

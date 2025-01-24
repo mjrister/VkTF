@@ -9,7 +9,7 @@ module;
 
 export module physical_device;
 
-namespace gfx {
+namespace vktf {
 
 export struct QueueFamilyIndices {
   std::uint32_t graphics_index = 0;
@@ -43,7 +43,7 @@ private:
   QueueFamilyIndices queue_family_indices_;
 };
 
-}  // namespace gfx
+}  // namespace vktf
 
 module :private;
 
@@ -51,8 +51,8 @@ namespace {
 
 constexpr auto kInvalidRank = -1;
 
-std::optional<gfx::QueueFamilyIndices> FindQueueFamilyIndices(const vk::PhysicalDevice physical_device,
-                                                              const vk::SurfaceKHR surface) {
+std::optional<vktf::QueueFamilyIndices> FindQueueFamilyIndices(const vk::PhysicalDevice physical_device,
+                                                               const vk::SurfaceKHR surface) {
   std::optional<std::uint32_t> maybe_graphics_index;
   std::optional<std::uint32_t> maybe_present_index;
 
@@ -64,7 +64,7 @@ std::optional<gfx::QueueFamilyIndices> FindQueueFamilyIndices(const vk::Physical
       maybe_present_index = index;
     }
     if (maybe_graphics_index.has_value() && maybe_present_index.has_value()) {
-      return gfx::QueueFamilyIndices{.graphics_index = *maybe_graphics_index, .present_index = *maybe_present_index};
+      return vktf::QueueFamilyIndices{.graphics_index = *maybe_graphics_index, .present_index = *maybe_present_index};
     }
     ++index;
   }
@@ -73,21 +73,21 @@ std::optional<gfx::QueueFamilyIndices> FindQueueFamilyIndices(const vk::Physical
 }
 
 // TODO: implement a more robust ranking system based on device features, limits, and format support
-gfx::RankedPhysicalDevice GetRankedPhysicalDevice(const vk::PhysicalDevice physical_device,
-                                                  const vk::SurfaceKHR surface) {
+vktf::RankedPhysicalDevice GetRankedPhysicalDevice(const vk::PhysicalDevice physical_device,
+                                                   const vk::SurfaceKHR surface) {
   return FindQueueFamilyIndices(physical_device, surface)
       .transform([physical_device](const auto queue_family_indices) {
         const auto physical_device_properties = physical_device.getProperties();
-        return gfx::RankedPhysicalDevice{
+        return vktf::RankedPhysicalDevice{
             .physical_device = physical_device,
             .physical_device_limits = physical_device_properties.limits,
             .queue_family_indices = queue_family_indices,
             .rank = physical_device_properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu};
       })
-      .value_or(gfx::RankedPhysicalDevice{.rank = kInvalidRank});
+      .value_or(vktf::RankedPhysicalDevice{.rank = kInvalidRank});
 }
 
-gfx::RankedPhysicalDevice SelectPhysicalDevice(const vk::Instance instance, const vk::SurfaceKHR surface) {
+vktf::RankedPhysicalDevice SelectPhysicalDevice(const vk::Instance instance, const vk::SurfaceKHR surface) {
   const auto ranked_physical_devices = instance.enumeratePhysicalDevices()
                                        | std::views::transform([surface](const auto physical_device) {
                                            return GetRankedPhysicalDevice(physical_device, surface);
@@ -99,12 +99,12 @@ gfx::RankedPhysicalDevice SelectPhysicalDevice(const vk::Instance instance, cons
 
   return ranked_physical_devices.empty()
              ? throw std::runtime_error{"No supported physical device could be found"}
-             : *std::ranges::max_element(ranked_physical_devices, {}, &gfx::RankedPhysicalDevice::rank);
+             : *std::ranges::max_element(ranked_physical_devices, {}, &vktf::RankedPhysicalDevice::rank);
 }
 
 }  // namespace
 
-namespace gfx {
+namespace vktf {
 
 PhysicalDevice::PhysicalDevice(const vk::Instance instance, const vk::SurfaceKHR surface)
     : PhysicalDevice{SelectPhysicalDevice(instance, surface)} {}
@@ -115,4 +115,4 @@ PhysicalDevice::PhysicalDevice(const RankedPhysicalDevice& ranked_physical_devic
       physical_device_features_{physical_device_.getFeatures()},
       queue_family_indices_{ranked_physical_device.queue_family_indices} {}
 
-}  // namespace gfx
+}  // namespace vktf

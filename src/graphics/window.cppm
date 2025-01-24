@@ -13,7 +13,7 @@ module;
 
 export module window;
 
-namespace gfx {
+namespace vktf {
 
 export class Window {
 public:
@@ -45,7 +45,7 @@ private:
   UniqueGlfwWindow glfw_window_{nullptr, nullptr};
 };
 
-}  // namespace gfx
+}  // namespace vktf
 
 module :private;
 
@@ -81,7 +81,7 @@ private:
 
 }  // namespace
 
-namespace gfx {
+namespace vktf {
 
 Window::Window(const char* const title) {
   [[maybe_unused]] const auto& glfw_context = GlfwContext::Get();
@@ -133,4 +133,4 @@ glm::vec2 Window::GetCursorPosition() const noexcept {
   return glm::vec2{static_cast<float>(x), static_cast<float>(y)};
 }
 
-}  // namespace gfx
+}  // namespace vktf

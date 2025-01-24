@@ -6,7 +6,7 @@ module;
 
 export module data_view;
 
-namespace gfx {
+namespace vktf {
 
 export template <typename R, typename T>
 concept DataRange = std::ranges::contiguous_range<R> &&  //
@@ -30,4 +30,4 @@ private:
   std::size_t size_;
 };
 
-}  // namespace gfx
+}  // namespace vktf

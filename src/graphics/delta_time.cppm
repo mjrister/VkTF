@@ -4,7 +4,7 @@ module;
 
 export module delta_time;
 
-namespace gfx {
+namespace vktf {
 
 export class DeltaTime {
   using Clock = std::chrono::steady_clock;
@@ -26,4 +26,4 @@ private:
   Duration::rep delta_time_ = 0;
 };
 
-}  // namespace gfx
+}  // namespace vktf
