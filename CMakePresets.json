@@ -4,20 +4,14 @@
     {
       "name": "default",
       "hidden": true,
+      "generator": "Ninja",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
       "toolchainFile": "${sourceDir}/third_party/vcpkg/scripts/buildsystems/vcpkg.cmake"
-    },
-    {
-      "name": "ninja",
-      "hidden": true,
-      "generator": "Ninja",
-      "architecture": {
-        "strategy": "external"
-      },
-      "toolset": {
-        "strategy": "external"
-      }
     },
     {
       "name": "windows",
@@ -53,20 +47,6 @@
       }
     },
     {
-      "name": "x64",
-      "hidden": true,
-      "architecture": {
-        "value": "x64"
-      }
-    },
-    {
-      "name": "x86",
-      "hidden": true,
-      "architecture": {
-        "value": "x86"
-      }
-    },
-    {
       "name": "debug",
       "hidden": true,
       "cacheVariables": {
@@ -88,11 +68,17 @@
       }
     },
     {
+      "name": "clang-tidy",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_CXX_CLANG_TIDY": "clang-tidy;--config-file=${sourceDir}/.clang-tidy;-p=${sourceDir}/out/build/${presetName}",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true
+      }
+    },
+    {
       "name": "windows-debug",
       "inherits": [
         "windows",
-        "ninja",
-        "x64",
         "debug"
       ],
       "cacheVariables": {
@@ -101,19 +87,9 @@
       }
     },
     {
-      "name": "windows-clang-tidy",
-      "inherits": "windows-debug",
-      "cacheVariables": {
-        "CMAKE_CXX_CLANG_TIDY": "clang-tidy;--config-file=${sourceDir}/.clang-tidy;-p=${sourceDir}/out/build/${presetName};--extra-arg=/EHsc",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": true
-      }
-    },
-    {
       "name": "windows-release",
       "inherits": [
         "windows",
-        "ninja",
-        "x64",
         "release"
       ]
     },
@@ -121,8 +97,6 @@
       "name": "windows-relwithdebinfo",
       "inherits": [
         "windows",
-        "ninja",
-        "x64",
         "relwithdebinfo"
       ]
     },
@@ -130,25 +104,13 @@
       "name": "linux-debug",
       "inherits": [
         "linux",
-        "ninja",
-        "x64",
         "debug"
       ]
-    },
-    {
-      "name": "linux-clang-tidy",
-      "inherits": "linux-debug",
-      "cacheVariables": {
-        "CMAKE_CXX_CLANG_TIDY": "clang-tidy;--config-file=${sourceDir}/.clang-tidy;-p=${sourceDir}/out/build/${presetName}",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": true
-      }
     },
     {
       "name": "linux-release",
       "inherits": [
         "linux",
-        "ninja",
-        "x64",
         "release"
       ]
     },
@@ -156,8 +118,6 @@
       "name": "linux-relwithdebinfo",
       "inherits": [
         "linux",
-        "ninja",
-        "x64",
         "relwithdebinfo"
       ]
     }
@@ -166,10 +126,6 @@
     {
       "name": "windows-debug",
       "configurePreset": "windows-debug"
-    },
-    {
-      "name": "windows-clang-tidy",
-      "configurePreset": "windows-clang-tidy"
     },
     {
       "name": "windows-release",
@@ -182,10 +138,6 @@
     {
       "name": "linux-debug",
       "configurePreset": "linux-debug"
-    },
-    {
-      "name": "linux-clang-tidy",
-      "configurePreset": "linux-clang-tidy"
     },
     {
       "name": "linux-release",
@@ -202,10 +154,6 @@
       "configurePreset": "windows-debug"
     },
     {
-      "name": "windows-clang-tidy",
-      "configurePreset": "windows-clang-tidy"
-    },
-    {
       "name": "windows-release",
       "configurePreset": "windows-release"
     },
@@ -216,10 +164,6 @@
     {
       "name": "linux-debug",
       "configurePreset": "linux-debug"
-    },
-    {
-      "name": "linux-clang-tidy",
-      "configurePreset": "linux-clang-tidy"
     },
     {
       "name": "linux-release",
