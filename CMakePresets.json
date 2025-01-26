@@ -11,7 +11,13 @@
       },
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
-      "toolchainFile": "${sourceDir}/third_party/vcpkg/scripts/buildsystems/vcpkg.cmake"
+      "toolchainFile": "${sourceDir}/third_party/vcpkg/scripts/buildsystems/vcpkg.cmake",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "23",
+        "CMAKE_CXX_STANDARD_REQUIRED": true,
+        "CMAKE_CXX_EXTENSIONS": false,
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true
+      }
     },
     {
       "name": "windows",
@@ -19,6 +25,9 @@
       "inherits": "default",
       "cacheVariables": {
         "CMAKE_CXX_COMPILER": "cl.exe"
+      },
+      "environment": {
+        "CXX_FLAGS": "/W4 /WX"
       },
       "condition": {
         "type": "equals",
@@ -31,9 +40,10 @@
       "hidden": true,
       "inherits": "default",
       "cacheVariables": {
-        "CMAKE_CXX_COMPILER": "clang++",
-        "CMAKE_CXX_FLAGS": "-stdlib=libc++",
-        "CMAKE_EXE_LINKER_FLAGS": "-stdlib=libc++"
+        "CMAKE_CXX_COMPILER": "clang++"
+      },
+      "environment": {
+        "CXX_FLAGS": "-Wall -Werror -Wextra -Wpedantic"
       },
       "condition": {
         "type": "equals",
@@ -71,8 +81,7 @@
       "name": "clang-tidy",
       "hidden": true,
       "cacheVariables": {
-        "CMAKE_CXX_CLANG_TIDY": "clang-tidy;--config-file=${sourceDir}/.clang-tidy;-p=${sourceDir}/out/build/${presetName}",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": true
+        "CMAKE_CXX_CLANG_TIDY": "clang-tidy;--config-file=${sourceDir}/.clang-tidy;-p=${sourceDir}/out/build/${presetName}"
       }
     },
     {
@@ -82,6 +91,7 @@
         "debug"
       ],
       "cacheVariables": {
+        "CXX_FLAGS": "/fsanitize=address",
         "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/vcpkg-triplets",
         "VCPKG_TARGET_TRIPLET": "x64-windows-asan"
       }
@@ -91,35 +101,55 @@
       "inherits": [
         "windows",
         "release"
-      ]
+      ],
+      "cacheVariables": {
+        "CXX_FLAGS": "/Ob3 /fp:fast /GL",
+        "CXX_LINKER_FLAGS": "/LTCG:INCREMENTAL"
+      }
     },
     {
       "name": "windows-relwithdebinfo",
       "inherits": [
         "windows",
         "relwithdebinfo"
-      ]
+      ],
+      "cacheVariables": {
+        "CXX_FLAGS": "/fp:fast /GL",
+        "CXX_LINKER_FLAGS": "/LTCG:INCREMENTAL"
+      }
     },
     {
       "name": "linux-debug",
       "inherits": [
         "linux",
         "debug"
-      ]
+      ],
+      "cacheVariables": {
+        "CXX_FLAGS": "-fsanitize=address",
+        "CXX_LINKER_FLAGS": "-fsanitize=address"
+      }
     },
     {
       "name": "linux-release",
       "inherits": [
         "linux",
         "release"
-      ]
+      ],
+      "cacheVariables": {
+        "CXX_FLAGS": "-O3 -ffast-math -flto",
+        "CXX_LINKER_FLAGS": "-flto"
+      }
     },
     {
       "name": "linux-relwithdebinfo",
       "inherits": [
         "linux",
         "relwithdebinfo"
-      ]
+      ],
+      "cacheVariables": {
+        "CXX_FLAGS": "-ffast-math -flto",
+        "CXX_LINKER_FLAGS": "-flto"
+      }
     }
   ],
   "buildPresets": [

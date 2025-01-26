@@ -17,7 +17,7 @@ set(SHADERS_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/shaders)
 set(SHADERS_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders)
 
 # compile GLSL shaders from the source directory to SPIR-V modules in the binary directory
-include(${CMAKE_SCRIPTS_DIR}/compile_shader.cmake)
+include(${CMAKE_SOURCE_DIR}/cmake/compile_shader.cmake)
 compile_shader(vertex.glsl vert)
 compile_shader(fragment.glsl frag)
 

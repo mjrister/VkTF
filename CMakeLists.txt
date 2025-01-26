@@ -1,31 +1,11 @@
 cmake_minimum_required(VERSION 3.31)
 project(VkTF VERSION 0.0.4 LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+# Defining CMAKE_CXX_FLAGS and CMAKE_EXE_LINKER_FLAGS in CMake presets will overwrite default values provided by CMake.
+# To prevent this, compile and link options for a preset are defined in cache/environment variables and applied here.
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} $ENV{CXX_FLAGS} $CACHE{CXX_FLAGS}")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} $CACHE{CXX_LINKER_FLAGS}")
 
-if(MSVC)
-  add_compile_options(/W4 /WX)
-  if(CMAKE_BUILD_TYPE STREQUAL Debug)
-    add_compile_definitions(_DEBUG)
-    add_compile_options(/fsanitize=address)
-  else()
-    add_compile_options(/Ob3 /fp:fast /GL)
-    add_link_options(/LTCG:INCREMENTAL)
-  endif()
-else()
-  add_compile_options(-Wall -Werror -Wextra -Wpedantic)
-  if(CMAKE_BUILD_TYPE STREQUAL Debug)
-    add_compile_options(-fsanitize=address)
-    add_link_options(-fsanitize=address)
-  else()
-    add_compile_options(-O3 -ffast-math -flto)
-    add_link_options(-flto)
-  endif()
-endif()
-
-set(CMAKE_SCRIPTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 add_subdirectory(src)
 
 enable_testing()
