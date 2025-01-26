@@ -31,8 +31,7 @@ namespace vktf {
 
 Instance::Instance() {
 #if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1
-  const vk::DynamicLoader dynamic_loader;
-  VULKAN_HPP_DEFAULT_DISPATCHER.init(dynamic_loader.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr"));
+  VULKAN_HPP_DEFAULT_DISPATCHER.init();
 #endif
 
   static constexpr vk::ApplicationInfo kApplicationInfo{.apiVersion = kApiVersion};

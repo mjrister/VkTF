@@ -110,8 +110,7 @@ vk::UniqueSurfaceKHR Window::CreateSurface(const vk::Instance instance) const {
   VkSurfaceKHR surface = nullptr;
   const auto result = glfwCreateWindowSurface(instance, glfw_window_.get(), nullptr, &surface);
   vk::detail::resultCheck(static_cast<vk::Result>(result), "Window surface creation failed");
-  const vk::ObjectDestroy<vk::Instance, VULKAN_HPP_DEFAULT_DISPATCHER_TYPE> deleter{instance};
-  return vk::UniqueSurfaceKHR{vk::SurfaceKHR{surface}, deleter};
+  return vk::UniqueSurfaceKHR{surface, instance};
 }
 
 vk::Extent2D Window::GetFramebufferExtent() const noexcept {
