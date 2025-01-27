@@ -108,22 +108,14 @@ glslang_stage_t GetGlslangStage(const vk::ShaderStageFlagBits shader_stage) {
   }
 }
 
-constexpr vktf::glslang::SpirvOptimization GetSpirvOptimization() {
-#ifndef NDEBUG
-  return vktf::glslang::SpirvOptimization::kNone;
-#endif
-  return vktf::glslang::SpirvOptimization::kSpeed;  // TODO: enable size optimizations when targeting mobile devices
-}
-
 std::vector<SpirvWord> GetSpirvBinary(const std::filesystem::path& shader_filepath,
                                       const vk::ShaderStageFlagBits shader_stage) {
   try {
     if (shader_filepath.extension() == ".spv") return ReadSpirvFile(shader_filepath);
 
-    static constexpr auto kSpirvOptimization = GetSpirvOptimization();
     const auto glsl_shader = ReadGlslFile(shader_filepath);
     const auto glslang_stage = GetGlslangStage(shader_stage);
-    return vktf::glslang::Compile(glsl_shader, glslang_stage, kSpirvOptimization);
+    return vktf::glslang::Compile(glsl_shader, glslang_stage);
 
   } catch (const std::ios::failure&) {
     std::throw_with_nested(std::runtime_error{std::format("Failed to read {}", shader_filepath.string())});
