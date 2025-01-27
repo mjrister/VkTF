@@ -89,7 +89,11 @@
       "inherits": [
         "windows",
         "debug"
-      ],
+      ]
+    },
+    {
+      "name": "windows-debug-asan",
+      "inherits": "windows-debug",
       "cacheVariables": {
         "CXX_FLAGS": "/fsanitize=address",
         "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/vcpkg-triplets",
@@ -123,7 +127,11 @@
       "inherits": [
         "linux",
         "debug"
-      ],
+      ]
+    },
+    {
+      "name": "linux-debug-asan",
+      "inherits": "linux-debug",
       "cacheVariables": {
         "CXX_FLAGS": "-fsanitize=address",
         "CXX_LINKER_FLAGS": "-fsanitize=address"
@@ -158,6 +166,10 @@
       "configurePreset": "windows-debug"
     },
     {
+      "name": "windows-debug-asan",
+      "configurePreset": "windows-debug-asan"
+    },
+    {
       "name": "windows-release",
       "configurePreset": "windows-release"
     },
@@ -168,6 +180,10 @@
     {
       "name": "linux-debug",
       "configurePreset": "linux-debug"
+    },
+    {
+      "name": "linux-debug-asan",
+      "configurePreset": "linux-debug-asan"
     },
     {
       "name": "linux-release",
@@ -184,6 +200,10 @@
       "configurePreset": "windows-debug"
     },
     {
+      "name": "windows-debug-asan",
+      "configurePreset": "windows-debug-asan"
+    },
+    {
       "name": "windows-release",
       "configurePreset": "windows-release"
     },
@@ -194,6 +214,10 @@
     {
       "name": "linux-debug",
       "configurePreset": "linux-debug"
+    },
+    {
+      "name": "linux-debug-asan",
+      "configurePreset": "linux-debug-asan"
     },
     {
       "name": "linux-release",
