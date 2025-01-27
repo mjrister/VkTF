@@ -705,13 +705,13 @@ void UpdateMaterialDescriptorSets(const vk::Device device,
                                   const vktf::DescriptorSets& material_descriptor_sets,
                                   UnorderedPtrMap<cgltf_material, Material>& materials) {
   std::vector<vk::DescriptorBufferInfo> descriptor_buffer_infos;
-  descriptor_buffer_infos.resize(materials.size());
+  descriptor_buffer_infos.reserve(materials.size());
 
   std::vector<std::vector<vk::DescriptorImageInfo>> descriptor_image_infos;
-  descriptor_image_infos.resize(materials.size());
+  descriptor_image_infos.reserve(materials.size());
 
   std::vector<vk::WriteDescriptorSet> descriptor_set_writes;
-  descriptor_set_writes.reserve(materials.size());
+  descriptor_set_writes.reserve(2 * materials.size());
 
   for (const auto& [descriptor_set, material] :
        std::views::zip(material_descriptor_sets, materials | std::views::values)) {
