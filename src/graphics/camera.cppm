@@ -57,9 +57,7 @@ glm::mat4 GetViewTransform(const glm::vec3& position, const glm::vec3& direction
 
 glm::mat4 GetProjectionTransform(const vktf::ViewFrustum& view_frustum) {
   const auto& [field_of_view_y, aspect_ratio, z_near, z_far] = view_frustum;
-  auto projection_transform = z_far == std::numeric_limits<float>::infinity()
-                                  ? glm::infinitePerspective(field_of_view_y, aspect_ratio, z_near)
-                                  : glm::perspective(field_of_view_y, aspect_ratio, z_near, z_far);
+  auto projection_transform = glm::perspective(field_of_view_y, aspect_ratio, z_near, z_far);
   projection_transform[1][1] *= -1.0f;  // account for inverted y-axis convention in OpenGL
   return projection_transform;
 }
