@@ -7,27 +7,19 @@ module;
 
 #include <vulkan/vulkan.hpp>
 
-export module descriptor_sets;
+export module descriptor_pool;
 
 namespace vktf {
 
-export class DescriptorSets {
+export class DescriptorPool {
 public:
-  DescriptorSets() noexcept = default;
-  DescriptorSets(vk::Device device,
-                 std::uint32_t descriptor_set_count,
+  DescriptorPool(vk::Device device,
                  std::span<const vk::DescriptorPoolSize> descriptor_pool_sizes,
-                 std::span<const vk::DescriptorSetLayoutBinding> descriptor_set_layout_bindings);
-
-  [[nodiscard]] vk::DescriptorSet operator[](const std::size_t index) const noexcept {
-    assert(index < descriptor_sets_.size());
-    return descriptor_sets_[index];
-  }
-
-  [[nodiscard]] auto begin() const noexcept { return descriptor_sets_.cbegin(); }
-  [[nodiscard]] auto end() const noexcept { return descriptor_sets_.cend(); }
+                 std::span<const vk::DescriptorSetLayoutBinding> descriptor_set_layout_bindings,
+                 std::uint32_t descriptor_set_count);
 
   [[nodiscard]] vk::DescriptorSetLayout descriptor_set_layout() const noexcept { return *descriptor_set_layout_; }
+  [[nodiscard]] const std::vector<vk::DescriptorSet>& descriptor_sets() const noexcept { return descriptor_sets_; }
 
 private:
   vk::UniqueDescriptorPool descriptor_pool_;
@@ -41,10 +33,10 @@ module :private;
 
 namespace vktf {
 
-DescriptorSets::DescriptorSets(const vk::Device device,
-                               const std::uint32_t descriptor_set_count,
+DescriptorPool::DescriptorPool(const vk::Device device,
                                const std::span<const vk::DescriptorPoolSize> descriptor_pool_sizes,
-                               const std::span<const vk::DescriptorSetLayoutBinding> descriptor_set_layout_bindings)
+                               const std::span<const vk::DescriptorSetLayoutBinding> descriptor_set_layout_bindings,
+                               const std::uint32_t descriptor_set_count)
     : descriptor_pool_{device.createDescriptorPoolUnique(
           vk::DescriptorPoolCreateInfo{.maxSets = descriptor_set_count,
                                        .poolSizeCount = static_cast<std::uint32_t>(descriptor_pool_sizes.size()),

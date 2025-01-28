@@ -39,7 +39,7 @@ import allocator;
 import buffer;
 import camera;
 import data_view;
-import descriptor_sets;
+import descriptor_pool;
 import image;
 import ktx_texture;
 import shader_module;
@@ -115,9 +115,9 @@ private:
   std::vector<std::unique_ptr<Light>> lights_;
   std::unique_ptr<const Node> root_node_;
   std::vector<Buffer> camera_buffers_;
-  std::vector<Buffer> light_buffers_;
-  DescriptorSets global_descriptor_sets_;
-  DescriptorSets material_descriptor_sets_;
+  std::vector<Buffer> lights_buffers_;
+  std::optional<DescriptorPool> global_descriptor_pool_;
+  std::optional<DescriptorPool> material_descriptor_pool_;
   vk::UniquePipelineLayout graphics_pipeline_layout_;
   vk::UniquePipeline graphics_pipeline_;
 };
@@ -362,37 +362,43 @@ std::vector<vktf::Buffer> CreateMappedUniformBuffers(const std::size_t buffer_co
 
 // ============================================= Global Descriptor Sets ================================================
 
-vktf::DescriptorSets CreateGlobalDescriptorSets(const vk::Device device, const std::uint32_t max_render_frames) {
+std::optional<vktf::DescriptorPool> CreateGlobalDescriptorPool(const vk::Device device,
+                                                               const std::uint32_t max_render_frames) {
+  static constexpr std::uint32_t kBuffersPerRenderFrame = 2;
   const std::array descriptor_pool_sizes{
-      vk::DescriptorPoolSize{.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = 2 * max_render_frames}};
+      vk::DescriptorPoolSize{.type = vk::DescriptorType::eUniformBuffer,
+                             .descriptorCount = kBuffersPerRenderFrame * max_render_frames}};
 
   static constexpr std::array kDescriptorSetLayoutBindings{
       vk::DescriptorSetLayoutBinding{.binding = 0,  // camera buffer
                                      .descriptorType = vk::DescriptorType::eUniformBuffer,
                                      .descriptorCount = 1,
                                      .stageFlags = vk::ShaderStageFlagBits::eVertex},
-      vk::DescriptorSetLayoutBinding{.binding = 1,  // light buffer
+      vk::DescriptorSetLayoutBinding{.binding = 1,  // lights buffer
                                      .descriptorType = vk::DescriptorType::eUniformBuffer,
                                      .descriptorCount = 1,
                                      .stageFlags = vk::ShaderStageFlagBits::eFragment}};
 
-  return vktf::DescriptorSets{device, max_render_frames, descriptor_pool_sizes, kDescriptorSetLayoutBindings};
+  return vktf::DescriptorPool{device, descriptor_pool_sizes, kDescriptorSetLayoutBindings, max_render_frames};
 }
 
 void UpdateGlobalDescriptorSets(const vk::Device device,
-                                const vktf::DescriptorSets& global_descriptor_sets,
+                                const vktf::DescriptorPool& global_descriptor_pool,
                                 const std::vector<vktf::Buffer>& camera_buffers,
-                                const std::vector<vktf::Buffer>& light_buffers) {
-  assert(camera_buffers.size() == light_buffers.size());
+                                const std::vector<vktf::Buffer>& lights_buffers) {
+  const auto& global_descriptor_sets = global_descriptor_pool.descriptor_sets();
+  assert(camera_buffers.size() == global_descriptor_sets.size());
+  assert(lights_buffers.size() == global_descriptor_sets.size());
 
+  const auto buffer_count = camera_buffers.size() + lights_buffers.size();
   std::vector<vk::DescriptorBufferInfo> descriptor_buffer_infos;
-  descriptor_buffer_infos.reserve(camera_buffers.size() + light_buffers.size());
+  descriptor_buffer_infos.reserve(buffer_count);
 
   std::vector<vk::WriteDescriptorSet> descriptor_set_writes;
-  descriptor_set_writes.reserve(camera_buffers.size() + light_buffers.size());
+  descriptor_set_writes.reserve(buffer_count);
 
-  for (const auto& [descriptor_set, camera_buffer, light_buffer] :
-       std::views::zip(global_descriptor_sets, camera_buffers, light_buffers)) {
+  for (const auto& [descriptor_set, camera_buffer, lights_buffer] :
+       std::views::zip(global_descriptor_sets, camera_buffers, lights_buffers)) {
     const auto& camera_descriptor_buffer_info = descriptor_buffer_infos.emplace_back(
         vk::DescriptorBufferInfo{.buffer = *camera_buffer, .range = vk::WholeSize});
 
@@ -403,15 +409,15 @@ void UpdateGlobalDescriptorSets(const vk::Device device,
                                                            .descriptorType = vk::DescriptorType::eUniformBuffer,
                                                            .pBufferInfo = &camera_descriptor_buffer_info});
 
-    const auto& light_descriptor_buffer_info =
-        descriptor_buffer_infos.emplace_back(vk::DescriptorBufferInfo{.buffer = *light_buffer, .range = vk::WholeSize});
+    const auto& lights_descriptor_buffer_info = descriptor_buffer_infos.emplace_back(
+        vk::DescriptorBufferInfo{.buffer = *lights_buffer, .range = vk::WholeSize});
 
     descriptor_set_writes.push_back(vk::WriteDescriptorSet{.dstSet = descriptor_set,
                                                            .dstBinding = 1,
                                                            .dstArrayElement = 0,
                                                            .descriptorCount = 1,
                                                            .descriptorType = vk::DescriptorType::eUniformBuffer,
-                                                           .pBufferInfo = &light_descriptor_buffer_info});
+                                                           .pBufferInfo = &lights_descriptor_buffer_info});
   }
 
   device.updateDescriptorSets(descriptor_set_writes, nullptr);
@@ -680,41 +686,45 @@ std::unique_ptr<Material> CreateMaterial(const vk::Device device,
           copy_buffer_options));
 }
 
-vktf::DescriptorSets CreateMaterialDescriptorSets(const vk::Device device, const std::uint32_t material_count) {
+std::optional<vktf::DescriptorPool> CreateMaterialDescriptorPool(const vk::Device device,
+                                                                 const std::uint32_t material_count) {
   static constexpr std::uint32_t kImagesPerMaterial = 3;
-
   const std::array descriptor_pool_sizes{
       vk::DescriptorPoolSize{.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = material_count},
       vk::DescriptorPoolSize{.type = vk::DescriptorType::eCombinedImageSampler,
                              .descriptorCount = kImagesPerMaterial * material_count}};
 
   static constexpr std::array kDescriptorSetLayoutBindings{
-      vk::DescriptorSetLayoutBinding{.binding = 0,
+      vk::DescriptorSetLayoutBinding{.binding = 0,  // material properties
                                      .descriptorType = vk::DescriptorType::eUniformBuffer,
                                      .descriptorCount = 1,
                                      .stageFlags = vk::ShaderStageFlagBits::eFragment},
-      vk::DescriptorSetLayoutBinding{.binding = 1,
+      vk::DescriptorSetLayoutBinding{.binding = 1,  // base color, metallic-roughness, normal
                                      .descriptorType = vk::DescriptorType::eCombinedImageSampler,
                                      .descriptorCount = kImagesPerMaterial,
                                      .stageFlags = vk::ShaderStageFlagBits::eFragment}};
 
-  return vktf::DescriptorSets{device, material_count, descriptor_pool_sizes, kDescriptorSetLayoutBindings};
+  return vktf::DescriptorPool{device, descriptor_pool_sizes, kDescriptorSetLayoutBindings, material_count};
 }
 
 void UpdateMaterialDescriptorSets(const vk::Device device,
-                                  const vktf::DescriptorSets& material_descriptor_sets,
+                                  const vktf::DescriptorPool& materials_descriptor_pool,
                                   UnorderedPtrMap<cgltf_material, Material>& materials) {
+  const auto& materials_descriptor_sets = materials_descriptor_pool.descriptor_sets();
+  assert(materials.size() == materials_descriptor_sets.size());
+
   std::vector<vk::DescriptorBufferInfo> descriptor_buffer_infos;
   descriptor_buffer_infos.reserve(materials.size());
 
   std::vector<std::vector<vk::DescriptorImageInfo>> descriptor_image_infos;
   descriptor_image_infos.reserve(materials.size());
 
+  static constexpr auto kDescriptorsPerMaterial = 2;
   std::vector<vk::WriteDescriptorSet> descriptor_set_writes;
-  descriptor_set_writes.reserve(2 * materials.size());
+  descriptor_set_writes.reserve(kDescriptorsPerMaterial * materials.size());
 
   for (const auto& [descriptor_set, material] :
-       std::views::zip(material_descriptor_sets, materials | std::views::values)) {
+       std::views::zip(materials_descriptor_sets, materials | std::views::values)) {
     if (material == nullptr) continue;  // TODO: avoid creating descriptor set for unsupported material
 
     const auto& [base_color_image, base_color_sampler] = *material->maybe_base_color_texture;
@@ -734,15 +744,15 @@ void UpdateMaterialDescriptorSets(const vk::Device device,
                                                            .pBufferInfo = &descriptor_buffer_info});
 
     const auto& descriptor_image_info = descriptor_image_infos.emplace_back(
-        std::initializer_list{vk::DescriptorImageInfo{.sampler = base_color_sampler,
-                                                      .imageView = base_color_image.image_view(),
-                                                      .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal},
-                              vk::DescriptorImageInfo{.sampler = metallic_roughness_sampler,
-                                                      .imageView = metallic_roughness_image.image_view(),
-                                                      .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal},
-                              vk::DescriptorImageInfo{.sampler = normal_sampler,
-                                                      .imageView = normal_image.image_view(),
-                                                      .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal}});
+        std::vector{vk::DescriptorImageInfo{.sampler = base_color_sampler,
+                                            .imageView = base_color_image.image_view(),
+                                            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal},
+                    vk::DescriptorImageInfo{.sampler = metallic_roughness_sampler,
+                                            .imageView = metallic_roughness_image.image_view(),
+                                            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal},
+                    vk::DescriptorImageInfo{.sampler = normal_sampler,
+                                            .imageView = normal_image.image_view(),
+                                            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal}});
 
     descriptor_set_writes.push_back(
         vk::WriteDescriptorSet{.dstSet = descriptor_set,
@@ -1217,6 +1227,7 @@ struct CameraTransforms {
   glm::mat4 projection_transform{0.0f};
 };
 
+// TODO: utilize initialization lists to avoid requiring default constructors for class members
 GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
                      const vk::PhysicalDevice physical_device,
                      const vk::Bool32 enable_sampler_anisotropy,
@@ -1300,16 +1311,16 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
                                             CreateNodes(gltf_scene.nodes, gltf_scene.nodes_count, meshes, lights));
 
   camera_buffers_ = CreateMappedUniformBuffers(max_render_frames, sizeof(CameraTransforms), allocator);
-  light_buffers_ = CreateMappedUniformBuffers(max_render_frames, sizeof(Light) * lights.size(), allocator);
-  global_descriptor_sets_ = CreateGlobalDescriptorSets(device, static_cast<std::uint32_t>(max_render_frames));
-  UpdateGlobalDescriptorSets(device, global_descriptor_sets_, camera_buffers_, light_buffers_);
+  lights_buffers_ = CreateMappedUniformBuffers(max_render_frames, sizeof(Light) * lights.size(), allocator);
+  global_descriptor_pool_ = CreateGlobalDescriptorPool(device, static_cast<std::uint32_t>(max_render_frames));
+  UpdateGlobalDescriptorSets(device, *global_descriptor_pool_, camera_buffers_, lights_buffers_);
 
-  material_descriptor_sets_ = CreateMaterialDescriptorSets(device, static_cast<std::uint32_t>(materials.size()));
-  UpdateMaterialDescriptorSets(device, material_descriptor_sets_, materials);
+  material_descriptor_pool_ = CreateMaterialDescriptorPool(device, static_cast<std::uint32_t>(materials.size()));
+  UpdateMaterialDescriptorSets(device, *material_descriptor_pool_, materials);
 
   graphics_pipeline_layout_ = CreateGraphicsPipelineLayout(
       device,
-      std::array{global_descriptor_sets_.descriptor_set_layout(), material_descriptor_sets_.descriptor_set_layout()});
+      std::array{global_descriptor_pool_->descriptor_set_layout(), material_descriptor_pool_->descriptor_set_layout()});
   graphics_pipeline_ = CreateGraphicsPipeline(device,
                                               *graphics_pipeline_layout_,
                                               viewport_extent,
@@ -1331,10 +1342,12 @@ void GltfScene::Render(const Camera& camera,
                        const std::size_t frame_index,
                        const vk::CommandBuffer command_buffer) const {
   command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphics_pipeline_);
+
+  const auto& global_descriptor_sets = global_descriptor_pool_->descriptor_sets();
   command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                     *graphics_pipeline_layout_,
                                     0,
-                                    global_descriptor_sets_[frame_index],
+                                    global_descriptor_sets[frame_index],
                                     nullptr);
 
   using ViewPosition = decltype(PushConstants::view_position);
@@ -1354,7 +1367,7 @@ void GltfScene::Render(const Camera& camera,
     ::Render(*child_node, root_node_->transform, *graphics_pipeline_layout_, command_buffer, lights_buffer);
   }
 
-  light_buffers_[frame_index].Copy<Light>(lights_buffer);
+  lights_buffers_[frame_index].Copy<Light>(lights_buffer);
 }
 
 }  // namespace vktf

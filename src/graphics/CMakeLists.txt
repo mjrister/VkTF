@@ -6,7 +6,7 @@ target_sources(graphics PUBLIC FILE_SET CXX_MODULES
                                      camera.cppm
                                      data_view.cppm
                                      delta_time.cppm
-                                     descriptor_sets.cppm
+                                     descriptor_pool.cppm
                                      device.cppm
                                      engine.cppm
                                      glslang_compiler.cppm
