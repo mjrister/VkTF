@@ -4,6 +4,7 @@ target_sources(graphics PUBLIC FILE_SET CXX_MODULES
                                FILES allocator.cppm
                                      buffer.cppm
                                      camera.cppm
+                                     command_pool.cppm
                                      data_view.cppm
                                      delta_time.cppm
                                      descriptor_pool.cppm

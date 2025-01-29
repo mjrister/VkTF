@@ -38,6 +38,7 @@ export module gltf_scene;
 import allocator;
 import buffer;
 import camera;
+import command_pool;
 import data_view;
 import descriptor_pool;
 import image;
@@ -285,8 +286,7 @@ const cgltf_scene& GetDefaultScene(const cgltf_data& gltf_data) {
 // ====================================================== Buffers ======================================================
 
 struct CopyBufferOptions {
-  vk::UniqueCommandPool command_pool;
-  vk::UniqueCommandBuffer command_buffer;
+  vk::CommandBuffer command_buffer;
   std::vector<vktf::Buffer> staging_buffers;  // staging buffers must remain in scope until copy commands complete
   VmaAllocator allocator = nullptr;
 };
@@ -294,27 +294,6 @@ struct CopyBufferOptions {
 constexpr VmaAllocationCreateInfo kHostVisibleAllocationCreateInfo{
     .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
     .usage = VMA_MEMORY_USAGE_AUTO};
-
-CopyBufferOptions CreateCopyBufferOptions(const vk::Device device,
-                                          const std::uint32_t transfer_queue_family_index,
-                                          const std::size_t staging_buffer_count,
-                                          const VmaAllocator allocator) {
-  auto copy_command_pool =
-      device.createCommandPoolUnique(vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eTransient,
-                                                               .queueFamilyIndex = transfer_queue_family_index});
-  auto copy_command_buffers =
-      device.allocateCommandBuffersUnique(vk::CommandBufferAllocateInfo{.commandPool = *copy_command_pool,
-                                                                        .level = vk::CommandBufferLevel::ePrimary,
-                                                                        .commandBufferCount = 1});
-
-  std::vector<vktf::Buffer> staging_buffers;
-  staging_buffers.reserve(staging_buffer_count);
-
-  return CopyBufferOptions{.command_pool = std::move(copy_command_pool),
-                           .command_buffer = std::move(copy_command_buffers.front()),
-                           .staging_buffers = std::move(staging_buffers),
-                           .allocator = allocator};
-}
 
 template <typename T>
 vk::Buffer CreateStagingBuffer(const vktf::DataView<const T> data_view,
@@ -336,11 +315,11 @@ template <typename T>
 vktf::Buffer CreateBuffer(const vktf::DataView<const T>& data_view,
                           const vk::BufferUsageFlags usage_flags,
                           CopyBufferOptions& copy_buffer_options) {
-  auto& [_, command_buffer, staging_buffers, allocator] = copy_buffer_options;
+  auto& [command_buffer, staging_buffers, allocator] = copy_buffer_options;
   const auto staging_buffer = CreateStagingBuffer(data_view, allocator, staging_buffers);
 
   vktf::Buffer buffer{data_view.size_bytes(), usage_flags | vk::BufferUsageFlagBits::eTransferDst, allocator};
-  command_buffer->copyBuffer(staging_buffer, *buffer, vk::BufferCopy{.size = data_view.size_bytes()});
+  command_buffer.copyBuffer(staging_buffer, *buffer, vk::BufferCopy{.size = data_view.size_bytes()});
 
   return buffer;
 }
@@ -543,7 +522,7 @@ std::vector<vk::BufferImageCopy> GetBufferImageCopies(const ktxTexture2& ktx_tex
 vktf::Image CreateImage(const vk::Device device,
                         const ktxTexture2& ktx_texture2,
                         CopyBufferOptions& copy_buffer_options) {
-  auto& [_, command_buffer, staging_buffers, allocator] = copy_buffer_options;
+  auto& [command_buffer, staging_buffers, allocator] = copy_buffer_options;
   const auto& staging_buffer =
       CreateStagingBuffer(vktf::DataView<const ktx_uint8_t>{ktx_texture2.pData, ktx_texture2.dataSize},
                           allocator,
@@ -559,7 +538,7 @@ vktf::Image CreateImage(const vk::Device device,
                     allocator};
 
   const auto buffer_image_copies = GetBufferImageCopies(ktx_texture2);
-  image.Copy(staging_buffer, buffer_image_copies, *command_buffer);
+  image.Copy(staging_buffer, buffer_image_copies, command_buffer);
 
   return image;
 }
@@ -1252,16 +1231,22 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
         })
       | std::ranges::to<std::vector>();
 
+  const CommandPool copy_command_pool{device, vk::CommandPoolCreateFlagBits::eTransient, queue_family_index, 1};
+  const auto command_buffer = *copy_command_pool.command_buffers().front();
+  command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+
+  const auto staging_buffer_count = gltf_data->buffers_count + gltf_data->images_count;
+  std::vector<Buffer> staging_buffers;
+  staging_buffers.reserve(staging_buffer_count);
+
+  CopyBufferOptions copy_buffer_options{.command_buffer = command_buffer,
+                                        .staging_buffers = std::move(staging_buffers),
+                                        .allocator = allocator};
+
   std::unordered_map<vk::SamplerCreateInfo, vk::UniqueSampler> samplers;
   CreateSamplerOptions create_sampler_options{.enable_anisotropy = enable_sampler_anisotropy,
                                               .max_anisotropy = max_sampler_anisotropy,
                                               .samplers = &samplers};
-
-  const auto staging_buffer_count = gltf_data->buffers_count + gltf_data->images_count;
-  auto copy_buffer_options = CreateCopyBufferOptions(device, queue_family_index, staging_buffer_count, allocator);
-
-  const auto copy_command_buffer = *copy_buffer_options.command_buffer;
-  copy_command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
 
   auto materials =
       material_futures
@@ -1279,10 +1264,10 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
                   })
                 | std::ranges::to<std::unordered_map>();
 
-  copy_command_buffer.end();
+  command_buffer.end();
 
   const auto copy_fence = device.createFenceUnique(vk::FenceCreateInfo{});
-  queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &copy_command_buffer}, *copy_fence);
+  queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &command_buffer}, *copy_fence);
 
   auto lights =
       std::span{gltf_data->lights, gltf_data->lights_count}  //
@@ -1293,7 +1278,7 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
               return true;
             default:
               std::println(std::cerr, "Unsupported light {} with type {}", GetName(gltf_light), gltf_light.type);
-              return false;  // TODO: add spot light support
+              return false;  // TODO: add cgltf_light_type_spot support
           }
         })
       | std::views::transform([](const auto& gltf_light) {

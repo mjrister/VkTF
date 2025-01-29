@@ -19,6 +19,7 @@ export module engine;
 import allocator;
 import buffer;
 import camera;
+import command_pool;
 import delta_time;
 import device;
 import image;
@@ -63,9 +64,8 @@ private:
   std::vector<vk::UniqueFramebuffer> framebuffers_;
   vk::Queue graphics_queue_;
   vk::Queue present_queue_;
-  vk::UniqueCommandPool draw_command_pool_;
-  std::vector<vk::UniqueCommandBuffer> draw_command_buffers_;
-  std::array<vk::UniqueFence, kMaxRenderFrames> draw_fences_;
+  CommandPool render_command_pool_;
+  std::array<vk::UniqueFence, kMaxRenderFrames> render_fences_;
   std::array<vk::UniqueSemaphore, kMaxRenderFrames> acquire_next_image_semaphores_;
   std::array<vk::UniqueSemaphore, kMaxRenderFrames> present_image_semaphores_;
 };
@@ -265,14 +265,11 @@ Engine::Engine(const Window& window)
                                        depth_attachment_.image_view())},
       graphics_queue_{device_->getQueue(physical_device_.queue_family_indices().graphics_index, 0)},
       present_queue_{device_->getQueue(physical_device_.queue_family_indices().present_index, 0)},
-      draw_command_pool_{device_->createCommandPoolUnique(
-          vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-                                    .queueFamilyIndex = physical_device_.queue_family_indices().graphics_index})},
-      draw_command_buffers_{
-          device_->allocateCommandBuffersUnique(vk::CommandBufferAllocateInfo{.commandPool = *draw_command_pool_,
-                                                                              .level = vk::CommandBufferLevel::ePrimary,
-                                                                              .commandBufferCount = kMaxRenderFrames})},
-      draw_fences_{CreateFences<kMaxRenderFrames>(*device_)},
+      render_command_pool_{*device_,
+                           vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+                           physical_device_.queue_family_indices().graphics_index,
+                           kMaxRenderFrames},
+      render_fences_{CreateFences<kMaxRenderFrames>(*device_)},
       acquire_next_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)},
       present_image_semaphores_{CreateSemaphores<kMaxRenderFrames>(*device_)} {}
 
@@ -295,27 +292,22 @@ GltfScene Engine::Load(const std::filesystem::path& gltf_filepath) const {
 }
 
 void Engine::Render(const GltfScene& gltf_scene, const Camera& camera) {
-  if (++current_frame_index_ == kMaxRenderFrames) {
-    current_frame_index_ = 0;
-  }
-
-  // NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index): index guaranteed to be within array bounds
-  const auto draw_fence = *draw_fences_[current_frame_index_];
-  const auto acquire_next_image_semaphore = *acquire_next_image_semaphores_[current_frame_index_];
-  const auto present_image_semaphore = *present_image_semaphores_[current_frame_index_];
-  // NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index)
+  if (++current_frame_index_ == kMaxRenderFrames) current_frame_index_ = 0;
 
   static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
-  auto result = device_->waitForFences(draw_fence, vk::True, kMaxTimeout);
-  vk::detail::resultCheck(result, "Draw fence failed to enter a signaled state");
-  device_->resetFences(draw_fence);
+  const auto render_fence = *render_fences_[current_frame_index_];
+  auto result = device_->waitForFences(render_fence, vk::True, kMaxTimeout);
+  vk::detail::resultCheck(result, "Render fence failed to enter a signaled state");
+  device_->resetFences(render_fence);
 
   std::uint32_t image_index = 0;
+  const auto acquire_next_image_semaphore = *acquire_next_image_semaphores_[current_frame_index_];
   std::tie(result, image_index) = device_->acquireNextImageKHR(*swapchain_, kMaxTimeout, acquire_next_image_semaphore);
   vk::detail::resultCheck(result, "Acquire next swapchain image failed");
 
-  const auto draw_command_buffer = *draw_command_buffers_[current_frame_index_];
-  draw_command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+  const auto& command_buffers = render_command_pool_.command_buffers();
+  const auto command_buffer = *command_buffers[current_frame_index_];
+  command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
 
   static constexpr std::array kClearColor{0.0f, 0.0f, 0.0f, 0.0f};
   static constexpr std::array kClearValues{
@@ -323,7 +315,7 @@ void Engine::Render(const GltfScene& gltf_scene, const Camera& camera) {
       vk::ClearValue{.color = vk::ClearColorValue{kClearColor}},
       vk::ClearValue{.depthStencil = vk::ClearDepthStencilValue{.depth = 1.0f, .stencil = 0}}};
 
-  draw_command_buffer.beginRenderPass(
+  command_buffer.beginRenderPass(
       vk::RenderPassBeginInfo{
           .renderPass = *render_pass_,
           .framebuffer = *framebuffers_[image_index],
@@ -332,20 +324,21 @@ void Engine::Render(const GltfScene& gltf_scene, const Camera& camera) {
           .pClearValues = kClearValues.data()},
       vk::SubpassContents::eInline);
 
-  gltf_scene.Render(camera, current_frame_index_, draw_command_buffer);
+  gltf_scene.Render(camera, current_frame_index_, command_buffer);
 
-  draw_command_buffer.endRenderPass();
-  draw_command_buffer.end();
+  command_buffer.endRenderPass();
+  command_buffer.end();
 
   static constexpr vk::PipelineStageFlags kPipelineWaitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+  const auto present_image_semaphore = *present_image_semaphores_[current_frame_index_];
   graphics_queue_.submit(vk::SubmitInfo{.waitSemaphoreCount = 1,
                                         .pWaitSemaphores = &acquire_next_image_semaphore,
                                         .pWaitDstStageMask = &kPipelineWaitStage,
                                         .commandBufferCount = 1,
-                                        .pCommandBuffers = &draw_command_buffer,
+                                        .pCommandBuffers = &command_buffer,
                                         .signalSemaphoreCount = 1,
                                         .pSignalSemaphores = &present_image_semaphore},
-                         draw_fence);
+                         render_fence);
 
   const auto swapchain = *swapchain_;
   result = present_queue_.presentKHR(vk::PresentInfoKHR{.waitSemaphoreCount = 1,
