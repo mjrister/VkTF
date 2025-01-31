@@ -28,9 +28,7 @@ public:
 
   [[nodiscard]] vk::Format image_format() const noexcept { return image_format_; }
   [[nodiscard]] vk::Extent2D image_extent() const noexcept { return image_extent_; }
-  [[nodiscard]] std::ranges::view auto image_views() const {
-    return image_views_ | std::views::transform([](const auto& image_view) { return *image_view; });
-  }
+  [[nodiscard]] const std::vector<vk::UniqueImageView>& image_views() const noexcept { return image_views_; }
 
 private:
   Swapchain(vk::Device device, const vk::SwapchainCreateInfoKHR& swapchain_create_info);
@@ -95,13 +93,13 @@ vk::SwapchainCreateInfoKHR GetSwapchainCreateInfo(const vk::SurfaceKHR surface,
                                                   const vk::Extent2D framebuffer_extent,
                                                   const vktf::QueueFamilyIndices& queue_family_indices) {
   const auto surface_capabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
-  const auto surface_format = GetSwapchainSurfaceFormat(physical_device, surface);
+  const auto [image_format, image_color_space] = GetSwapchainSurfaceFormat(physical_device, surface);
 
   vk::SwapchainCreateInfoKHR swapchain_create_info{
       .surface = surface,
       .minImageCount = GetSwapchainImageCount(surface_capabilities),
-      .imageFormat = surface_format.format,
-      .imageColorSpace = surface_format.colorSpace,
+      .imageFormat = image_format,
+      .imageColorSpace = image_color_space,
       .imageExtent = GetSwapchainImageExtent(surface_capabilities, framebuffer_extent),
       .imageArrayLayers = 1,
       .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
@@ -110,6 +108,7 @@ vk::SwapchainCreateInfoKHR GetSwapchainCreateInfo(const vk::SurfaceKHR surface,
 
   const auto& [graphics_index, present_index] = queue_family_indices;
   const std::array graphics_and_present_index{graphics_index, present_index};
+
   if (graphics_index != present_index) {
     swapchain_create_info.imageSharingMode = vk::SharingMode::eConcurrent;
     swapchain_create_info.queueFamilyIndexCount = 2;

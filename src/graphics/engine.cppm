@@ -193,8 +193,8 @@ std::vector<vk::UniqueFramebuffer> CreateFramebuffers(const vk::Device device,
                                                       const vk::ImageView color_attachment,
                                                       const vk::ImageView depth_attachment) {
   return swapchain.image_views()
-         | std::views::transform([=, image_extent = swapchain.image_extent()](const auto color_resolve_attachment) {
-             const std::array image_attachments{color_attachment, color_resolve_attachment, depth_attachment};
+         | std::views::transform([=, image_extent = swapchain.image_extent()](const auto& color_resolve_attachment) {
+             const std::array image_attachments{color_attachment, *color_resolve_attachment, depth_attachment};
              return device.createFramebufferUnique(
                  vk::FramebufferCreateInfo{.renderPass = render_pass,
                                            .attachmentCount = static_cast<std::uint32_t>(image_attachments.size()),
