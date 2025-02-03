@@ -471,12 +471,11 @@ vk::SamplerAddressMode GetSamplerAddressMode(const cgltf_int gltf_wrap_mode) {
 
 vk::Sampler CreateSampler(const vk::Device device,
                           const cgltf_sampler* const gltf_sampler,
-                          const std::uint32_t mip_levels,
                           CreateSamplerOptions& create_sampler_options) {
   auto& [enable_anisotropy, max_anisotropy, samplers] = create_sampler_options;
   vk::SamplerCreateInfo sampler_create_info{.anisotropyEnable = enable_anisotropy,
                                             .maxAnisotropy = max_anisotropy,
-                                            .maxLod = static_cast<float>(mip_levels)};
+                                            .maxLod = vk::LodClampNone};
 
   if (gltf_sampler != nullptr) {
     const auto [min_filter, mipmap_mode] = GetSamplerMinFilterAndMipmapMode(gltf_sampler->min_filter);
@@ -637,26 +636,21 @@ std::unique_ptr<Material> CreateMaterial(const vk::Device device,
                roughness_factor] = gltf_material.pbr_metallic_roughness;
   const auto normal_texture_view = gltf_material.normal_texture;
 
+  const auto* const base_color_sampler = base_color_texture_view.texture->sampler;
+  const auto* const metallic_roughness_sampler = metallic_roughness_texture_view.texture->sampler;
+  const auto* const normal_sampler = normal_texture_view.texture->sampler;
+
   const auto& base_color_ktx_texture = *maybe_base_color_ktx_texture;
   const auto& metallic_roughness_ktx_texture = *maybe_metallic_roughness_ktx_texture;
   const auto& normal_ktx_texture = *maybe_normal_ktx_texture;
 
   return std::make_unique<Material>(
       Texture{.image = CreateImage(device, *base_color_ktx_texture, copy_buffer_options),
-              .sampler = CreateSampler(device,
-                                       base_color_texture_view.texture->sampler,
-                                       base_color_ktx_texture->numLevels,
-                                       create_sampler_options)},
+              .sampler = CreateSampler(device, base_color_sampler, create_sampler_options)},
       Texture{.image = CreateImage(device, *metallic_roughness_ktx_texture, copy_buffer_options),
-              .sampler = CreateSampler(device,
-                                       metallic_roughness_texture_view.texture->sampler,
-                                       metallic_roughness_ktx_texture->numLevels,
-                                       create_sampler_options)},
+              .sampler = CreateSampler(device, metallic_roughness_sampler, create_sampler_options)},
       Texture{.image = CreateImage(device, *normal_ktx_texture, copy_buffer_options),
-              .sampler = CreateSampler(device,
-                                       normal_texture_view.texture->sampler,
-                                       normal_ktx_texture->numLevels,
-                                       create_sampler_options)},
+              .sampler = CreateSampler(device, normal_sampler, create_sampler_options)},
       CreateBuffer<MaterialProperties>(
           MaterialProperties{.base_color_factor = ToVec(base_color_factor),
                              .metallic_roughness_factor = glm::vec2{metallic_factor, roughness_factor},
