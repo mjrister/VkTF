@@ -69,7 +69,7 @@ struct IndexBuffer {
 struct Primitive {
   vktf::Buffer vertex_buffer;
   IndexBuffer index_buffer;
-  Material* material;
+  const Material* material = nullptr;
 };
 
 struct Mesh {
@@ -78,7 +78,7 @@ struct Mesh {
 
 struct Light {
   glm::vec4 position{0.0f};
-  glm::vec4 color{0.0f};  // padding applied to conform to std140 layout requirements
+  glm::vec4 color{0.0f};  // alpha padding applied to conform to std140 layout requirements
 };
 
 struct Node {
@@ -113,7 +113,7 @@ private:
   std::vector<std::unique_ptr<Material>> materials_;
   std::vector<vk::UniqueSampler> samplers_;
   std::vector<std::unique_ptr<const Mesh>> meshes_;
-  std::vector<std::unique_ptr<Light>> lights_;
+  std::vector<std::unique_ptr<const Light>> lights_;
   std::unique_ptr<const Node> root_node_;
   std::vector<Buffer> camera_buffers_;
   std::vector<Buffer> lights_buffers_;
@@ -945,7 +945,7 @@ std::unique_ptr<const Mesh> CreateMesh(const cgltf_mesh& gltf_mesh,
       continue;  // TODO: add support for non-indexed triangle meshes
     }
 
-    auto* const material = Find(gltf_primitive.material, materials);
+    const auto* const material = Find(gltf_primitive.material, materials);
     if (material == nullptr) {
       static constexpr auto kMessageFormat = "Mesh {} primitive {} with material {} is unsupported";
       std::println(std::cerr, kMessageFormat, GetName(gltf_mesh), index++, GetName(*gltf_primitive.material));
@@ -973,7 +973,7 @@ glm::mat4 GetTransform(const cgltf_node& gltf_node) {
 std::vector<std::unique_ptr<const Node>> CreateNodes(const cgltf_node* const* const gltf_nodes,
                                                      const cgltf_size gltf_nodes_count,
                                                      const UnorderedPtrMap<cgltf_mesh, const Mesh>& meshes,
-                                                     const UnorderedPtrMap<cgltf_light, Light>& lights) {
+                                                     const UnorderedPtrMap<cgltf_light, const Light>& lights) {
   return std::span{gltf_nodes, gltf_nodes_count}  //
          | std::views::transform([&meshes, &lights](const auto* const gltf_node) {
              return std::make_unique<const Node>(
@@ -1173,7 +1173,7 @@ void Render(const Node& node,
 
   if (node.light != nullptr) {
     if (node.light->position.w == 0.0f) {
-      const auto& direction = node_transform[2];  // light direction is derived from the node orientation z-axis
+      const auto& direction = node_transform[2];  // light direction derived from the node orientation z-axis
       lights_buffer.emplace_back(glm::normalize(direction), node.light->color);
     } else {
       assert(node.light->position.w == 1.0f);
@@ -1279,7 +1279,7 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
           const glm::vec4 light_position{glm::vec3{0.0f},  // light position set dynamically based on node transform
                                          static_cast<float>(gltf_light.type == cgltf_light_type_point)};
           const glm::vec4 light_color{ToVec(gltf_light.color), 1.0f};
-          return std::pair{&gltf_light, std::make_unique<Light>(light_position, light_color)};
+          return std::pair{&gltf_light, std::make_unique<const Light>(light_position, light_color)};
         })
       | std::ranges::to<std::unordered_map>();
 
