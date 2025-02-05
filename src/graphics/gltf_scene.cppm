@@ -755,7 +755,6 @@ struct Vertex {
   glm::vec3 normal{0.0f};
   glm::vec4 tangent{0.0f};
   glm::vec2 texture_coordinates_0{0.0f};
-  glm::vec4 color_0{0.0f};
 };
 
 template <glm::length_t N>
@@ -787,43 +786,29 @@ bool TryUnpackAttribute(const cgltf_attribute& gltf_attribute, VertexAttribute<f
 }
 
 template <glm::length_t N>
-void ValidateRequiredAttribute(const VertexAttribute<float, N>& vertex_attribute) {
+void ValidateAttribute(const VertexAttribute<float, N>& vertex_attribute) {
+  // TODO: add support for optional vertex attributes
   if (const auto& maybe_attribute_data = vertex_attribute.maybe_data;
       !maybe_attribute_data.has_value() || maybe_attribute_data->empty()) {
     throw std::runtime_error{std::format("Missing required vertex attribute {}", vertex_attribute.name)};
   }
 }
 
-template <glm::length_t N>
-void ValidateOptionalAttribute(VertexAttribute<float, N>& vertex_attribute,
-                               const std::size_t attribute_count,
-                               const glm::vec<N, float>& default_value) {
-  if (auto& maybe_attribute_data = vertex_attribute.maybe_data; !maybe_attribute_data.has_value()) {
-    // TODO: avoid filling the vertex buffer with default values when an attribute is missing
-    maybe_attribute_data = std::vector<glm::vec<N, float>>(attribute_count, default_value);
-  }
-}
-
 void ValidateAttributes(const VertexAttribute<float, 3>& position_attribute,
                         const VertexAttribute<float, 3>& normal_attribute,
                         const VertexAttribute<float, 4>& tangent_attribute,
-                        const VertexAttribute<float, 2>& texture_coordinates_0_attribute,
-                        VertexAttribute<float, 4>& color_0_attribute) {
-  ValidateRequiredAttribute(position_attribute);
-  ValidateRequiredAttribute(normal_attribute);  // TODO: derive normals from positions data when missing
-  ValidateRequiredAttribute(tangent_attribute);
-  ValidateRequiredAttribute(texture_coordinates_0_attribute);
-
-  const auto position_count = position_attribute.maybe_data->size();
-  ValidateOptionalAttribute(color_0_attribute, position_count, glm::vec4{1.0f});
+                        const VertexAttribute<float, 2>& texture_coordinates_0_attribute) {
+  ValidateAttribute(position_attribute);
+  ValidateAttribute(normal_attribute);
+  ValidateAttribute(tangent_attribute);
+  ValidateAttribute(texture_coordinates_0_attribute);
 
 #ifndef NDEBUG
   // the glTF specification requires all primitive attributes have the same count
   for (const auto& attribute_count : {normal_attribute.maybe_data->size(),
                                       tangent_attribute.maybe_data->size(),
-                                      texture_coordinates_0_attribute.maybe_data->size(),
-                                      color_0_attribute.maybe_data->size()}) {
-    assert(attribute_count == position_count);
+                                      texture_coordinates_0_attribute.maybe_data->size()}) {
+    assert(attribute_count == position_attribute.maybe_data->size());
   }
 #endif
 }
@@ -833,7 +818,6 @@ std::vector<Vertex> CreateVertices(const cgltf_primitive& gltf_primitive) {
   VertexAttribute<float, 3> normal_attribute{.name = "NORMAL"};
   VertexAttribute<float, 4> tangent_attribute{.name = "TANGENT"};
   VertexAttribute<float, 2> texture_coordinates_0_attribute{.name = "TEXCOORD_0"};
-  VertexAttribute<float, 4> color_0_attribute{.name = "COLOR_0"};
 
   for (const auto& gltf_attribute : std::span{gltf_primitive.attributes, gltf_primitive.attributes_count}) {
     switch (gltf_attribute.type) {
@@ -849,27 +833,16 @@ std::vector<Vertex> CreateVertices(const cgltf_primitive& gltf_primitive) {
       case cgltf_attribute_type_texcoord:
         if (TryUnpackAttribute(gltf_attribute, texture_coordinates_0_attribute)) continue;
         break;
-      case cgltf_attribute_type_color:
-        if (TryUnpackAttribute(gltf_attribute, color_0_attribute)) continue;
-        break;
       default:
         break;
     }
     std::println(std::cerr, "Unsupported primitive attribute {}", GetName(gltf_attribute));
   }
 
-  ValidateAttributes(position_attribute,
-                     normal_attribute,
-                     tangent_attribute,
-                     texture_coordinates_0_attribute,
-                     color_0_attribute);
+  ValidateAttributes(position_attribute, normal_attribute, tangent_attribute, texture_coordinates_0_attribute);
 
   return std::views::zip_transform(
-             [](const auto& position,
-                const auto& normal,
-                const auto& tangent,
-                const auto& texture_coordinates_0,
-                const auto& color_0) {
+             [](const auto& position, const auto& normal, const auto& tangent, const auto& texture_coordinates_0) {
 #ifndef NDEBUG
                // the glTF specification requires unit length normals and tangent vectors
                static constexpr auto kEpsilon = 1.0e-6f;
@@ -879,14 +852,12 @@ std::vector<Vertex> CreateVertices(const cgltf_primitive& gltf_primitive) {
                return Vertex{.position = position,
                              .normal = normal,
                              .tangent = tangent,
-                             .texture_coordinates_0 = texture_coordinates_0,
-                             .color_0 = color_0};
+                             .texture_coordinates_0 = texture_coordinates_0};
              },
              *position_attribute.maybe_data,
              *normal_attribute.maybe_data,
              *tangent_attribute.maybe_data,
-             *texture_coordinates_0_attribute.maybe_data,
-             *color_0_attribute.maybe_data)
+             *texture_coordinates_0_attribute.maybe_data)
          | std::ranges::to<std::vector>();
 }
 
@@ -1063,11 +1034,7 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
       vk::VertexInputAttributeDescription{.location = 3,
                                           .binding = 0,
                                           .format = vk::Format::eR32G32Sfloat,
-                                          .offset = offsetof(Vertex, texture_coordinates_0)},
-      vk::VertexInputAttributeDescription{.location = 4,
-                                          .binding = 0,
-                                          .format = vk::Format::eR32G32B32A32Sfloat,
-                                          .offset = offsetof(Vertex, color_0)}};
+                                          .offset = offsetof(Vertex, texture_coordinates_0)}};
 
   static constexpr vk::PipelineVertexInputStateCreateInfo kVertexInputStateCreateInfo{
       .vertexBindingDescriptionCount = 1,

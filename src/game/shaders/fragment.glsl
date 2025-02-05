@@ -33,8 +33,7 @@ layout(set = 1, binding = 1) uniform sampler2D material_samplers[kMaterialSample
 layout(location = 0) in Fragment {
   vec3 position;
   vec2 texture_coordinates_0;
-  vec4 color_0;
-  mat3 normal_transform;  // TODO: prefer normal transform matrix multplication in the vertex
+  mat3 normal_transform;
 } fragment;
 
 layout(location = 0) out vec4 fragment_color;
@@ -48,7 +47,7 @@ vec4 GetSampledImageColor(const uint sampler_index) {
 }
 
 vec4 GetBaseColor() {
-  return fragment.color_0 * material_properties.base_color_factor * GetSampledImageColor(kBaseColorSamplerIndex);
+  return material_properties.base_color_factor * GetSampledImageColor(kBaseColorSamplerIndex);
 }
 
 vec2 GetMetallicRoughness() {

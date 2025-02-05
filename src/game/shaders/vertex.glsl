@@ -13,12 +13,10 @@ layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
 layout(location = 2) in vec4 tangent; // w-component indicates the signed handedness of the tangent basis
 layout(location = 3) in vec2 texture_coordinates_0;
-layout(location = 4) in vec4 color_0;
 
 layout(location = 0) out Fragment {
   vec3 position;
   vec2 texture_coordinates_0;
-  vec4 color_0;
   mat3 normal_transform;
 } fragment;
 
@@ -36,7 +34,6 @@ void main() {
   fragment.position = model_position.xyz;
   fragment.normal_transform = GetNormalTransform(model_transform);
   fragment.texture_coordinates_0 = texture_coordinates_0;
-  fragment.color_0 = color_0;
 
   gl_Position = projection_transform * view_transform * model_position;
 }
