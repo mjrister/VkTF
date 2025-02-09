@@ -14,10 +14,10 @@ target_sources(graphics PUBLIC FILE_SET CXX_MODULES
                                      gltf_scene.cppm
                                      image.cppm
                                      instance.cppm
-                                     ktx_texture.cppm
                                      physical_device.cppm
                                      shader_module.cppm
                                      swapchain.cppm
+                                     texture.cppm
                                      window.cppm)
 
 find_package(Ktx CONFIG REQUIRED)

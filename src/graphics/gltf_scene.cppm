@@ -25,7 +25,6 @@ module;
 #include <vector>
 
 #include <cgltf.h>
-#include <ktx.h>
 #include <vk_mem_alloc.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/epsilon.hpp>
@@ -41,21 +40,16 @@ import command_pool;
 import data_view;
 import descriptor_pool;
 import image;
-import ktx_texture;
 import shader_module;
+import texture;
 
 namespace {
 
-struct Texture {
-  vktf::Image image;
-  vk::Sampler sampler;
-};
-
 struct Material {
-  std::optional<Texture> maybe_base_color_texture;
-  std::optional<Texture> maybe_metallic_roughness_texture;
-  std::optional<Texture> maybe_normal_texture;
-  std::optional<vktf::Buffer> maybe_properties_buffer;
+  vktf::Texture base_color_texture;
+  vktf::Texture metallic_roughness_texture;
+  vktf::Texture normal_texture;
+  vktf::Buffer properties_buffer;
   vk::DescriptorSet descriptor_set;
 };
 
@@ -283,8 +277,8 @@ const Value& Find(const Key* const gltf_key, const GltfMap<Key, Value>& gltf_map
 
 struct CopyBufferOptions {
   vk::CommandBuffer command_buffer;
-  std::vector<vktf::Buffer> staging_buffers;  // staging buffers must remain in scope until copy commands complete
   VmaAllocator allocator = nullptr;
+  std::vector<vktf::Buffer> staging_buffers;  // staging buffers must remain in scope until copy commands complete
 };
 
 constexpr VmaAllocationCreateInfo kHostVisibleAllocationCreateInfo{
@@ -311,7 +305,7 @@ template <typename T>
 vktf::Buffer CreateBuffer(const vktf::DataView<const T>& data_view,
                           const vk::BufferUsageFlags usage_flags,
                           CopyBufferOptions& copy_buffer_options) {
-  auto& [command_buffer, staging_buffers, allocator] = copy_buffer_options;
+  auto& [command_buffer, allocator, staging_buffers] = copy_buffer_options;
   const auto staging_buffer = CreateStagingBuffer(data_view, allocator, staging_buffers);
 
   vktf::Buffer buffer{data_view.size_bytes(), usage_flags | vk::BufferUsageFlagBits::eTransferDst, allocator};
@@ -493,60 +487,12 @@ vk::UniqueSampler CreateDefaultSampler(const vk::Device device, const CreateSamp
                                                           .maxLod = vk::LodClampNone});
 }
 
-// ====================================================== Images =======================================================
-
-std::vector<vk::BufferImageCopy> GetBufferImageCopies(const ktxTexture2& ktx_texture2) {
-  return std::views::iota(0u, ktx_texture2.numLevels)
-         | std::views::transform([ktx_texture = ktxTexture(&ktx_texture2)](const auto mip_level) {
-             ktx_size_t image_offset = 0;
-             if (const auto ktx_error_code = ktxTexture_GetImageOffset(ktx_texture, mip_level, 0, 0, &image_offset);
-                 ktx_error_code != KTX_SUCCESS) {
-               throw std::runtime_error{std::format("Failed to get image offset for mip level {} with error {}",
-                                                    mip_level,
-                                                    ktxErrorString(ktx_error_code))};
-             }
-             return vk::BufferImageCopy{
-                 .bufferOffset = image_offset,
-                 .imageSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor,
-                                                                .mipLevel = mip_level,
-                                                                .layerCount = 1},
-                 .imageExtent = vk::Extent3D{.width = ktx_texture->baseWidth >> mip_level,
-                                             .height = ktx_texture->baseHeight >> mip_level,
-                                             .depth = 1}};
-           })
-         | std::ranges::to<std::vector>();
-}
-
-vktf::Image CreateImage(const vk::Device device,
-                        const ktxTexture2& ktx_texture2,
-                        CopyBufferOptions& copy_buffer_options) {
-  auto& [command_buffer, staging_buffers, allocator] = copy_buffer_options;
-  const auto& staging_buffer =
-      CreateStagingBuffer(vktf::DataView<const ktx_uint8_t>{ktx_texture2.pData, ktx_texture2.dataSize},
-                          allocator,
-                          staging_buffers);
-
-  vktf::Image image{device,
-                    static_cast<vk::Format>(ktx_texture2.vkFormat),
-                    vk::Extent2D{ktx_texture2.baseWidth, ktx_texture2.baseHeight},
-                    ktx_texture2.numLevels,
-                    vk::SampleCountFlagBits::e1,
-                    vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
-                    vk::ImageAspectFlagBits::eColor,
-                    allocator};
-
-  const auto buffer_image_copies = GetBufferImageCopies(ktx_texture2);
-  image.Copy(staging_buffer, buffer_image_copies, command_buffer);
-
-  return image;
-}
-
 // ===================================================== Materials =====================================================
 
-struct MaterialKtxTextures {
-  std::optional<vktf::KtxTexture> maybe_base_color_texture;
-  std::optional<vktf::KtxTexture> maybe_metallic_roughness_texture;
-  std::optional<vktf::KtxTexture> maybe_normal_texture;
+struct MaterialTextures {
+  std::optional<vktf::Texture> maybe_base_color_texture;
+  std::optional<vktf::Texture> maybe_metallic_roughness_texture;
+  std::optional<vktf::Texture> maybe_normal_texture;
 };
 
 struct MaterialProperties {
@@ -555,10 +501,11 @@ struct MaterialProperties {
   float normal_scale = 0.0f;
 };
 
-std::optional<vktf::KtxTexture> CreateKtxTexture(const cgltf_texture_view& gltf_texture_view,
-                                                 const vktf::ColorSpace color_space,
-                                                 const std::filesystem::path& gltf_directory,
-                                                 const vk::PhysicalDevice physical_device) {
+std::optional<vktf::Texture> CreateTexture(const cgltf_texture_view& gltf_texture_view,
+                                           const vktf::ColorSpace color_space,
+                                           const std::filesystem::path& gltf_directory,
+                                           const vk::PhysicalDevice physical_device,
+                                           const GltfMap<cgltf_sampler, vk::UniqueSampler>& samplers) {
   const auto* const gltf_texture = gltf_texture_view.texture;
   if (gltf_texture == nullptr) return std::nullopt;
 
@@ -574,53 +521,56 @@ std::optional<vktf::KtxTexture> CreateKtxTexture(const cgltf_texture_view& gltf_
     return std::nullopt;
   }
 
-  return vktf::KtxTexture{gltf_directory / gltf_image_uri, color_space, physical_device};
+  const auto& sampler = Find(gltf_texture->sampler, samplers);
+  return vktf::Texture{gltf_directory / gltf_image_uri, color_space, physical_device, *sampler};
 }
 
-MaterialKtxTextures CreateKtxTextures(const cgltf_material& gltf_material,
-                                      const std::filesystem::path& gltf_directory,
-                                      const vk::PhysicalDevice physical_device) {
+MaterialTextures CreateMaterialTextures(const cgltf_material& gltf_material,
+                                        const std::filesystem::path& gltf_directory,
+                                        const vk::PhysicalDevice physical_device,
+                                        const GltfMap<cgltf_sampler, vk::UniqueSampler>& samplers) {
   if (gltf_material.has_pbr_metallic_roughness == 0) {
     return {};  // TODO: add support for non PBR metallic-roughness materials
   }
 
   const auto& pbr_metallic_roughness = gltf_material.pbr_metallic_roughness;
   auto base_color_texture_future = std::async(std::launch::async,
-                                              CreateKtxTexture,
-                                              pbr_metallic_roughness.base_color_texture,
+                                              CreateTexture,
+                                              std::cref(pbr_metallic_roughness.base_color_texture),
                                               vktf::ColorSpace::kSrgb,
-                                              gltf_directory,
-                                              physical_device);
+                                              std::cref(gltf_directory),
+                                              physical_device,
+                                              std::cref(samplers));
 
   auto metallic_roughness_texture_future = std::async(std::launch::async,
-                                                      CreateKtxTexture,
-                                                      pbr_metallic_roughness.metallic_roughness_texture,
+                                                      CreateTexture,
+                                                      std::cref(pbr_metallic_roughness.metallic_roughness_texture),
                                                       vktf::ColorSpace::kLinear,
-                                                      gltf_directory,
-                                                      physical_device);
+                                                      std::cref(gltf_directory),
+                                                      physical_device,
+                                                      std::cref(samplers));
 
   auto normal_texture_future = std::async(std::launch::async,
-                                          CreateKtxTexture,
-                                          gltf_material.normal_texture,
+                                          CreateTexture,
+                                          std::cref(gltf_material.normal_texture),
                                           vktf::ColorSpace::kLinear,
-                                          gltf_directory,
-                                          physical_device);
+                                          std::cref(gltf_directory),
+                                          physical_device,
+                                          std::cref(samplers));
 
-  return MaterialKtxTextures{.maybe_base_color_texture = base_color_texture_future.get(),
-                             .maybe_metallic_roughness_texture = metallic_roughness_texture_future.get(),
-                             .maybe_normal_texture = normal_texture_future.get()};
+  return MaterialTextures{.maybe_base_color_texture = base_color_texture_future.get(),
+                          .maybe_metallic_roughness_texture = metallic_roughness_texture_future.get(),
+                          .maybe_normal_texture = normal_texture_future.get()};
 }
 
 std::unique_ptr<Material> CreateMaterial(const vk::Device device,
                                          const cgltf_material& gltf_material,
-                                         const MaterialKtxTextures& material_ktx_textures,
-                                         const GltfMap<cgltf_sampler, vk::UniqueSampler>& samplers,
+                                         MaterialTextures& material_textures,
                                          CopyBufferOptions& copy_buffer_options) {
-  const auto& [maybe_base_color_ktx_texture, maybe_metallic_roughness_ktx_texture, maybe_normal_ktx_texture] =
-      material_ktx_textures;
+  auto& [maybe_base_color_texture, maybe_metallic_roughness_texture, maybe_normal_texture] = material_textures;
 
   if (std::ranges::any_of(
-          std::array{&maybe_base_color_ktx_texture, &maybe_metallic_roughness_ktx_texture, &maybe_normal_ktx_texture},
+          std::array{&maybe_base_color_texture, &maybe_metallic_roughness_texture, &maybe_normal_texture},
           [](const auto* const maybe_ktx_texture) { return !maybe_ktx_texture->has_value(); })) {
     std::println(std::cerr,
                  "Failed to create material {} because it's missing required PBR metallic-roughness textures",
@@ -628,34 +578,28 @@ std::unique_ptr<Material> CreateMaterial(const vk::Device device,
     return nullptr;  // TODO: add support for optional material textures
   }
 
-  const auto& [base_color_texture_view,
-               metallic_roughness_texture_view,
-               base_color_factor,
-               metallic_factor,
-               roughness_factor] = gltf_material.pbr_metallic_roughness;
-  const auto normal_texture_view = gltf_material.normal_texture;
+  const auto& pbr_metallic_roughness = gltf_material.pbr_metallic_roughness;
+  const MaterialProperties material_properties{
+      .base_color_factor = ToVec(pbr_metallic_roughness.base_color_factor),
+      .metallic_roughness_factor =
+          glm::vec2{pbr_metallic_roughness.metallic_factor, pbr_metallic_roughness.roughness_factor},
+      .normal_scale = gltf_material.normal_texture.scale};
 
-  const auto& base_color_ktx_texture = *maybe_base_color_ktx_texture;
-  const auto& metallic_roughness_ktx_texture = *maybe_metallic_roughness_ktx_texture;
-  const auto& normal_ktx_texture = *maybe_normal_ktx_texture;
+  auto& base_color_texture = *maybe_base_color_texture;
+  auto& metallic_roughness_texture = *maybe_metallic_roughness_texture;
+  auto& normal_texture = *maybe_normal_texture;
 
-  const auto* const base_color_sampler = base_color_texture_view.texture->sampler;
-  const auto* const metallic_roughness_sampler = metallic_roughness_texture_view.texture->sampler;
-  const auto* const normal_sampler = normal_texture_view.texture->sampler;
+  auto& [command_buffer, allocator, staging_buffers] = copy_buffer_options;
+  staging_buffers.push_back(base_color_texture.CreateImage(device, command_buffer, allocator));
+  staging_buffers.push_back(metallic_roughness_texture.CreateImage(device, command_buffer, allocator));
+  staging_buffers.push_back(normal_texture.CreateImage(device, command_buffer, allocator));
 
-  return std::make_unique<Material>(
-      Texture{.image = CreateImage(device, *base_color_ktx_texture, copy_buffer_options),
-              .sampler = *Find(base_color_sampler, samplers)},
-      Texture{.image = CreateImage(device, *metallic_roughness_ktx_texture, copy_buffer_options),
-              .sampler = *Find(metallic_roughness_sampler, samplers)},
-      Texture{.image = CreateImage(device, *normal_ktx_texture, copy_buffer_options),
-              .sampler = *Find(normal_sampler, samplers)},
-      CreateBuffer<MaterialProperties>(
-          MaterialProperties{.base_color_factor = ToVec(base_color_factor),
-                             .metallic_roughness_factor = glm::vec2{metallic_factor, roughness_factor},
-                             .normal_scale = normal_texture_view.scale},
-          vk::BufferUsageFlagBits::eUniformBuffer,
-          copy_buffer_options));
+  return std::make_unique<Material>(std::move(base_color_texture),
+                                    std::move(metallic_roughness_texture),
+                                    std::move(normal_texture),
+                                    CreateBuffer<MaterialProperties>(material_properties,
+                                                                     vk::BufferUsageFlagBits::eUniformBuffer,
+                                                                     copy_buffer_options));
 }
 
 std::optional<vktf::DescriptorPool> CreateMaterialDescriptorPool(const vk::Device device,
@@ -698,11 +642,10 @@ void UpdateMaterialDescriptorSets(const vk::Device device,
   for (const auto& [material, descriptor_set] : std::views::zip(materials | std::views::values, descriptor_sets)) {
     if (material == nullptr) continue;  // TODO: avoid creating descriptor set for unsupported material
 
-    const auto& [base_color_image, base_color_sampler] = *material->maybe_base_color_texture;
-    const auto& [metallic_roughness_image, metallic_roughness_sampler] = *material->maybe_metallic_roughness_texture;
-    const auto& [normal_image, normal_sampler] = *material->maybe_normal_texture;
-    const auto& properties_buffer = *material->maybe_properties_buffer;
-    material->descriptor_set = descriptor_set;
+    const auto& base_color_texture = material->base_color_texture;
+    const auto& metallic_roughness_texture = material->metallic_roughness_texture;
+    const auto& normal_texture = material->normal_texture;
+    const auto& properties_buffer = material->properties_buffer;
 
     const auto& descriptor_buffer_info = descriptor_buffer_infos.emplace_back(
         vk::DescriptorBufferInfo{.buffer = *properties_buffer, .range = vk::WholeSize});
@@ -715,14 +658,14 @@ void UpdateMaterialDescriptorSets(const vk::Device device,
                                                            .pBufferInfo = &descriptor_buffer_info});
 
     const auto& descriptor_image_info = descriptor_image_infos.emplace_back(
-        std::vector{vk::DescriptorImageInfo{.sampler = base_color_sampler,
-                                            .imageView = base_color_image.image_view(),
+        std::vector{vk::DescriptorImageInfo{.sampler = base_color_texture.sampler(),
+                                            .imageView = base_color_texture.image_view(),
                                             .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal},
-                    vk::DescriptorImageInfo{.sampler = metallic_roughness_sampler,
-                                            .imageView = metallic_roughness_image.image_view(),
+                    vk::DescriptorImageInfo{.sampler = metallic_roughness_texture.sampler(),
+                                            .imageView = metallic_roughness_texture.image_view(),
                                             .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal},
-                    vk::DescriptorImageInfo{.sampler = normal_sampler,
-                                            .imageView = normal_image.image_view(),
+                    vk::DescriptorImageInfo{.sampler = normal_texture.sampler(),
+                                            .imageView = normal_texture.image_view(),
                                             .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal}});
 
     descriptor_set_writes.push_back(
@@ -733,6 +676,8 @@ void UpdateMaterialDescriptorSets(const vk::Device device,
                                .descriptorType = vk::DescriptorType::eCombinedImageSampler,
                                .pImageInfo = descriptor_image_info.data(),
                                .pBufferInfo = &descriptor_buffer_info});
+
+    material->descriptor_set = descriptor_set;
   }
 
   device.updateDescriptorSets(descriptor_set_writes, nullptr);
@@ -1198,9 +1143,10 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
 
   auto material_futures =
       std::span{gltf_data->materials, gltf_data->materials_count}
-      | std::views::transform([&gltf_directory, physical_device](const auto& gltf_material) {
-          return std::async(std::launch::async, [&gltf_material, &gltf_directory, physical_device] {
-            return std::pair{&gltf_material, CreateKtxTextures(gltf_material, gltf_directory, physical_device)};
+      | std::views::transform([&gltf_directory, physical_device, &samplers](const auto& gltf_material) {
+          return std::async(std::launch::async, [&gltf_material, &gltf_directory, physical_device, &samplers] {
+            return std::pair{&gltf_material,
+                             CreateMaterialTextures(gltf_material, gltf_directory, physical_device, samplers)};
           });
         })
       | std::ranges::to<std::vector>();
@@ -1214,17 +1160,16 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
   staging_buffers.reserve(staging_buffer_count);
 
   CopyBufferOptions copy_buffer_options{.command_buffer = command_buffer,
-                                        .staging_buffers = std::move(staging_buffers),
-                                        .allocator = allocator};
+                                        .allocator = allocator,
+                                        .staging_buffers = std::move(staging_buffers)};
 
-  auto materials =
-      material_futures  //
-      | std::views::transform([device, &copy_buffer_options, &samplers](auto& material_future) {
-          auto [gltf_material, ktx_textures] = material_future.get();
-          return std::pair{gltf_material,
-                           CreateMaterial(device, *gltf_material, ktx_textures, samplers, copy_buffer_options)};
-        })
-      | std::ranges::to<std::unordered_map>();
+  auto materials = material_futures  //
+                   | std::views::transform([device, &copy_buffer_options](auto& material_future) {
+                       auto [gltf_material, material_textures] = material_future.get();
+                       return std::pair{gltf_material,
+                                        CreateMaterial(device, *gltf_material, material_textures, copy_buffer_options)};
+                     })
+                   | std::ranges::to<std::unordered_map>();
 
   auto meshes = std::span{gltf_data->meshes, gltf_data->meshes_count}
                 | std::views::transform([&materials, &copy_buffer_options](const auto& gltf_mesh) {
