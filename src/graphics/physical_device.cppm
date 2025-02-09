@@ -25,7 +25,7 @@ struct RankedPhysicalDevice {
 
 export class PhysicalDevice {
 public:
-  PhysicalDevice(vk::Instance instance, vk::SurfaceKHR surface);
+  PhysicalDevice(const vk::Instance instance, const vk::SurfaceKHR surface);
 
   [[nodiscard]] vk::PhysicalDevice operator*() const noexcept { return physical_device_; }
   [[nodiscard]] const vk::PhysicalDevice* operator->() const noexcept { return &physical_device_; }

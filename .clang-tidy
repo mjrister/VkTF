@@ -18,7 +18,8 @@ Checks: >-
   -misc-include-cleaner,
   -misc-misplaced-const,
   -misc-no-recursion,
-  -modernize-use-trailing-return-type
+  -modernize-use-trailing-return-type,
+  -readability-avoid-const-params-in-decls
 CheckOptions:
   - key: hicpp-signed-bitwise.IgnorePositiveIntegerLiterals
     value: true

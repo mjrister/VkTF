@@ -20,7 +20,7 @@ export module glslang_compiler;
 
 namespace vktf::glslang {
 
-export std::vector<std::uint32_t> Compile(const std::string& glsl_shader, glslang_stage_t glslang_stage);
+export std::vector<std::uint32_t> Compile(const std::string& glsl_shader, const glslang_stage_t glslang_stage);
 
 }  // namespace vktf::glslang
 

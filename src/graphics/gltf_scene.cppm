@@ -94,19 +94,19 @@ namespace vktf {
 export class GltfScene {
 public:
   GltfScene(const std::filesystem::path& gltf_filepath,
-            vk::PhysicalDevice physical_device,
-            vk::Bool32 enable_sampler_anisotropy,
-            float max_sampler_anisotropy,
-            vk::Device device,
-            vk::Queue queue,
-            std::uint32_t queue_family_index,
-            vk::Extent2D viewport_extent,
-            vk::SampleCountFlagBits msaa_sample_count,
-            vk::RenderPass render_pass,
-            VmaAllocator allocator,
-            std::size_t max_render_frames);
+            const vk::PhysicalDevice physical_device,
+            const vk::Bool32 enable_sampler_anisotropy,
+            const float max_sampler_anisotropy,
+            const vk::Device device,
+            const vk::Queue queue,
+            const std::uint32_t queue_family_index,
+            const vk::Extent2D viewport_extent,
+            const vk::SampleCountFlagBits msaa_sample_count,
+            const vk::RenderPass render_pass,
+            const VmaAllocator allocator,
+            const std::size_t max_render_frames);
 
-  void Render(const Camera& camera, std::size_t frame_index, vk::CommandBuffer command_buffer) const;
+  void Render(const Camera& camera, const std::size_t frame_index, const vk::CommandBuffer command_buffer) const;
 
 private:
   std::vector<std::unique_ptr<Material>> materials_;

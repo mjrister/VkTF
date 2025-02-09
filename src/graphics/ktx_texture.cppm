@@ -26,7 +26,9 @@ export enum class ColorSpace : std::uint8_t { kLinear, kSrgb };
 
 export class KtxTexture {
 public:
-  KtxTexture(const std::filesystem::path& texture_filepath, ColorSpace color_space, vk::PhysicalDevice physical_device);
+  KtxTexture(const std::filesystem::path& texture_filepath,
+             const ColorSpace color_space,
+             const vk::PhysicalDevice physical_device);
 
   [[nodiscard]] const ktxTexture2& operator*() const noexcept { return *ktx_texture2_; }
   [[nodiscard]] const ktxTexture2* operator->() const noexcept { return ktx_texture2_.get(); }

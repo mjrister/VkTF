@@ -14,14 +14,14 @@ namespace vktf {
 
 export class Image {
 public:
-  Image(vk::Device device,
-        vk::Format format,
-        vk::Extent2D extent,
-        std::uint32_t mip_levels,
-        vk::SampleCountFlagBits sample_count,
-        vk::ImageUsageFlags usage_flags,
-        vk::ImageAspectFlagBits aspect_mask,
-        VmaAllocator allocator,
+  Image(const vk::Device device,
+        const vk::Format format,
+        const vk::Extent2D extent,
+        const std::uint32_t mip_levels,
+        const vk::SampleCountFlagBits sample_count,
+        const vk::ImageUsageFlags usage_flags,
+        const vk::ImageAspectFlagBits aspect_mask,
+        const VmaAllocator allocator,
         const VmaAllocationCreateInfo& allocation_create_info = kDefaultAllocationCreateInfo);
 
   Image(const Image&) = delete;
@@ -35,9 +35,9 @@ public:
   [[nodiscard]] vk::ImageView image_view() const noexcept { return *image_view_; }
   [[nodiscard]] vk::Format format() const noexcept { return format_; }
 
-  void Copy(vk::Buffer buffer,
+  void Copy(const vk::Buffer buffer,
             const std::vector<vk::BufferImageCopy>& buffer_image_copies,
-            vk::CommandBuffer command_buffer) const;
+            const vk::CommandBuffer command_buffer) const;
 
 private:
   vk::Image image_;

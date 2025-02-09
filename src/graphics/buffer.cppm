@@ -16,9 +16,9 @@ namespace vktf {
 
 export class Buffer {
 public:
-  Buffer(vk::DeviceSize size_bytes,
-         vk::BufferUsageFlags usage_flags,
-         VmaAllocator allocator,
+  Buffer(const vk::DeviceSize size_bytes,
+         const vk::BufferUsageFlags usage_flags,
+         const VmaAllocator allocator,
          const VmaAllocationCreateInfo& allocation_create_info = kDefaultAllocationCreateInfo);
 
   Buffer(const Buffer&) = delete;

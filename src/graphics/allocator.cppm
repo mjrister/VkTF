@@ -13,7 +13,7 @@ namespace vktf {
 
 export class Allocator {
 public:
-  Allocator(vk::Instance instance, vk::PhysicalDevice physical_device, vk::Device device);
+  Allocator(const vk::Instance instance, const vk::PhysicalDevice physical_device, const vk::Device device);
 
   Allocator(const Allocator&) = delete;
   Allocator(Allocator&& allocator) noexcept { *this = std::move(allocator); }

@@ -18,10 +18,10 @@ namespace vktf {
 
 export class Swapchain {
 public:
-  Swapchain(vk::SurfaceKHR surface,
-            vk::PhysicalDevice physical_device,
-            vk::Device device,
-            vk::Extent2D framebuffer_extent,
+  Swapchain(const vk::SurfaceKHR surface,
+            const vk::PhysicalDevice physical_device,
+            const vk::Device device,
+            const vk::Extent2D framebuffer_extent,
             const QueueFamilyIndices& queue_family_indices);
 
   [[nodiscard]] vk::SwapchainKHR operator*() const noexcept { return *swapchain_; }

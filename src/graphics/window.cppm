@@ -17,7 +17,7 @@ namespace vktf {
 
 export class Window {
 public:
-  explicit Window(const char* title);
+  explicit Window(const char* const title);
 
   [[nodiscard]] static std::span<const char* const> GetInstanceExtensions();
   [[nodiscard]] vk::UniqueSurfaceKHR CreateSurface(vk::Instance instance) const;

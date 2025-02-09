@@ -13,10 +13,10 @@ namespace vktf {
 
 export class DescriptorPool {
 public:
-  DescriptorPool(vk::Device device,
-                 std::span<const vk::DescriptorPoolSize> descriptor_pool_sizes,
-                 std::span<const vk::DescriptorSetLayoutBinding> descriptor_set_layout_bindings,
-                 std::uint32_t descriptor_set_count);
+  DescriptorPool(const vk::Device device,
+                 const std::span<const vk::DescriptorPoolSize> descriptor_pool_sizes,
+                 const std::span<const vk::DescriptorSetLayoutBinding> descriptor_set_layout_bindings,
+                 const std::uint32_t descriptor_set_count);
 
   [[nodiscard]] vk::DescriptorSetLayout descriptor_set_layout() const noexcept { return *descriptor_set_layout_; }
   [[nodiscard]] const std::vector<vk::DescriptorSet>& descriptor_sets() const noexcept { return descriptor_sets_; }

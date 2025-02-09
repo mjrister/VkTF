@@ -20,7 +20,9 @@ namespace vktf {
 
 export class ShaderModule {
 public:
-  ShaderModule(vk::Device device, const std::filesystem::path& shader_filepath, vk::ShaderStageFlagBits shader_stage);
+  ShaderModule(const vk::Device device,
+               const std::filesystem::path& shader_filepath,
+               const vk::ShaderStageFlagBits shader_stage);
 
   [[nodiscard]] vk::ShaderModule operator*() const noexcept { return *shader_module_; }
 

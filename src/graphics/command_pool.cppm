@@ -11,10 +11,10 @@ namespace vktf {
 
 export class CommandPool {
 public:
-  CommandPool(vk::Device device,
-              vk::CommandPoolCreateFlags command_pool_create_flags,
-              std::uint32_t queue_family_index,
-              std::uint32_t command_buffer_count);
+  CommandPool(const vk::Device device,
+              const vk::CommandPoolCreateFlags command_pool_create_flags,
+              const std::uint32_t queue_family_index,
+              const std::uint32_t command_buffer_count);
 
   [[nodiscard]] const auto& command_buffers() const noexcept { return command_buffers_; }
 

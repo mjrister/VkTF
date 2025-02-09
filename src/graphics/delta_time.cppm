@@ -8,7 +8,7 @@ namespace vktf {
 
 export class DeltaTime {
   using Clock = std::chrono::steady_clock;
-  using Duration = std::chrono::duration<float>;
+  using Duration = std::chrono::duration<float>;  // float seconds
   using TimePoint = std::chrono::time_point<Clock, Duration>;
 
 public:
