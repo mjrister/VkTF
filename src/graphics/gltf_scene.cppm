@@ -40,34 +40,12 @@ import command_pool;
 import data_view;
 import descriptor_pool;
 import image;
+import material;
+import mesh;
 import shader_module;
 import texture;
 
 namespace {
-
-struct Material {
-  vktf::Texture base_color_texture;
-  vktf::Texture metallic_roughness_texture;
-  vktf::Texture normal_texture;
-  vktf::Buffer properties_buffer;
-  vk::DescriptorSet descriptor_set;
-};
-
-struct IndexBuffer {
-  std::uint32_t index_count = 0;
-  vk::IndexType index_type = vk::IndexType::eUint16;
-  vktf::Buffer buffer;
-};
-
-struct Primitive {
-  vktf::Buffer vertex_buffer;
-  IndexBuffer index_buffer;
-  const Material* material = nullptr;
-};
-
-struct Mesh {
-  std::vector<Primitive> primitives;
-};
 
 struct Light {
   glm::vec4 position{0.0f};
@@ -75,7 +53,7 @@ struct Light {
 };
 
 struct Node {
-  const Mesh* mesh = nullptr;
+  const vktf::Mesh* mesh = nullptr;
   const Light* light = nullptr;
   glm::mat4 transform{0.0f};
   std::vector<std::unique_ptr<const Node>> children;
@@ -281,48 +259,15 @@ struct CopyBufferOptions {
   std::vector<vktf::Buffer> staging_buffers;  // staging buffers must remain in scope until copy commands complete
 };
 
-constexpr VmaAllocationCreateInfo kHostVisibleAllocationCreateInfo{
-    .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-    .usage = VMA_MEMORY_USAGE_AUTO};
-
-template <typename T>
-vk::Buffer CreateStagingBuffer(const vktf::DataView<const T> data_view,
-                               const VmaAllocator allocator,
-                               std::vector<vktf::Buffer>& staging_buffers) {
-  auto& staging_buffer = staging_buffers.emplace_back(data_view.size_bytes(),
-                                                      vk::BufferUsageFlagBits::eTransferSrc,
-                                                      allocator,
-                                                      kHostVisibleAllocationCreateInfo);
-
-  staging_buffer.MapMemory();
-  staging_buffer.Copy(data_view);
-  staging_buffer.UnmapMemory();  // staging buffers are only copied once so they can be unmapped immediately
-
-  return *staging_buffer;
-}
-
-template <typename T>
-vktf::Buffer CreateBuffer(const vktf::DataView<const T>& data_view,
-                          const vk::BufferUsageFlags usage_flags,
-                          CopyBufferOptions& copy_buffer_options) {
-  auto& [command_buffer, allocator, staging_buffers] = copy_buffer_options;
-  const auto staging_buffer = CreateStagingBuffer(data_view, allocator, staging_buffers);
-
-  vktf::Buffer buffer{data_view.size_bytes(), usage_flags | vk::BufferUsageFlagBits::eTransferDst, allocator};
-  command_buffer.copyBuffer(staging_buffer, *buffer, vk::BufferCopy{.size = data_view.size_bytes()});
-
-  return buffer;
-}
-
 std::vector<vktf::Buffer> CreateMappedUniformBuffers(const std::size_t buffer_count,
                                                      const std::size_t buffer_size_bytes,
                                                      const VmaAllocator allocator) {
-  return std::views::iota(0u, buffer_count)  //
+  return std::views::iota(0uz, buffer_count)  //
          | std::views::transform([buffer_size_bytes, allocator](const auto /*frame_index*/) {
              vktf::Buffer buffer{buffer_size_bytes,
                                  vk::BufferUsageFlagBits::eUniformBuffer,
                                  allocator,
-                                 kHostVisibleAllocationCreateInfo};
+                                 vktf::kHostVisibleAllocationCreateInfo};
              buffer.MapMemory();  // enable persistent mapping
              return buffer;
            })
@@ -563,10 +508,10 @@ MaterialTextures CreateMaterialTextures(const cgltf_material& gltf_material,
                           .maybe_normal_texture = normal_texture_future.get()};
 }
 
-std::unique_ptr<Material> CreateMaterial(const vk::Device device,
-                                         const cgltf_material& gltf_material,
-                                         MaterialTextures& material_textures,
-                                         CopyBufferOptions& copy_buffer_options) {
+std::unique_ptr<vktf::Material> CreateMaterial(const vk::Device device,
+                                               const cgltf_material& gltf_material,
+                                               MaterialTextures& material_textures,
+                                               CopyBufferOptions& copy_buffer_options) {
   auto& [maybe_base_color_texture, maybe_metallic_roughness_texture, maybe_normal_texture] = material_textures;
 
   if (std::ranges::any_of(
@@ -590,16 +535,19 @@ std::unique_ptr<Material> CreateMaterial(const vk::Device device,
   auto& normal_texture = *maybe_normal_texture;
 
   auto& [command_buffer, allocator, staging_buffers] = copy_buffer_options;
-  staging_buffers.push_back(base_color_texture.CreateImage(device, command_buffer, allocator));
-  staging_buffers.push_back(metallic_roughness_texture.CreateImage(device, command_buffer, allocator));
-  staging_buffers.push_back(normal_texture.CreateImage(device, command_buffer, allocator));
+  base_color_texture.CreateImage(device, command_buffer, allocator, staging_buffers);
+  metallic_roughness_texture.CreateImage(device, command_buffer, allocator, staging_buffers);
+  normal_texture.CreateImage(device, command_buffer, allocator, staging_buffers);
 
-  return std::make_unique<Material>(std::move(base_color_texture),
-                                    std::move(metallic_roughness_texture),
-                                    std::move(normal_texture),
-                                    CreateBuffer<MaterialProperties>(material_properties,
-                                                                     vk::BufferUsageFlagBits::eUniformBuffer,
-                                                                     copy_buffer_options));
+  return std::make_unique<vktf::Material>(
+      std::move(base_color_texture),
+      std::move(metallic_roughness_texture),
+      std::move(normal_texture),
+      vktf::CreateBuffer<MaterialProperties>(material_properties,
+                                             vk::BufferUsageFlagBits::eUniformBuffer,
+                                             command_buffer,
+                                             allocator,
+                                             staging_buffers));
 }
 
 std::optional<vktf::DescriptorPool> CreateMaterialDescriptorPool(const vk::Device device,
@@ -625,7 +573,7 @@ std::optional<vktf::DescriptorPool> CreateMaterialDescriptorPool(const vk::Devic
 
 void UpdateMaterialDescriptorSets(const vk::Device device,
                                   const vktf::DescriptorPool& material_descriptor_pool,
-                                  GltfMap<cgltf_material, std::unique_ptr<Material>>& materials) {
+                                  GltfMap<cgltf_material, std::unique_ptr<vktf::Material>>& materials) {
   const auto& descriptor_sets = material_descriptor_pool.descriptor_sets();
   assert(materials.size() == descriptor_sets.size());
 
@@ -693,13 +641,6 @@ struct VertexAttribute {
   std::optional<Data> maybe_data;
 };
 
-struct Vertex {
-  glm::vec3 position{0.0f};
-  glm::vec3 normal{0.0f};
-  glm::vec4 tangent{0.0f};
-  glm::vec2 texture_coordinates_0{0.0f};
-};
-
 template <glm::length_t N>
   requires VecConstructible<float, N>
 std::vector<glm::vec<N, float>> UnpackFloats(const cgltf_accessor& gltf_accessor) {
@@ -729,8 +670,7 @@ bool TryUnpackAttribute(const cgltf_attribute& gltf_attribute, VertexAttribute<f
 }
 
 template <glm::length_t N>
-void ValidateAttribute(const VertexAttribute<float, N>& vertex_attribute) {
-  // TODO: add support for optional vertex attributes
+void ValidateRequiredAttribute(const VertexAttribute<float, N>& vertex_attribute) {
   if (const auto& maybe_attribute_data = vertex_attribute.maybe_data;
       !maybe_attribute_data.has_value() || maybe_attribute_data->empty()) {
     throw std::runtime_error{std::format("Missing required vertex attribute {}", vertex_attribute.name)};
@@ -741,10 +681,10 @@ void ValidateAttributes(const VertexAttribute<float, 3>& position_attribute,
                         const VertexAttribute<float, 3>& normal_attribute,
                         const VertexAttribute<float, 4>& tangent_attribute,
                         const VertexAttribute<float, 2>& texture_coordinates_0_attribute) {
-  ValidateAttribute(position_attribute);
-  ValidateAttribute(normal_attribute);
-  ValidateAttribute(tangent_attribute);
-  ValidateAttribute(texture_coordinates_0_attribute);
+  ValidateRequiredAttribute(position_attribute);
+  ValidateRequiredAttribute(normal_attribute);   // TODO: derive from positions when undefined
+  ValidateRequiredAttribute(tangent_attribute);  // TODO: derive from positions and texture coordinates when undefined
+  ValidateRequiredAttribute(texture_coordinates_0_attribute);
 
 #ifndef NDEBUG
   // the glTF specification requires all primitive attributes have the same count
@@ -756,7 +696,41 @@ void ValidateAttributes(const VertexAttribute<float, 3>& position_attribute,
 #endif
 }
 
-std::vector<Vertex> CreateVertices(const cgltf_primitive& gltf_primitive) {
+std::vector<vktf::Vertex> CreateVertices(const std::vector<glm::vec3>& positions,
+                                         const std::vector<glm::vec3>& normals,
+                                         const std::vector<glm::vec4>& tangents,
+                                         const std::vector<glm::vec2>& texture_coordinates_0s) {
+  return std::views::zip_transform(
+             [](const auto& position, const auto& normal, const auto& tangent, const auto& texture_coordinates_0) {
+               // the glTF specification requires unit length normals and tangent vectors
+               static constexpr auto kEpsilon = 1.0e-6f;
+               assert(glm::epsilonEqual(glm::length(normal), 1.0f, kEpsilon));
+               assert(glm::epsilonEqual(glm::length(glm::vec3{tangent}), 1.0f, kEpsilon));
+               return vktf::Vertex{.position = position,
+                                   .normal = normal,
+                                   .tangent = tangent,
+                                   .texture_coordinates_0 = texture_coordinates_0};
+             },
+             positions,
+             normals,
+             tangents,
+             texture_coordinates_0s)
+         | std::ranges::to<std::vector>();
+}
+
+template <vktf::IndexType T>
+std::vector<T> UnpackIndices(const cgltf_accessor& gltf_accessor) {
+  std::vector<T> indices(gltf_accessor.count);
+  if (const auto index_size_bytes = sizeof(T);
+      cgltf_accessor_unpack_indices(&gltf_accessor, indices.data(), index_size_bytes, indices.size()) == 0) {
+    throw std::runtime_error{std::format("Failed to unpack indices for accessor {}", GetName(gltf_accessor))};
+  }
+  return indices;
+}
+
+vktf::Primitive& EmplacePrimitive(const cgltf_primitive& gltf_primitive,
+                                  const vktf::Material* material,
+                                  std::vector<vktf::Primitive>& primitives) {
   VertexAttribute<float, 3> position_attribute{.name = "POSITION"};
   VertexAttribute<float, 3> normal_attribute{.name = "NORMAL"};
   VertexAttribute<float, 4> tangent_attribute{.name = "TANGENT"};
@@ -784,98 +758,58 @@ std::vector<Vertex> CreateVertices(const cgltf_primitive& gltf_primitive) {
 
   ValidateAttributes(position_attribute, normal_attribute, tangent_attribute, texture_coordinates_0_attribute);
 
-  return std::views::zip_transform(
-             [](const auto& position, const auto& normal, const auto& tangent, const auto& texture_coordinates_0) {
-#ifndef NDEBUG
-               // the glTF specification requires unit length normals and tangent vectors
-               static constexpr auto kEpsilon = 1.0e-6f;
-               assert(glm::epsilonEqual(glm::length(normal), 1.0f, kEpsilon));
-               assert(glm::epsilonEqual(glm::length(glm::vec3{tangent}), 1.0f, kEpsilon));
-#endif
-               return Vertex{.position = position,
-                             .normal = normal,
-                             .tangent = tangent,
-                             .texture_coordinates_0 = texture_coordinates_0};
-             },
-             *position_attribute.maybe_data,
-             *normal_attribute.maybe_data,
-             *tangent_attribute.maybe_data,
-             *texture_coordinates_0_attribute.maybe_data)
-         | std::ranges::to<std::vector>();
-}
+  auto vertices = CreateVertices(*position_attribute.maybe_data,
+                                 *normal_attribute.maybe_data,
+                                 *tangent_attribute.maybe_data,
+                                 *texture_coordinates_0_attribute.maybe_data);
 
-// ====================================================== Meshes =======================================================
-
-template <typename T>
-  requires std::same_as<T, std::uint16_t> || std::same_as<T, std::uint32_t>
-std::vector<T> UnpackIndices(const cgltf_accessor& gltf_accessor) {
-  std::vector<T> indices(gltf_accessor.count);
-  if (const auto index_size_bytes = sizeof(T);
-      cgltf_accessor_unpack_indices(&gltf_accessor, indices.data(), index_size_bytes, indices.size()) == 0) {
-    throw std::runtime_error{std::format("Failed to unpack indices for accessor {}", GetName(gltf_accessor))};
-  }
-  return indices;
-}
-
-IndexBuffer CreateIndexBuffer(const cgltf_accessor& gltf_accessor, CopyBufferOptions& copy_buffer_options) {
-  switch (const auto component_size = cgltf_component_size(gltf_accessor.component_type)) {
-    case 2: {
-      const auto indices = UnpackIndices<std::uint16_t>(gltf_accessor);
-      return IndexBuffer{
-          .index_count = static_cast<std::uint32_t>(indices.size()),
-          .index_type = vk::IndexType::eUint16,
-          .buffer = CreateBuffer<std::uint16_t>(indices, vk::BufferUsageFlagBits::eIndexBuffer, copy_buffer_options)};
-    }
-    case 4: {
-      const auto indices = UnpackIndices<std::uint32_t>(gltf_accessor);
-      return IndexBuffer{
-          .index_count = static_cast<std::uint32_t>(indices.size()),
-          .index_type = vk::IndexType::eUint32,
-          .buffer = CreateBuffer<std::uint32_t>(indices, vk::BufferUsageFlagBits::eIndexBuffer, copy_buffer_options)};
-    }
+  const auto* const indices_accessor = gltf_primitive.indices;
+  switch (const auto indices_component_size = cgltf_component_size(indices_accessor->component_type)) {
+    case 2:
+      return primitives.emplace_back(std::move(vertices), UnpackIndices<std::uint16_t>(*indices_accessor), material);
+    case 4:
+      return primitives.emplace_back(std::move(vertices), UnpackIndices<std::uint32_t>(*indices_accessor), material);
     default: {
       static constexpr auto kBitsPerByte = 8;
-      throw std::runtime_error{std::format("Unsupported {}-bit index type", component_size * kBitsPerByte)};
+      throw std::runtime_error{std::format("Unsupported {}-bit index type", indices_component_size * kBitsPerByte)};
     }
   }
 }
 
-std::unique_ptr<const Mesh> CreateMesh(const cgltf_mesh& gltf_mesh,
-                                       const GltfMap<cgltf_material, std::unique_ptr<Material>>& materials,
-                                       CopyBufferOptions& copy_buffer_options) {
-  std::vector<Primitive> primitives;
+std::unique_ptr<const vktf::Mesh> CreateMesh(const cgltf_mesh& gltf_mesh,
+                                             const GltfMap<cgltf_material, std::unique_ptr<vktf::Material>>& materials,
+                                             CopyBufferOptions& copy_buffer_options) {
+  std::vector<vktf::Primitive> primitives;
   primitives.reserve(gltf_mesh.primitives_count);
 
-  for (auto index = 0; const auto& gltf_primitive : std::span{gltf_mesh.primitives, gltf_mesh.primitives_count}) {
+  for (const auto& [index, gltf_primitive] :
+       std::span{gltf_mesh.primitives, gltf_mesh.primitives_count} | std::views::enumerate) {
     if (gltf_primitive.type != cgltf_primitive_type_triangles) {
       static constexpr auto kMessageFormat = "Failed to create mesh primitive {}[{}] with type {}";
-      std::println(std::cerr, kMessageFormat, GetName(gltf_mesh), index++, gltf_primitive.type);
-      continue;  // TODO: add support for other primitive types
+      std::println(std::cerr, kMessageFormat, GetName(gltf_mesh), index, gltf_primitive.type);
+      continue;  // TODO: support alternative primitive types
     }
 
     if (gltf_primitive.indices == nullptr || gltf_primitive.indices->count == 0) {
       static constexpr auto* kMessageFormat = "Failed to create mesh primitive {}[{}] with invalid indices accessor";
-      std::println(std::cerr, kMessageFormat, GetName(gltf_mesh), index++);
-      continue;  // TODO: add support for non-indexed triangle meshes
+      std::println(std::cerr, kMessageFormat, GetName(gltf_mesh), index);
+      continue;  // TODO: support non-indexed triangle meshes
     }
 
     const auto* const gltf_material = gltf_primitive.material;
     const auto* const material = gltf_material == nullptr ? nullptr : Find(gltf_material, materials).get();
-
     if (material == nullptr) {
       static constexpr auto* kMessageFormat = "Failed to create mesh primitive {}[{}] with unsupported material";
-      std::println(std::cerr, kMessageFormat, GetName(gltf_mesh), index++);
-      continue;  // TODO: add default material support
+      std::println(std::cerr, kMessageFormat, GetName(gltf_mesh), index);
+      continue;  // TODO: support dynamic material layouts
     }
 
-    const auto vertices = CreateVertices(gltf_primitive);
-    primitives.emplace_back(CreateBuffer<Vertex>(vertices, vk::BufferUsageFlagBits::eVertexBuffer, copy_buffer_options),
-                            CreateIndexBuffer(*gltf_primitive.indices, copy_buffer_options),
-                            material);
-    ++index;
+    auto& primitive = EmplacePrimitive(gltf_primitive, material, primitives);
+    auto& [command_buffer, allocator, staging_buffers] = copy_buffer_options;
+    primitive.CreateBuffers(command_buffer, allocator, staging_buffers);
   }
 
-  return std::make_unique<const Mesh>(std::move(primitives));
+  return std::make_unique<const vktf::Mesh>(std::move(primitives));
 }
 
 // ======================================================= Nodes =======================================================
@@ -886,10 +820,11 @@ glm::mat4 GetTransform(const cgltf_node& gltf_node) {
   return transform;
 }
 
-std::vector<std::unique_ptr<const Node>> CreateNodes(const cgltf_node* const* const gltf_nodes,
-                                                     const cgltf_size gltf_nodes_count,
-                                                     const GltfMap<cgltf_mesh, std::unique_ptr<const Mesh>>& meshes,
-                                                     const GltfMap<cgltf_light, std::unique_ptr<const Light>>& lights) {
+std::vector<std::unique_ptr<const Node>> CreateNodes(
+    const cgltf_node* const* const gltf_nodes,
+    const cgltf_size gltf_nodes_count,
+    const GltfMap<cgltf_mesh, std::unique_ptr<const vktf::Mesh>>& meshes,
+    const GltfMap<cgltf_light, std::unique_ptr<const Light>>& lights) {
   return std::span{gltf_nodes, gltf_nodes_count}
          | std::views::transform([&meshes, &lights](const auto* const gltf_node) {
              return std::make_unique<const Node>(
@@ -960,26 +895,26 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
 
   static constexpr vk::VertexInputBindingDescription kVertexInputBindingDescription{
       .binding = 0,
-      .stride = sizeof(Vertex),
+      .stride = sizeof(vktf::Vertex),
       .inputRate = vk::VertexInputRate::eVertex};
 
   static constexpr std::array kVertexAttributeDescriptions{
       vk::VertexInputAttributeDescription{.location = 0,
                                           .binding = 0,
                                           .format = vk::Format::eR32G32B32Sfloat,
-                                          .offset = offsetof(Vertex, position)},
+                                          .offset = offsetof(vktf::Vertex, position)},
       vk::VertexInputAttributeDescription{.location = 1,
                                           .binding = 0,
                                           .format = vk::Format::eR32G32B32Sfloat,
-                                          .offset = offsetof(Vertex, normal)},
+                                          .offset = offsetof(vktf::Vertex, normal)},
       vk::VertexInputAttributeDescription{.location = 2,
                                           .binding = 0,
                                           .format = vk::Format::eR32G32B32A32Sfloat,
-                                          .offset = offsetof(Vertex, tangent)},
+                                          .offset = offsetof(vktf::Vertex, tangent)},
       vk::VertexInputAttributeDescription{.location = 3,
                                           .binding = 0,
                                           .format = vk::Format::eR32G32Sfloat,
-                                          .offset = offsetof(Vertex, texture_coordinates_0)}};
+                                          .offset = offsetof(vktf::Vertex, texture_coordinates_0)}};
 
   static constexpr vk::PipelineVertexInputStateCreateInfo kVertexInputStateCreateInfo{
       .vertexBindingDescriptionCount = 1,
@@ -1054,25 +989,18 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
 
 // ==================================================== Rendering ======================================================
 
-void Render(const Mesh& mesh,
-            const glm::mat4& node_transform,
+void Render(const vktf::Mesh& mesh,
+            const glm::mat4& model_transform,
             const vk::PipelineLayout graphics_pipeline_layout,
             const vk::CommandBuffer command_buffer) {
   using ModelTransform = decltype(PushConstants::model_transform);
   command_buffer.pushConstants<ModelTransform>(graphics_pipeline_layout,
                                                vk::ShaderStageFlagBits::eVertex,
                                                offsetof(PushConstants, model_transform),
-                                               node_transform);
+                                               model_transform);
 
-  for (const auto& [vertex_buffer, index_buffer, material] : mesh.primitives) {
-    command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                                      graphics_pipeline_layout,
-                                      1,
-                                      material->descriptor_set,
-                                      nullptr);
-    command_buffer.bindVertexBuffers(0, *vertex_buffer, static_cast<vk::DeviceSize>(0));
-    command_buffer.bindIndexBuffer(*index_buffer.buffer, 0, index_buffer.index_type);
-    command_buffer.drawIndexed(index_buffer.index_count, 1, 0, 0, 0);
+  for (const auto& primitive : mesh) {
+    primitive.Render(command_buffer, graphics_pipeline_layout);
   }
 }
 

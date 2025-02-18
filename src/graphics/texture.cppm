@@ -49,13 +49,13 @@ public:
 
   [[nodiscard]] vk::Sampler sampler() const noexcept { return sampler_; }
 
-  // returns a staging buffer which must remain in scope until command buffer queue submission completes
-  [[nodiscard]] Buffer CreateImage(const vk::Device device,
-                                   const vk::CommandBuffer command_buffer,
-                                   const VmaAllocator allocator);
+  void CreateImage(const vk::Device device,
+                   const vk::CommandBuffer command_buffer,
+                   const VmaAllocator allocator,
+                   std::vector<Buffer>& staging_buffers);
 
 private:
-  std::variant<UniqueKtxTexture2, Image> image_;  // KTX texture on host memory or a Vulkan image on device memory
+  std::variant<UniqueKtxTexture2, Image> image_;
   vk::Sampler sampler_;
 };
 
@@ -320,30 +320,15 @@ std::vector<vk::BufferImageCopy> GetBufferImageCopies(const ktxTexture2& ktx_tex
          | std::ranges::to<std::vector>();
 }
 
-template <typename T>
-[[nodiscard]] vktf::Buffer CreateStagingBuffer(const vktf::DataView<const T> data_view, const VmaAllocator allocator) {
-  static constexpr VmaAllocationCreateInfo kHostVisibleAllocationCreateInfo{
-      .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-      .usage = VMA_MEMORY_USAGE_AUTO};
-
-  vktf::Buffer staging_buffer{data_view.size_bytes(),
-                              vk::BufferUsageFlagBits::eTransferSrc,
-                              allocator,
-                              kHostVisibleAllocationCreateInfo};
-
-  staging_buffer.MapMemory();
-  staging_buffer.Copy(data_view);
-  staging_buffer.UnmapMemory();  // staging buffers are only copied once so they can be unmapped immediately
-
-  return staging_buffer;
-}
-
-std::pair<vktf::Buffer, vktf::Image> CreateImage(const vk::Device device,
-                                                 const ktxTexture2& ktx_texture2,
-                                                 const vk::CommandBuffer command_buffer,
-                                                 const VmaAllocator allocator) {
-  auto staging_buffer =
-      CreateStagingBuffer(vktf::DataView<const ktx_uint8_t>{ktx_texture2.pData, ktx_texture2.dataSize}, allocator);
+vktf::Image CreateImage(const ktxTexture2& ktx_texture2,
+                        const vk::Device device,
+                        const vk::CommandBuffer command_buffer,
+                        const VmaAllocator allocator,
+                        std::vector<vktf::Buffer>& staging_buffers) {
+  const auto& staging_buffer =
+      vktf::EmplaceStagingBuffer(vktf::DataView<const ktx_uint8_t>{ktx_texture2.pData, ktx_texture2.dataSize},
+                                 allocator,
+                                 staging_buffers);
 
   vktf::Image image{device,
                     static_cast<vk::Format>(ktx_texture2.vkFormat),
@@ -357,7 +342,7 @@ std::pair<vktf::Buffer, vktf::Image> CreateImage(const vk::Device device,
   const auto buffer_image_copies = GetBufferImageCopies(ktx_texture2);
   image.Copy(*staging_buffer, buffer_image_copies, command_buffer);
 
-  return std::pair{std::move(staging_buffer), std::move(image)};
+  return image;
 }
 
 }  // namespace
@@ -370,14 +355,13 @@ Texture::Texture(const std::filesystem::path& texture_filepath,
                  const vk::Sampler sampler)
     : image_{CreateKtxTexture2(texture_filepath, color_space, physical_device)}, sampler_{sampler} {}
 
-Buffer Texture::CreateImage(const vk::Device device,
-                            const vk::CommandBuffer command_buffer,
-                            const VmaAllocator allocator) {
+void Texture::CreateImage(const vk::Device device,
+                          const vk::CommandBuffer command_buffer,
+                          const VmaAllocator allocator,
+                          std::vector<Buffer>& staging_buffers) {
   const auto* const ktx_texture2 = std::get_if<UniqueKtxTexture2>(&image_);
   assert(ktx_texture2 != nullptr);
-  std::optional<Buffer> staging_buffer;
-  std::tie(staging_buffer, image_) = ::CreateImage(device, **ktx_texture2, command_buffer, allocator);
-  return std::move(*staging_buffer);
+  image_ = ::CreateImage(**ktx_texture2, device, command_buffer, allocator, staging_buffers);
 }
 
 }  // namespace vktf

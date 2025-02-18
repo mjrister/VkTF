@@ -14,6 +14,8 @@ target_sources(graphics PUBLIC FILE_SET CXX_MODULES
                                      gltf_scene.cppm
                                      image.cppm
                                      instance.cppm
+                                     material.cppm
+                                     mesh.cppm
                                      physical_device.cppm
                                      shader_module.cppm
                                      swapchain.cppm
