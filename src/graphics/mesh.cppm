@@ -45,11 +45,13 @@ public:
     assert(material != nullptr);
   }
 
+  [[nodiscard]] const Material* material() const noexcept { return material_; }
+
   void CreateBuffers(const vk::CommandBuffer command_buffer,
                      const VmaAllocator allocator,
                      std::vector<Buffer>& staging_buffers);
 
-  void Render(const vk::CommandBuffer command_buffer, const vk::PipelineLayout pipeline_layout) const;
+  void Render(const vk::CommandBuffer command_buffer) const;
 
 private:
   using VertexData = std::vector<Vertex>;
@@ -57,7 +59,7 @@ private:
 
   std::variant<VertexData, Buffer> vertices_;
   std::variant<IndexData, IndexBuffer> indices_;
-  const Material* material_ = nullptr;  // non-owning pointer managed by the scene
+  const Material* material_ = nullptr;
 };
 
 export using Mesh = std::vector<Primitive>;
@@ -65,6 +67,20 @@ export using Mesh = std::vector<Primitive>;
 }  // namespace vktf
 
 module :private;
+
+namespace {
+
+template <vktf::IndexType T>
+vk::IndexType GetIndexType() {
+  if constexpr (std::same_as<T, std::uint16_t>) {
+    return vk::IndexType::eUint16;
+  } else {
+    static_assert(std::same_as<T, std::uint32_t>);
+    return vk::IndexType::eUint32;
+  }
+}
+
+}  // namespace
 
 namespace vktf {
 
@@ -82,30 +98,15 @@ void Primitive::CreateBuffers(const vk::CommandBuffer command_buffer,
 
   indices_ = std::visit(
       [command_buffer, allocator, &staging_buffers]<IndexType T>(const std::vector<T>& index_data_t) {
-        if constexpr (std::same_as<T, std::uint16_t>) {
-          return IndexBuffer{
-              .buffer = CreateBuffer<T>(index_data_t, eIndexBuffer, command_buffer, allocator, staging_buffers),
-              .index_type = vk::IndexType::eUint16,
-              .index_count = static_cast<std::uint32_t>(index_data_t.size())};
-        } else {
-          static_assert(std::same_as<T, std::uint32_t>);
-          return IndexBuffer{
-              .buffer = CreateBuffer<T>(index_data_t, eIndexBuffer, command_buffer, allocator, staging_buffers),
-              .index_type = vk::IndexType::eUint32,
-              .index_count = static_cast<std::uint32_t>(index_data_t.size())};
-        }
+        return IndexBuffer{
+            .buffer = CreateBuffer<T>(index_data_t, eIndexBuffer, command_buffer, allocator, staging_buffers),
+            .index_type = GetIndexType<T>(),
+            .index_count = static_cast<std::uint32_t>(index_data_t.size())};
       },
       *index_data);
 }
 
-void Primitive::Render(const vk::CommandBuffer command_buffer, const vk::PipelineLayout pipeline_layout) const {
-  // TODO: order primitive rendering by material to reduce descriptor set bindings
-  command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                                    pipeline_layout,
-                                    1,
-                                    material_->descriptor_set,
-                                    nullptr);
-
+void Primitive::Render(const vk::CommandBuffer command_buffer) const {
   const auto* const vertex_buffer = std::get_if<Buffer>(&vertices_);
   assert(vertex_buffer != nullptr);
   command_buffer.bindVertexBuffers(0, **vertex_buffer, static_cast<vk::DeviceSize>(0));

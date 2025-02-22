@@ -9,7 +9,6 @@ module;
 #include <filesystem>
 #include <format>
 #include <future>
-#include <initializer_list>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -539,6 +538,13 @@ std::unique_ptr<vktf::Material> CreateMaterial(const vk::Device device,
   metallic_roughness_texture.CreateImage(device, command_buffer, allocator, staging_buffers);
   normal_texture.CreateImage(device, command_buffer, allocator, staging_buffers);
 
+  const auto& pbr_metallic_roughness = gltf_material->pbr_metallic_roughness;
+  const MaterialProperties material_properties{
+      .base_color_factor = ToVec(pbr_metallic_roughness.base_color_factor),
+      .metallic_roughness_factor =
+          glm::vec2{pbr_metallic_roughness.metallic_factor, pbr_metallic_roughness.roughness_factor},
+      .normal_scale = gltf_material->normal_texture.scale};
+
   return std::make_unique<vktf::Material>(
       std::move(base_color_texture),
       std::move(metallic_roughness_texture),
@@ -547,7 +553,10 @@ std::unique_ptr<vktf::Material> CreateMaterial(const vk::Device device,
                                              vk::BufferUsageFlagBits::eUniformBuffer,
                                              command_buffer,
                                              allocator,
-                                             staging_buffers));
+                                             staging_buffers),
+      std::move(base_color_texture),
+      std::move(metallic_roughness_texture),
+      std::move(normal_texture));
 }
 
 std::optional<vktf::DescriptorPool> CreateMaterialDescriptorPool(const vk::Device device,
@@ -989,45 +998,59 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
 
 // ==================================================== Rendering ======================================================
 
-void Render(const vktf::Mesh& mesh,
-            const glm::mat4& model_transform,
-            const vk::PipelineLayout graphics_pipeline_layout,
-            const vk::CommandBuffer command_buffer) {
-  using ModelTransform = decltype(PushConstants::model_transform);
-  command_buffer.pushConstants<ModelTransform>(graphics_pipeline_layout,
-                                               vk::ShaderStageFlagBits::eVertex,
-                                               offsetof(PushConstants, model_transform),
-                                               model_transform);
+struct WorldPrimitive {
+  const vktf::Primitive* primitive = nullptr;
+  glm::mat4 world_transform{0.0f};
+};
 
-  for (const auto& primitive : mesh) {
-    primitive.Render(command_buffer, graphics_pipeline_layout);
-  }
-}
-
-void Render(const Node& node,
-            const glm::mat4& parent_transform,
-            const vk::PipelineLayout graphics_pipeline_layout,
-            const vk::CommandBuffer command_buffer,
-            std::vector<Light>& lights_buffer) {
-  const auto node_transform = parent_transform * node.transform;
+void UpdateWorldTransforms(const Node& node,
+                           const glm::mat4& parent_transform,
+                           std::vector<Light>& world_lights,
+                           GltfMap<vktf::Material, std::vector<WorldPrimitive>>& world_primitives) {
+  const auto world_transform = parent_transform * node.transform;
 
   if (node.light != nullptr) {
     if (node.light->position.w == 0.0f) {
-      const auto& direction = node_transform[2];  // light direction derived from the node orientation z-axis
-      lights_buffer.emplace_back(glm::normalize(direction), node.light->color);
+      const auto& light_direction = world_transform[2];
+      world_lights.emplace_back(glm::normalize(light_direction), node.light->color);
     } else {
       assert(node.light->position.w == 1.0f);
-      const auto& position = node_transform[3];  // light position derived from the node translation vector
-      lights_buffer.emplace_back(position, node.light->color);
+      const auto& light_position = world_transform[3];
+      world_lights.emplace_back(light_position, node.light->color);
     }
   }
 
-  if (const auto* const mesh = node.mesh; mesh != nullptr) {
-    Render(*mesh, node_transform, graphics_pipeline_layout, command_buffer);
+  if (node.mesh != nullptr) {
+    for (const auto& primitive : *node.mesh) {
+      world_primitives[primitive.material()].emplace_back(&primitive, world_transform);
+    }
   }
 
   for (const auto& child_node : node.children) {
-    Render(*child_node, node_transform, graphics_pipeline_layout, command_buffer, lights_buffer);
+    UpdateWorldTransforms(*child_node, world_transform, world_lights, world_primitives);
+  }
+}
+
+void Render(const GltfMap<vktf::Material, std::vector<WorldPrimitive>>& world_primitives_by_material,
+            const vk::PipelineLayout graphics_pipeline_layout,
+            const vk::CommandBuffer command_buffer) {
+  for (const auto& [material, world_primitives] : world_primitives_by_material) {
+    assert(material != nullptr);
+    command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                      graphics_pipeline_layout,
+                                      1,
+                                      material->descriptor_set,
+                                      nullptr);
+
+    for (const auto& [primitive, world_transform] : world_primitives) {
+      using ModelTransform = decltype(PushConstants::model_transform);
+      command_buffer.pushConstants<ModelTransform>(graphics_pipeline_layout,
+                                                   vk::ShaderStageFlagBits::eVertex,
+                                                   offsetof(PushConstants, model_transform),
+                                                   world_transform);
+      assert(primitive != nullptr);
+      primitive->Render(command_buffer);
+    }
   }
 }
 
@@ -1169,6 +1192,16 @@ void GltfScene::Render(const Camera& camera,
                        const vk::CommandBuffer command_buffer) const {
   command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphics_pipeline_);
 
+  std::vector<Light> world_lights;
+  world_lights.reserve(lights_.size());
+
+  GltfMap<Material, std::vector<WorldPrimitive>> world_primitives;
+  world_primitives.reserve(materials_.size());
+
+  UpdateWorldTransforms(*root_node_, glm::mat4{1.0f}, world_lights, world_primitives);
+
+  command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphics_pipeline_);
+
   const auto& global_descriptor_sets = global_descriptor_pool_->descriptor_sets();
   command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                                     *graphics_pipeline_layout_,
@@ -1176,24 +1209,19 @@ void GltfScene::Render(const Camera& camera,
                                     global_descriptor_sets[frame_index],
                                     nullptr);
 
+  camera_buffers_[frame_index].Copy<CameraTransforms>(
+      CameraTransforms{.view_transform = camera.view_transform(),
+                       .projection_transform = camera.projection_transform()});
+
+  lights_buffers_[frame_index].Copy<Light>(world_lights);
+
   using ViewPosition = decltype(PushConstants::view_position);
   command_buffer.pushConstants<ViewPosition>(*graphics_pipeline_layout_,
                                              vk::ShaderStageFlagBits::eFragment,
                                              offsetof(PushConstants, view_position),
                                              camera.GetPosition());
 
-  camera_buffers_[frame_index].Copy<CameraTransforms>(
-      CameraTransforms{.view_transform = camera.view_transform(),
-                       .projection_transform = camera.projection_transform()});
-
-  std::vector<Light> lights_buffer;
-  lights_buffer.reserve(lights_.size());
-
-  for (const auto& child_node : root_node_->children) {
-    ::Render(*child_node, root_node_->transform, *graphics_pipeline_layout_, command_buffer, lights_buffer);
-  }
-
-  lights_buffers_[frame_index].Copy<Light>(lights_buffer);
+  ::Render(world_primitives, *graphics_pipeline_layout_, command_buffer);
 }
 
 }  // namespace vktf
