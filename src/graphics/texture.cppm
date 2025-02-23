@@ -245,16 +245,13 @@ StbImage Load(const std::filesystem::path& image_filepath) {
 }
 
 vktf::UniqueKtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::path& image_filepath,
-                                                       const vktf::ColorSpace color_space,
-                                                       const vk::PhysicalDevice physical_device) {
+                                                       const vktf::ColorSpace color_space) {
   const auto [width, height, channels, data] = Load(image_filepath);
   static_assert(sizeof(decltype(data)::element_type) == 1, "8-bit image data is required");
   const auto data_size_bytes = static_cast<ktx_size_t>(width) * height * channels;
 
-  // R8G8B8A8 format support for images with VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT is required by the Vulkan specification
   const auto& [rgba32_srgb_format, rgba32_unorm_format, _] = kRgba32TranscodeTarget;
   const auto rgba32_format = color_space == vktf::ColorSpace::kLinear ? rgba32_unorm_format : rgba32_srgb_format;
-  assert(IsFormatSupported(physical_device, rgba32_format));
 
   vktf::UniqueKtxTexture2 ktx_texture2{nullptr, DestroyKtxTexture2};
   ktxTextureCreateInfo ktx_texture_create_info{.vkFormat = static_cast<ktx_uint32_t>(rgba32_format),
@@ -293,9 +290,15 @@ vktf::UniqueKtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::pa
 vktf::UniqueKtxTexture2 CreateKtxTexture2(const std::filesystem::path& texture_filepath,
                                           const vktf::ColorSpace color_space,
                                           const vk::PhysicalDevice physical_device) {
+#ifndef NDEBUG
+  // R8G8B8A8 format support for images with VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT is required by the Vulkan specification
+  const auto& [rgba32_srgb_format, rgba32_unorm_format, _] = kRgba32TranscodeTarget;
+  assert(IsFormatSupported(physical_device, rgba32_srgb_format));
+  assert(IsFormatSupported(physical_device, rgba32_unorm_format));
+#endif
   return texture_filepath.extension() == ".ktx2"
              ? CreateKtxTexture2FromKtxFile(texture_filepath, color_space, physical_device)
-             : CreateKtxTexture2FromImageFile(texture_filepath, color_space, physical_device);
+             : CreateKtxTexture2FromImageFile(texture_filepath, color_space);
 }
 
 std::vector<vk::BufferImageCopy> GetBufferImageCopies(const ktxTexture2& ktx_texture2) {
