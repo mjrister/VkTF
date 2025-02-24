@@ -44,7 +44,7 @@ import mesh;
 import shader_module;
 import texture;
 
-namespace {
+namespace vktf {
 
 struct Light {
   glm::vec4 position{0.0f};
@@ -52,15 +52,11 @@ struct Light {
 };
 
 struct Node {
-  const vktf::Mesh* mesh = nullptr;
+  const Mesh* mesh = nullptr;
   const Light* light = nullptr;
   glm::mat4 transform{0.0f};
   std::vector<std::unique_ptr<const Node>> children;
 };
-
-}  // namespace
-
-namespace vktf {
 
 export class GltfScene {
 public:
@@ -69,8 +65,8 @@ public:
             const vk::Bool32 enable_sampler_anisotropy,
             const float max_sampler_anisotropy,
             const vk::Device device,
-            const vk::Queue queue,
-            const std::uint32_t queue_family_index,
+            const vk::Queue transfer_queue,
+            const std::uint32_t transfer_queue_family_index,
             const vk::Extent2D viewport_extent,
             const vk::SampleCountFlagBits msaa_sample_count,
             const vk::RenderPass render_pass,
@@ -96,6 +92,8 @@ private:
 }  // namespace vktf
 
 module :private;
+
+#pragma region formatters
 
 template <>
 struct std::formatter<cgltf_result> : std::formatter<std::string_view> {
@@ -179,21 +177,11 @@ private:
   }
 };
 
+#pragma endregion
+
 namespace {
 
-template <typename T, glm::length_t N>
-concept VecConstructible = std::constructible_from<glm::vec<N, T>>;
-
-template <typename T, glm::length_t N>
-  requires VecConstructible<T, N>
-glm::vec<N, T> ToVec(const T (&src_array)[N]) {  // NOLINT(*-c-arrays): defines an explicit conversion from a c-array
-  glm::vec<N, T> dst_vec{};
-  static_assert(sizeof(src_array) == sizeof(dst_vec));
-  std::ranges::copy(src_array, glm::value_ptr(dst_vec));
-  return dst_vec;
-}
-
-// ======================================================= glTF ========================================================
+#pragma region utilities
 
 using UniqueGltfData = std::unique_ptr<cgltf_data, decltype(&cgltf_free)>;
 
@@ -218,17 +206,6 @@ UniqueGltfData Load(const std::string& gltf_filepath) {
   return gltf_data;
 }
 
-const cgltf_scene& GetDefaultScene(const cgltf_data& gltf_data) {
-  if (const auto* const gltf_scene = gltf_data.scene; gltf_scene != nullptr) {
-    return *gltf_scene;
-  }
-  if (const std::span gltf_scenes{gltf_data.scenes, gltf_data.scenes_count}; !gltf_scenes.empty()) {
-    return gltf_scenes.front();  // return the first available scene when no default is specified
-  }
-  // TODO: glTF files not containing scene data should be treated as a library of individual entities
-  throw std::runtime_error{"At least one glTF scene is required to render"};
-}
-
 template <typename T>
   requires std::convertible_to<decltype(T::name), const char*>
 std::string_view GetName(const T& gltf_element) {
@@ -241,107 +218,29 @@ std::string_view GetName(const T& gltf_element) {
 }
 
 template <typename Key, typename Value>
-using GltfMap = std::unordered_map<const Key*, Value>;
-
-template <typename Key, typename Value>
-const Value& Find(const Key* const gltf_key, const GltfMap<Key, Value>& gltf_map) {
-  const auto iterator = gltf_map.find(gltf_key);
-  assert(iterator != gltf_map.cend());  // assumed to contain all known key-value pairs before this function is called
+const Value& Get(const Key* const key, const std::unordered_map<const Key*, Value>& map) {
+  const auto iterator = map.find(key);
+  assert(iterator != map.cend());
   return iterator->second;
 }
 
-// ====================================================== Buffers ======================================================
+template <typename T, glm::length_t N>
+concept VecConstructible = std::constructible_from<glm::vec<N, T>>;
 
-struct CopyBufferOptions {
-  vk::CommandBuffer command_buffer;
-  VmaAllocator allocator = nullptr;
-  std::vector<vktf::Buffer> staging_buffers;  // staging buffers must remain in scope until copy commands complete
-};
-
-std::vector<vktf::Buffer> CreateMappedUniformBuffers(const std::size_t buffer_count,
-                                                     const std::size_t buffer_size_bytes,
-                                                     const VmaAllocator allocator) {
-  return std::views::iota(0uz, buffer_count)  //
-         | std::views::transform([buffer_size_bytes, allocator](const auto /*frame_index*/) {
-             vktf::Buffer buffer{buffer_size_bytes,
-                                 vk::BufferUsageFlagBits::eUniformBuffer,
-                                 allocator,
-                                 vktf::kHostVisibleAllocationCreateInfo};
-             buffer.MapMemory();  // enable persistent mapping
-             return buffer;
-           })
-         | std::ranges::to<std::vector>();
+template <typename T, glm::length_t N>
+  requires VecConstructible<T, N>
+glm::vec<N, T> ToVec(const T (&src_array)[N]) {  // NOLINT(*-c-arrays): defines an explicit conversion from a c-array
+  glm::vec<N, T> dst_vec{};
+  static_assert(sizeof(src_array) == sizeof(dst_vec));
+  std::ranges::copy(src_array, glm::value_ptr(dst_vec));
+  return dst_vec;
 }
 
-// ============================================= Global Descriptor Sets ================================================
+#pragma endregion
 
-std::optional<vktf::DescriptorPool> CreateGlobalDescriptorPool(const vk::Device device,
-                                                               const std::uint32_t max_render_frames) {
-  static constexpr std::uint32_t kBuffersPerRenderFrame = 2;
-  const std::array descriptor_pool_sizes{
-      vk::DescriptorPoolSize{.type = vk::DescriptorType::eUniformBuffer,
-                             .descriptorCount = kBuffersPerRenderFrame * max_render_frames}};
+#pragma region samplers
 
-  static constexpr std::array kDescriptorSetLayoutBindings{
-      vk::DescriptorSetLayoutBinding{.binding = 0,  // camera buffer
-                                     .descriptorType = vk::DescriptorType::eUniformBuffer,
-                                     .descriptorCount = 1,
-                                     .stageFlags = vk::ShaderStageFlagBits::eVertex},
-      vk::DescriptorSetLayoutBinding{.binding = 1,  // lights buffer
-                                     .descriptorType = vk::DescriptorType::eUniformBuffer,
-                                     .descriptorCount = 1,
-                                     .stageFlags = vk::ShaderStageFlagBits::eFragment}};
-
-  return vktf::DescriptorPool{device, descriptor_pool_sizes, kDescriptorSetLayoutBindings, max_render_frames};
-}
-
-void UpdateGlobalDescriptorSets(const vk::Device device,
-                                const vktf::DescriptorPool& global_descriptor_pool,
-                                const std::vector<vktf::Buffer>& camera_buffers,
-                                const std::vector<vktf::Buffer>& lights_buffers) {
-  const auto& descriptor_sets = global_descriptor_pool.descriptor_sets();
-  assert(camera_buffers.size() == descriptor_sets.size());
-  assert(lights_buffers.size() == descriptor_sets.size());
-
-  const auto buffer_count = camera_buffers.size() + lights_buffers.size();
-  std::vector<vk::DescriptorBufferInfo> descriptor_buffer_infos;
-  descriptor_buffer_infos.reserve(buffer_count);
-
-  std::vector<vk::WriteDescriptorSet> descriptor_set_writes;
-  descriptor_set_writes.reserve(buffer_count);
-
-  for (const auto& [camera_buffer, lights_buffer, descriptor_set] :
-       std::views::zip(camera_buffers, lights_buffers, descriptor_sets)) {
-    const auto& camera_descriptor_buffer_info = descriptor_buffer_infos.emplace_back(
-        vk::DescriptorBufferInfo{.buffer = *camera_buffer, .range = vk::WholeSize});
-
-    descriptor_set_writes.push_back(vk::WriteDescriptorSet{.dstSet = descriptor_set,
-                                                           .dstBinding = 0,
-                                                           .dstArrayElement = 0,
-                                                           .descriptorCount = 1,
-                                                           .descriptorType = vk::DescriptorType::eUniformBuffer,
-                                                           .pBufferInfo = &camera_descriptor_buffer_info});
-
-    const auto& lights_descriptor_buffer_info = descriptor_buffer_infos.emplace_back(
-        vk::DescriptorBufferInfo{.buffer = *lights_buffer, .range = vk::WholeSize});
-
-    descriptor_set_writes.push_back(vk::WriteDescriptorSet{.dstSet = descriptor_set,
-                                                           .dstBinding = 1,
-                                                           .dstArrayElement = 0,
-                                                           .descriptorCount = 1,
-                                                           .descriptorType = vk::DescriptorType::eUniformBuffer,
-                                                           .pBufferInfo = &lights_descriptor_buffer_info});
-  }
-
-  device.updateDescriptorSets(descriptor_set_writes, nullptr);
-}
-
-// ===================================================== Samplers ======================================================
-
-struct CreateSamplerOptions {
-  vk::Bool32 enable_anisotropy = vk::False;
-  float max_anisotropy = 0.0f;
-};
+using Samplers = std::unordered_map<const cgltf_sampler*, vk::UniqueSampler>;
 
 // filter and address mode values come from https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#reference-sampler
 enum class SamplerFilter : std::uint16_t {
@@ -402,8 +301,8 @@ vk::SamplerAddressMode GetSamplerAddressMode(const cgltf_int gltf_wrap_mode) {
   }
 }
 
-vk::UniqueSampler CreateSampler(const vk::Device device,
-                                const cgltf_sampler& gltf_sampler,
+vk::UniqueSampler CreateSampler(const cgltf_sampler& gltf_sampler,
+                                const vk::Device device,
                                 const vk::Bool32 enable_anisotropy,
                                 const float max_anisotropy) {
   const auto [min_filter, mipmap_mode] = GetSamplerMinFilterAndMipmapMode(gltf_sampler.min_filter);
@@ -431,7 +330,9 @@ vk::UniqueSampler CreateDefaultSampler(const vk::Device device,
                                                           .maxLod = vk::LodClampNone});
 }
 
-// ===================================================== Materials =====================================================
+#pragma endregion
+
+#pragma region materials
 
 struct MaterialFutures {
   const cgltf_material* gltf_material = nullptr;
@@ -446,11 +347,13 @@ struct MaterialProperties {
   float normal_scale = 0.0f;
 };
 
+using Materials = std::unordered_map<const cgltf_material*, std::unique_ptr<vktf::Material>>;
+
 std::optional<vktf::Texture> CreateTexture(const cgltf_texture_view& gltf_texture_view,
                                            const vktf::ColorSpace color_space,
                                            const std::filesystem::path& gltf_directory,
                                            const vk::PhysicalDevice physical_device,
-                                           const GltfMap<cgltf_sampler, vk::UniqueSampler>& samplers) {
+                                           const Samplers& samplers) {
   const auto* const gltf_texture = gltf_texture_view.texture;
   if (gltf_texture == nullptr) return std::nullopt;
 
@@ -466,14 +369,14 @@ std::optional<vktf::Texture> CreateTexture(const cgltf_texture_view& gltf_textur
     return std::nullopt;
   }
 
-  const auto& sampler = Find(gltf_texture->sampler, samplers);
+  const auto& sampler = Get(gltf_texture->sampler, samplers);
   return vktf::Texture{gltf_directory / gltf_image_uri, color_space, physical_device, *sampler};
 }
 
 MaterialFutures CreateMaterialFutures(const cgltf_material& gltf_material,
                                       const std::filesystem::path& gltf_directory,
                                       const vk::PhysicalDevice physical_device,
-                                      const GltfMap<cgltf_sampler, vk::UniqueSampler>& samplers) {
+                                      const Samplers& samplers) {
   if (gltf_material.has_pbr_metallic_roughness == 0) {
     return {};  // TODO: add support for non PBR metallic-roughness materials
   }
@@ -505,9 +408,11 @@ MaterialFutures CreateMaterialFutures(const cgltf_material& gltf_material,
                                           std::cref(samplers))};
 }
 
-std::unique_ptr<vktf::Material> CreateMaterial(const vk::Device device,
-                                               MaterialFutures& material_futures,
-                                               CopyBufferOptions& copy_buffer_options) {
+std::unique_ptr<vktf::Material> CreateMaterial(MaterialFutures& material_futures,
+                                               const vk::Device device,
+                                               const vk::CommandBuffer command_buffer,
+                                               const VmaAllocator allocator,
+                                               std::vector<vktf::Buffer>& staging_buffers) {
   auto& [gltf_material, base_color_texture_future, metallic_roughness_texture_future, normal_texture_future] =
       material_futures;
 
@@ -528,7 +433,6 @@ std::unique_ptr<vktf::Material> CreateMaterial(const vk::Device device,
   auto& metallic_roughness_texture = *maybe_metallic_roughness_texture;
   auto& normal_texture = *maybe_normal_texture;
 
-  auto& [command_buffer, allocator, staging_buffers] = copy_buffer_options;
   base_color_texture.CreateImage(device, command_buffer, allocator, staging_buffers);
   metallic_roughness_texture.CreateImage(device, command_buffer, allocator, staging_buffers);
   normal_texture.CreateImage(device, command_buffer, allocator, staging_buffers);
@@ -574,7 +478,7 @@ std::optional<vktf::DescriptorPool> CreateMaterialDescriptorPool(const vk::Devic
 
 void UpdateMaterialDescriptorSets(const vk::Device device,
                                   const vktf::DescriptorPool& material_descriptor_pool,
-                                  GltfMap<cgltf_material, std::unique_ptr<vktf::Material>>& materials) {
+                                  Materials& materials) {
   const auto& descriptor_sets = material_descriptor_pool.descriptor_sets();
   assert(materials.size() == descriptor_sets.size());
 
@@ -632,7 +536,11 @@ void UpdateMaterialDescriptorSets(const vk::Device device,
   device.updateDescriptorSets(descriptor_set_writes, nullptr);
 }
 
-// ===================================================== Vertices ======================================================
+#pragma endregion
+
+#pragma region meshes
+
+using Meshes = std::unordered_map<const cgltf_mesh*, std::unique_ptr<const vktf::Mesh>>;
 
 template <typename T, glm::length_t N>
   requires VecConstructible<T, N>
@@ -778,8 +686,10 @@ vktf::Primitive& EmplacePrimitive(const cgltf_primitive& gltf_primitive,
 }
 
 std::unique_ptr<const vktf::Mesh> CreateMesh(const cgltf_mesh& gltf_mesh,
-                                             const GltfMap<cgltf_material, std::unique_ptr<vktf::Material>>& materials,
-                                             CopyBufferOptions& copy_buffer_options) {
+                                             const Materials& materials,
+                                             const vk::CommandBuffer command_buffer,
+                                             const VmaAllocator allocator,
+                                             std::vector<vktf::Buffer>& staging_buffers) {
   std::vector<vktf::Primitive> primitives;
   primitives.reserve(gltf_mesh.primitives_count);
 
@@ -798,7 +708,7 @@ std::unique_ptr<const vktf::Mesh> CreateMesh(const cgltf_mesh& gltf_mesh,
     }
 
     const auto* const gltf_material = gltf_primitive.material;
-    const auto* const material = gltf_material == nullptr ? nullptr : Find(gltf_material, materials).get();
+    const auto* const material = gltf_material == nullptr ? nullptr : Get(gltf_material, materials).get();
     if (material == nullptr) {
       static constexpr auto* kMessageFormat = "Failed to create mesh primitive {}[{}] with unsupported material";
       std::println(std::cerr, kMessageFormat, GetName(gltf_mesh), index);
@@ -806,38 +716,138 @@ std::unique_ptr<const vktf::Mesh> CreateMesh(const cgltf_mesh& gltf_mesh,
     }
 
     auto& primitive = EmplacePrimitive(gltf_primitive, material, primitives);
-    auto& [command_buffer, allocator, staging_buffers] = copy_buffer_options;
     primitive.CreateBuffers(command_buffer, allocator, staging_buffers);
   }
 
   return std::make_unique<const vktf::Mesh>(std::move(primitives));
 }
 
-// ======================================================= Nodes =======================================================
+#pragma endregion
 
-glm::mat4 GetTransform(const cgltf_node& gltf_node) {
+#pragma region scene
+
+using Lights = std::unordered_map<const cgltf_light*, std::unique_ptr<const vktf::Light>>;
+
+const cgltf_scene& GetDefaultScene(const cgltf_data& gltf_data) {
+  if (const auto* const gltf_scene = gltf_data.scene; gltf_scene != nullptr) {
+    return *gltf_scene;
+  }
+  if (const std::span gltf_scenes{gltf_data.scenes, gltf_data.scenes_count}; !gltf_scenes.empty()) {
+    return gltf_scenes.front();  // return the first available scene when no default is specified
+  }
+  // TODO: glTF files not containing scene data should be treated as a library of individual entities
+  throw std::runtime_error{"At least one glTF scene is required to render"};
+}
+
+glm::mat4 GetLocalTransform(const cgltf_node& gltf_node) {
   glm::mat4 transform{0.0f};
   cgltf_node_transform_local(&gltf_node, glm::value_ptr(transform));
   return transform;
 }
 
-std::vector<std::unique_ptr<const Node>> CreateNodes(
-    const cgltf_node* const* const gltf_nodes,
-    const cgltf_size gltf_nodes_count,
-    const GltfMap<cgltf_mesh, std::unique_ptr<const vktf::Mesh>>& meshes,
-    const GltfMap<cgltf_light, std::unique_ptr<const Light>>& lights) {
+std::vector<std::unique_ptr<const vktf::Node>> CreateNodes(const cgltf_node* const* const gltf_nodes,
+                                                           const cgltf_size gltf_nodes_count,
+                                                           const Meshes& meshes,
+                                                           const Lights& lights) {
   return std::span{gltf_nodes, gltf_nodes_count}
          | std::views::transform([&meshes, &lights](const auto* const gltf_node) {
-             return std::make_unique<const Node>(
-                 gltf_node->mesh == nullptr ? nullptr : Find(gltf_node->mesh, meshes).get(),
-                 gltf_node->light == nullptr ? nullptr : Find(gltf_node->light, lights).get(),
-                 GetTransform(*gltf_node),
+             return std::make_unique<const vktf::Node>(
+                 gltf_node->mesh == nullptr ? nullptr : Get(gltf_node->mesh, meshes).get(),
+                 gltf_node->light == nullptr ? nullptr : Get(gltf_node->light, lights).get(),
+                 GetLocalTransform(*gltf_node),
                  CreateNodes(gltf_node->children, gltf_node->children_count, meshes, lights));
            })
          | std::ranges::to<std::vector>();
 }
 
-// ================================================= Graphics Pipeline =================================================
+#pragma endregion
+
+#pragma region uniform buffers
+
+struct CameraTransforms {
+  glm::mat4 view_transform{0.0f};
+  glm::mat4 projection_transform{0.0f};
+};
+
+std::vector<vktf::Buffer> CreateMappedUniformBuffers(const std::size_t buffer_count,
+                                                     const std::size_t buffer_size_bytes,
+                                                     const VmaAllocator allocator) {
+  return std::views::iota(0uz, buffer_count)  //
+         | std::views::transform([buffer_size_bytes, allocator](const auto /*frame_index*/) {
+             vktf::Buffer buffer{buffer_size_bytes,
+                                 vk::BufferUsageFlagBits::eUniformBuffer,
+                                 allocator,
+                                 vktf::kHostVisibleAllocationCreateInfo};
+             buffer.MapMemory();  // enable persistent mapping
+             return buffer;
+           })
+         | std::ranges::to<std::vector>();
+}
+
+std::optional<vktf::DescriptorPool> CreateGlobalDescriptorPool(const vk::Device device,
+                                                               const std::uint32_t max_render_frames) {
+  static constexpr std::uint32_t kBuffersPerRenderFrame = 2;
+  const std::array descriptor_pool_sizes{
+      vk::DescriptorPoolSize{.type = vk::DescriptorType::eUniformBuffer,
+                             .descriptorCount = kBuffersPerRenderFrame * max_render_frames}};
+
+  static constexpr std::array kDescriptorSetLayoutBindings{
+      vk::DescriptorSetLayoutBinding{.binding = 0,  // camera buffer
+                                     .descriptorType = vk::DescriptorType::eUniformBuffer,
+                                     .descriptorCount = 1,
+                                     .stageFlags = vk::ShaderStageFlagBits::eVertex},
+      vk::DescriptorSetLayoutBinding{.binding = 1,  // lights buffer
+                                     .descriptorType = vk::DescriptorType::eUniformBuffer,
+                                     .descriptorCount = 1,
+                                     .stageFlags = vk::ShaderStageFlagBits::eFragment}};
+
+  return vktf::DescriptorPool{device, descriptor_pool_sizes, kDescriptorSetLayoutBindings, max_render_frames};
+}
+
+void UpdateGlobalDescriptorSets(const vk::Device device,
+                                const vktf::DescriptorPool& global_descriptor_pool,
+                                const std::vector<vktf::Buffer>& camera_buffers,
+                                const std::vector<vktf::Buffer>& lights_buffers) {
+  const auto& descriptor_sets = global_descriptor_pool.descriptor_sets();
+  assert(camera_buffers.size() == descriptor_sets.size());
+  assert(lights_buffers.size() == descriptor_sets.size());
+
+  const auto buffer_count = camera_buffers.size() + lights_buffers.size();
+  std::vector<vk::DescriptorBufferInfo> descriptor_buffer_infos;
+  descriptor_buffer_infos.reserve(buffer_count);
+
+  std::vector<vk::WriteDescriptorSet> descriptor_set_writes;
+  descriptor_set_writes.reserve(buffer_count);
+
+  for (const auto& [camera_buffer, lights_buffer, descriptor_set] :
+       std::views::zip(camera_buffers, lights_buffers, descriptor_sets)) {
+    const auto& camera_descriptor_buffer_info = descriptor_buffer_infos.emplace_back(
+        vk::DescriptorBufferInfo{.buffer = *camera_buffer, .range = vk::WholeSize});
+
+    descriptor_set_writes.push_back(vk::WriteDescriptorSet{.dstSet = descriptor_set,
+                                                           .dstBinding = 0,
+                                                           .dstArrayElement = 0,
+                                                           .descriptorCount = 1,
+                                                           .descriptorType = vk::DescriptorType::eUniformBuffer,
+                                                           .pBufferInfo = &camera_descriptor_buffer_info});
+
+    const auto& lights_descriptor_buffer_info = descriptor_buffer_infos.emplace_back(
+        vk::DescriptorBufferInfo{.buffer = *lights_buffer, .range = vk::WholeSize});
+
+    descriptor_set_writes.push_back(vk::WriteDescriptorSet{.dstSet = descriptor_set,
+                                                           .dstBinding = 1,
+                                                           .dstArrayElement = 0,
+                                                           .descriptorCount = 1,
+                                                           .descriptorType = vk::DescriptorType::eUniformBuffer,
+                                                           .pBufferInfo = &lights_descriptor_buffer_info});
+  }
+
+  device.updateDescriptorSets(descriptor_set_writes, nullptr);
+}
+
+#pragma endregion
+
+#pragma region graphics pipeline
 
 struct PushConstants {
   glm::mat4 model_transform{0.0f};
@@ -988,42 +998,46 @@ vk::UniquePipeline CreateGraphicsPipeline(const vk::Device device,
   return std::move(graphics_pipeline);  // return value optimization not available here
 }
 
-// ==================================================== Rendering ======================================================
+#pragma endregion
+
+#pragma region rendering
 
 struct WorldPrimitive {
   const vktf::Primitive* primitive = nullptr;
   glm::mat4 world_transform{0.0f};
 };
 
-void UpdateWorldTransforms(const Node& node,
+using WorldPrimitivesByMaterial = std::unordered_map<const vktf::Material*, std::vector<WorldPrimitive>>;
+
+void UpdateWorldTransforms(const vktf::Node& node,
                            const glm::mat4& parent_transform,
-                           std::vector<Light>& world_lights,
-                           GltfMap<vktf::Material, std::vector<WorldPrimitive>>& world_primitives) {
+                           std::vector<vktf::Light>& world_lights,
+                           WorldPrimitivesByMaterial& world_primitives_by_material) {
   const auto world_transform = parent_transform * node.transform;
 
-  if (node.light != nullptr) {
-    if (node.light->position.w == 0.0f) {
-      const auto& light_direction = world_transform[2];  // light direction derived from node world-orientation z-axis
-      world_lights.emplace_back(glm::normalize(light_direction), node.light->color);
+  if (const auto* const light = node.light; light != nullptr) {
+    if (light->position.w == 0.0f) {
+      const auto& light_direction = world_transform[2];  // light direction inherited from node world-orientation z-axis
+      world_lights.emplace_back(glm::normalize(light_direction), light->color);
     } else {
-      assert(node.light->position.w == 1.0f);
-      const auto& light_position = world_transform[3];  // light position derived from node world-position
-      world_lights.emplace_back(light_position, node.light->color);
+      assert(light->position.w == 1.0f);
+      const auto& light_position = world_transform[3];  // light position inherited from node world-position
+      world_lights.emplace_back(light_position, light->color);
     }
   }
 
-  if (node.mesh != nullptr) {
-    for (const auto& primitive : *node.mesh) {
-      world_primitives[primitive.material()].emplace_back(&primitive, world_transform);
+  if (const auto* const mesh = node.mesh; mesh != nullptr) {
+    for (const auto& primitive : *mesh) {
+      world_primitives_by_material[primitive.material()].emplace_back(&primitive, world_transform);
     }
   }
 
   for (const auto& child_node : node.children) {
-    UpdateWorldTransforms(*child_node, world_transform, world_lights, world_primitives);
+    UpdateWorldTransforms(*child_node, world_transform, world_lights, world_primitives_by_material);
   }
 }
 
-void Render(const GltfMap<vktf::Material, std::vector<WorldPrimitive>>& world_primitives_by_material,
+void Render(const WorldPrimitivesByMaterial& world_primitives_by_material,
             const vk::PipelineLayout graphics_pipeline_layout,
             const vk::CommandBuffer command_buffer) {
   for (const auto& [material, world_primitives] : world_primitives_by_material) {
@@ -1046,22 +1060,19 @@ void Render(const GltfMap<vktf::Material, std::vector<WorldPrimitive>>& world_pr
   }
 }
 
+#pragma endregion
+
 }  // namespace
 
 namespace vktf {
-
-struct CameraTransforms {
-  glm::mat4 view_transform{0.0f};
-  glm::mat4 projection_transform{0.0f};
-};
 
 GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
                      const vk::PhysicalDevice physical_device,
                      const vk::Bool32 enable_sampler_anisotropy,
                      const float max_sampler_anisotropy,
                      const vk::Device device,
-                     const vk::Queue queue,
-                     const std::uint32_t queue_family_index,
+                     const vk::Queue transfer_queue,
+                     const std::uint32_t transfer_queue_family_index,
                      const vk::Extent2D viewport_extent,
                      const vk::SampleCountFlagBits msaa_sample_count,
                      const vk::RenderPass render_pass,
@@ -1070,7 +1081,10 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
   const auto gltf_directory = gltf_filepath.parent_path();
   const auto gltf_data = Load(gltf_filepath.string());
 
-  const CommandPool copy_command_pool{device, vk::CommandPoolCreateFlagBits::eTransient, queue_family_index, 1};
+  const CommandPool copy_command_pool{device,
+                                      vk::CommandPoolCreateFlagBits::eTransient,
+                                      transfer_queue_family_index,
+                                      1};
   const auto command_buffer = *copy_command_pool.command_buffers().front();
   command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
 
@@ -1078,15 +1092,11 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
   std::vector<Buffer> staging_buffers;
   staging_buffers.reserve(staging_buffer_count);
 
-  CopyBufferOptions copy_buffer_options{.command_buffer = command_buffer,
-                                        .allocator = allocator,
-                                        .staging_buffers = std::move(staging_buffers)};
-
   auto samplers =
       std::span{gltf_data->samplers, gltf_data->samplers_count}
       | std::views::transform([device, enable_sampler_anisotropy, max_sampler_anisotropy](const auto& gltf_sampler) {
           return std::pair{&gltf_sampler,
-                           CreateSampler(device, gltf_sampler, enable_sampler_anisotropy, max_sampler_anisotropy)};
+                           CreateSampler(gltf_sampler, device, enable_sampler_anisotropy, max_sampler_anisotropy)};
         })
       | std::ranges::to<std::unordered_map>();
 
@@ -1094,26 +1104,28 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
     samplers.emplace(nullptr, CreateDefaultSampler(device, enable_sampler_anisotropy, max_sampler_anisotropy));
   }
 
-  auto materials = std::span{gltf_data->materials, gltf_data->materials_count}
-                   | std::views::transform([&gltf_directory, physical_device, &samplers](const auto& gltf_material) {
-                       return CreateMaterialFutures(gltf_material, gltf_directory, physical_device, samplers);
-                     })
-                   | std::ranges::to<std::vector>()
-                   | std::views::transform([device, &copy_buffer_options](MaterialFutures& material_futures) {
-                       return std::pair{material_futures.gltf_material,
-                                        CreateMaterial(device, material_futures, copy_buffer_options)};
-                     })
-                   | std::ranges::to<std::unordered_map>();
+  auto materials =
+      std::span{gltf_data->materials, gltf_data->materials_count}
+      | std::views::transform([&gltf_directory, physical_device, &samplers](const auto& gltf_material) {
+          return CreateMaterialFutures(gltf_material, gltf_directory, physical_device, samplers);
+        })
+      | std::ranges::to<std::vector>()  // force evaluation to allow all threads to begin execution before proceeding
+      | std::views::transform([device, command_buffer, allocator, &staging_buffers](MaterialFutures& material_futures) {
+          return std::pair{material_futures.gltf_material,
+                           CreateMaterial(material_futures, device, command_buffer, allocator, staging_buffers)};
+        })
+      | std::ranges::to<std::unordered_map>();
 
-  auto meshes = std::span{gltf_data->meshes, gltf_data->meshes_count}
-                | std::views::transform([&materials, &copy_buffer_options](const auto& gltf_mesh) {
-                    return std::pair{&gltf_mesh, CreateMesh(gltf_mesh, materials, copy_buffer_options)};
-                  })
-                | std::ranges::to<std::unordered_map>();
+  auto meshes =
+      std::span{gltf_data->meshes, gltf_data->meshes_count}
+      | std::views::transform([&materials, command_buffer, allocator, &staging_buffers](const auto& gltf_mesh) {
+          return std::pair{&gltf_mesh, CreateMesh(gltf_mesh, materials, command_buffer, allocator, staging_buffers)};
+        })
+      | std::ranges::to<std::unordered_map>();
 
   command_buffer.end();
   const auto copy_fence = device.createFenceUnique(vk::FenceCreateInfo{});
-  queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &command_buffer}, *copy_fence);
+  transfer_queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &command_buffer}, *copy_fence);
 
   auto lights =
       std::span{gltf_data->lights, gltf_data->lights_count}  //
@@ -1175,10 +1187,10 @@ void GltfScene::Render(const Camera& camera,
   std::vector<Light> world_lights;
   world_lights.reserve(lights_.size());
 
-  GltfMap<Material, std::vector<WorldPrimitive>> world_primitives;
-  world_primitives.reserve(materials_.size());
+  WorldPrimitivesByMaterial world_primitives_by_material;
+  world_primitives_by_material.reserve(materials_.size());
 
-  UpdateWorldTransforms(*root_node_, glm::mat4{1.0f}, world_lights, world_primitives);
+  UpdateWorldTransforms(*root_node_, glm::mat4{1.0f}, world_lights, world_primitives_by_material);
 
   command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphics_pipeline_);
 
@@ -1201,7 +1213,7 @@ void GltfScene::Render(const Camera& camera,
                                              offsetof(PushConstants, view_position),
                                              camera.GetPosition());
 
-  ::Render(world_primitives, *graphics_pipeline_layout_, command_buffer);
+  ::Render(world_primitives_by_material, *graphics_pipeline_layout_, command_buffer);
 }
 
 }  // namespace vktf
