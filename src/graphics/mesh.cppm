@@ -28,12 +28,6 @@ export struct Vertex {
   glm::vec2 texture_coordinates_0{0.0f};
 };
 
-struct IndexBuffer {
-  Buffer buffer;
-  vk::IndexType index_type = vk::IndexType::eUint16;
-  std::uint32_t index_count = 0;
-};
-
 export template <typename T>
 concept IndexType = std::same_as<T, std::uint16_t> || std::same_as<T, std::uint32_t>;
 
@@ -54,6 +48,12 @@ public:
   void Render(const vk::CommandBuffer command_buffer) const;
 
 private:
+  struct IndexBuffer {
+    Buffer buffer;
+    vk::IndexType index_type = vk::IndexType::eUint16;
+    std::uint32_t index_count = 0;
+  };
+
   using VertexData = std::vector<Vertex>;
   using IndexData = std::variant<std::vector<std::uint16_t>, std::vector<std::uint32_t>>;
 
@@ -71,7 +71,7 @@ module :private;
 namespace {
 
 template <vktf::IndexType T>
-vk::IndexType GetIndexType() {
+constexpr vk::IndexType GetIndexType() {
   if constexpr (std::same_as<T, std::uint16_t>) {
     return vk::IndexType::eUint16;
   } else {
