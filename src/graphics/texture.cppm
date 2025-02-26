@@ -14,7 +14,6 @@ module;
 #include <string>
 #include <unordered_set>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include <ktx.h>
@@ -32,30 +31,22 @@ namespace vktf {
 
 export enum class ColorSpace : std::uint8_t { kLinear, kSrgb };
 
-using UniqueKtxTexture2 = std::unique_ptr<ktxTexture2, void (*)(ktxTexture2*)>;
-
 export class Texture {
 public:
-  Texture(const std::filesystem::path& texture_filepath,
+  Texture(const std::filesystem::path& filepath,
           const ColorSpace color_space,
+          const vk::Sampler sampler,
           const vk::PhysicalDevice physical_device,
-          const vk::Sampler sampler);
+          const vk::Device device,
+          const vk::CommandBuffer command_buffer,
+          const VmaAllocator allocator,
+          std::unique_ptr<const Buffer>& staging_buffer);
 
-  [[nodiscard]] vk::ImageView image_view() const noexcept {
-    const auto* const image = std::get_if<Image>(&image_);
-    assert(image != nullptr);
-    return image->image_view();
-  }
-
+  [[nodiscard]] vk::ImageView image_view() const noexcept { return image_.image_view(); }
   [[nodiscard]] vk::Sampler sampler() const noexcept { return sampler_; }
 
-  void CreateImage(const vk::Device device,
-                   const vk::CommandBuffer command_buffer,
-                   const VmaAllocator allocator,
-                   std::vector<Buffer>& staging_buffers);
-
 private:
-  std::variant<UniqueKtxTexture2, Image> image_;
+  Image image_;
   vk::Sampler sampler_;
 };
 
@@ -99,6 +90,14 @@ constexpr TranscodeTarget kAstc4x4TranscodeTarget{.srgb_format = vk::Format::eAs
 constexpr TranscodeTarget kRgba32TranscodeTarget{.srgb_format = vk::Format::eR8G8B8A8Srgb,
                                                  .unorm_format = vk::Format::eR8G8B8A8Unorm,
                                                  .ktx_transcode_format = KTX_TTF_RGBA32};
+
+ktxTexture* AsKtxTexture(ktxTexture2* const ktx_texture2) {
+  // NOLINT(cppcoreguidelines-pro-type-cstyle-cast): macro definition requires c-style cast to the ktxTexture base class
+  return ktxTexture(ktx_texture2);
+}
+
+void DestroyKtxTexture2(ktxTexture2* const ktx_texture2) noexcept { ktxTexture_Destroy(AsKtxTexture(ktx_texture2)); }
+using UniqueKtxTexture2 = std::unique_ptr<ktxTexture2, decltype(&DestroyKtxTexture2)>;
 
 bool IsFormatSupported(const vk::PhysicalDevice physical_device, const vk::Format format) {
   const auto format_properties = physical_device.getFormatProperties(format);
@@ -180,17 +179,10 @@ ktx_transcode_fmt_e SelectKtxTranscodeFormat(ktxTexture2& ktx_texture2,
   }
 }
 
-ktxTexture* AsKtxTexture(ktxTexture2* const ktx_texture2) {
-  // NOLINT(cppcoreguidelines-pro-type-cstyle-cast): macro definition requires c-style cast to the ktxTexture base class
-  return ktxTexture(ktx_texture2);
-}
-
-void DestroyKtxTexture2(ktxTexture2* const ktx_texture2) noexcept { ktxTexture_Destroy(AsKtxTexture(ktx_texture2)); }
-
-vktf::UniqueKtxTexture2 CreateKtxTexture2FromKtxFile(const std::filesystem::path& ktx_filepath,
-                                                     const vktf::ColorSpace color_space,
-                                                     const vk::PhysicalDevice physical_device) {
-  vktf::UniqueKtxTexture2 ktx_texture2{nullptr, DestroyKtxTexture2};
+UniqueKtxTexture2 CreateKtxTexture2FromKtxFile(const std::filesystem::path& ktx_filepath,
+                                               const vktf::ColorSpace color_space,
+                                               const vk::PhysicalDevice physical_device) {
+  UniqueKtxTexture2 ktx_texture2{nullptr, DestroyKtxTexture2};
   if (const auto ktx_error_code = ktxTexture2_CreateFromNamedFile(ktx_filepath.string().c_str(),
                                                                   KTX_TEXTURE_CREATE_CHECK_GLTF_BASISU_BIT,
                                                                   std::out_ptr(ktx_texture2));
@@ -244,8 +236,8 @@ StbImage Load(const std::filesystem::path& image_filepath) {
   return StbImage{.width = width, .height = height, .channels = kRequiredChannels, .data = std::move(data)};
 }
 
-vktf::UniqueKtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::path& image_filepath,
-                                                       const vktf::ColorSpace color_space) {
+UniqueKtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::path& image_filepath,
+                                                 const vktf::ColorSpace color_space) {
   const auto [width, height, channels, data] = Load(image_filepath);
   static_assert(sizeof(decltype(data)::element_type) == 1, "8-bit image data is required");
   const auto data_size_bytes = static_cast<ktx_size_t>(width) * height * channels;
@@ -253,7 +245,7 @@ vktf::UniqueKtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::pa
   const auto& [rgba32_srgb_format, rgba32_unorm_format, _] = kRgba32TranscodeTarget;
   const auto rgba32_format = color_space == vktf::ColorSpace::kLinear ? rgba32_unorm_format : rgba32_srgb_format;
 
-  vktf::UniqueKtxTexture2 ktx_texture2{nullptr, DestroyKtxTexture2};
+  UniqueKtxTexture2 ktx_texture2{nullptr, DestroyKtxTexture2};
   ktxTextureCreateInfo ktx_texture_create_info{.vkFormat = static_cast<ktx_uint32_t>(rgba32_format),
                                                .baseWidth = static_cast<ktx_uint32_t>(width),
                                                .baseHeight = static_cast<ktx_uint32_t>(height),
@@ -287,9 +279,9 @@ vktf::UniqueKtxTexture2 CreateKtxTexture2FromImageFile(const std::filesystem::pa
   return ktx_texture2;
 }
 
-vktf::UniqueKtxTexture2 CreateKtxTexture2(const std::filesystem::path& texture_filepath,
-                                          const vktf::ColorSpace color_space,
-                                          const vk::PhysicalDevice physical_device) {
+UniqueKtxTexture2 CreateKtxTexture2(const std::filesystem::path& texture_filepath,
+                                    const vktf::ColorSpace color_space,
+                                    const vk::PhysicalDevice physical_device) {
 #ifndef NDEBUG
   // R8G8B8A8 format support for images with VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT is required by the Vulkan specification
   const auto& [rgba32_srgb_format, rgba32_unorm_format, _] = kRgba32TranscodeTarget;
@@ -323,27 +315,28 @@ std::vector<vk::BufferImageCopy> GetBufferImageCopies(const ktxTexture2& ktx_tex
          | std::ranges::to<std::vector>();
 }
 
-vktf::Image CreateImage(const ktxTexture2& ktx_texture2,
+vktf::Image CreateImage(const std::filesystem::path& texture_filepath,
+                        const vktf::ColorSpace color_space,
+                        const vk::PhysicalDevice physical_device,
                         const vk::Device device,
                         const vk::CommandBuffer command_buffer,
                         const VmaAllocator allocator,
-                        std::vector<vktf::Buffer>& staging_buffers) {
-  const auto& staging_buffer =
-      vktf::EmplaceStagingBuffer(vktf::DataView<const ktx_uint8_t>{ktx_texture2.pData, ktx_texture2.dataSize},
-                                 allocator,
-                                 staging_buffers);
+                        std::unique_ptr<const vktf::Buffer>& staging_buffer) {
+  const auto ktx_texture2 = CreateKtxTexture2(texture_filepath, color_space, physical_device);
+  staging_buffer =
+      vktf::CreateStagingBuffer(vktf::DataView<const ktx_uint8_t>{ktx_texture2->pData, ktx_texture2->dataSize},
+                                allocator);
 
   vktf::Image image{device,
-                    static_cast<vk::Format>(ktx_texture2.vkFormat),
-                    vk::Extent2D{.width = ktx_texture2.baseWidth, .height = ktx_texture2.baseHeight},
-                    ktx_texture2.numLevels,
+                    static_cast<vk::Format>(ktx_texture2->vkFormat),
+                    vk::Extent2D{.width = ktx_texture2->baseWidth, .height = ktx_texture2->baseHeight},
+                    ktx_texture2->numLevels,
                     vk::SampleCountFlagBits::e1,
                     vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
                     vk::ImageAspectFlagBits::eColor,
                     allocator};
-
-  const auto buffer_image_copies = GetBufferImageCopies(ktx_texture2);
-  image.Copy(*staging_buffer, buffer_image_copies, command_buffer);
+  const auto buffer_image_copies = GetBufferImageCopies(*ktx_texture2);
+  image.Copy(**staging_buffer, buffer_image_copies, command_buffer);
 
   return image;
 }
@@ -352,19 +345,15 @@ vktf::Image CreateImage(const ktxTexture2& ktx_texture2,
 
 namespace vktf {
 
-Texture::Texture(const std::filesystem::path& texture_filepath,
+Texture::Texture(const std::filesystem::path& filepath,
                  const ColorSpace color_space,
+                 const vk::Sampler sampler,
                  const vk::PhysicalDevice physical_device,
-                 const vk::Sampler sampler)
-    : image_{CreateKtxTexture2(texture_filepath, color_space, physical_device)}, sampler_{sampler} {}
-
-void Texture::CreateImage(const vk::Device device,
-                          const vk::CommandBuffer command_buffer,
-                          const VmaAllocator allocator,
-                          std::vector<Buffer>& staging_buffers) {
-  const auto* const ktx_texture2 = std::get_if<UniqueKtxTexture2>(&image_);
-  assert(ktx_texture2 != nullptr);
-  image_ = ::CreateImage(**ktx_texture2, device, command_buffer, allocator, staging_buffers);
-}
+                 const vk::Device device,
+                 const vk::CommandBuffer command_buffer,
+                 const VmaAllocator allocator,
+                 std::unique_ptr<const Buffer>& staging_buffer)
+    : image_{CreateImage(filepath, color_space, physical_device, device, command_buffer, allocator, staging_buffer)},
+      sampler_{sampler} {}
 
 }  // namespace vktf

@@ -53,18 +53,18 @@ private:
 };
 
 export template <typename T>
-[[nodiscard]] const Buffer& EmplaceStagingBuffer(const DataView<const T> data_view,
-                                                 const VmaAllocator allocator,
-                                                 std::vector<Buffer>& staging_buffers) {
-  auto& staging_buffer = staging_buffers.emplace_back(data_view.size_bytes(),
-                                                      vk::BufferUsageFlagBits::eTransferSrc,
-                                                      allocator,
-                                                      kHostVisibleAllocationCreateInfo);
+[[nodiscard]] std::unique_ptr<const Buffer> CreateStagingBuffer(const DataView<const T> data_view,
+                                                                const VmaAllocator allocator) {
+  auto staging_buffer = std::make_unique<Buffer>(data_view.size_bytes(),
+                                                 vk::BufferUsageFlagBits::eTransferSrc,
+                                                 allocator,
+                                                 kHostVisibleAllocationCreateInfo);
+
   staging_buffer.MapMemory();
   staging_buffer.Copy(data_view);
   staging_buffer.UnmapMemory();  // staging buffers are copied once so they can be unmapped immediately
 
-  return staging_buffer;
+  return std::unique_ptr<const Buffer>{staging_buffer.release()};
 }
 
 export template <typename T>
@@ -72,8 +72,8 @@ export template <typename T>
                                   const vk::BufferUsageFlags usage_flags,
                                   const vk::CommandBuffer command_buffer,
                                   const VmaAllocator allocator,
-                                  std::vector<Buffer>& staging_buffers) {
-  const auto& staging_buffer = EmplaceStagingBuffer(data_view, allocator, staging_buffers);
+                                  std::unique_ptr<const Buffer>& staging_buffer) {
+  staging_buffer = CreateStagingBuffer(data_view, allocator, staging_buffer);
   Buffer buffer{data_view.size_bytes(), usage_flags | vk::BufferUsageFlagBits::eTransferDst, allocator};
   command_buffer.copyBuffer(*staging_buffer, *buffer, vk::BufferCopy{.size = data_view.size_bytes()});
   return buffer;
