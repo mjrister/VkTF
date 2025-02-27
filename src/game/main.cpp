@@ -3,18 +3,19 @@
 #include <iostream>
 
 #define CGLTF_IMPLEMENTATION
-#define STB_IMAGE_IMPLEMENTATION
-#define VMA_IMPLEMENTATION
-
 #include <cgltf.h>
+
+#define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+
+#define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
-#include <vulkan/vulkan.hpp>
-#include <vulkan/vulkan_static_assertions.hpp>
 
 #if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1
+#include <vulkan/vulkan.hpp>
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 #endif
+#include <vulkan/vulkan_static_assertions.hpp>
 
 import game;
 
