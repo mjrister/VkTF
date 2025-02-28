@@ -32,6 +32,8 @@ public:
 
   [[nodiscard]] vk::Buffer operator*() const noexcept { return buffer_; }
 
+  [[nodiscard]] std::size_t size_bytes() const noexcept { return size_bytes_; }
+
   template <typename T>
   void Copy(const DataView<const T> data_view) const {
     assert(mapped_memory_ != nullptr);
@@ -53,29 +55,23 @@ private:
 };
 
 export template <typename T>
-[[nodiscard]] const Buffer& EmplaceStagingBuffer(const DataView<const T> data_view,
-                                                 const VmaAllocator allocator,
-                                                 std::vector<Buffer>& staging_buffers) {
-  auto& staging_buffer = staging_buffers.emplace_back(data_view.size_bytes(),
-                                                      vk::BufferUsageFlagBits::eTransferSrc,
-                                                      allocator,
-                                                      kHostVisibleAllocationCreateInfo);
+[[nodiscard]] Buffer CreateStagingBuffer(const DataView<const T> data_view, const VmaAllocator allocator) {
+  Buffer staging_buffer{data_view.size_bytes(),
+                        vk::BufferUsageFlagBits::eTransferSrc,
+                        allocator,
+                        kHostVisibleAllocationCreateInfo};
   staging_buffer.MapMemory();
   staging_buffer.Copy(data_view);
-  staging_buffer.UnmapMemory();  // staging buffers are copied once so they can be unmapped immediately
-
+  staging_buffer.UnmapMemory();
   return staging_buffer;
 }
 
-export template <typename T>
-[[nodiscard]] Buffer CreateBuffer(const DataView<const T> data_view,
-                                  const vk::BufferUsageFlags usage_flags,
-                                  const vk::CommandBuffer command_buffer,
-                                  const VmaAllocator allocator,
-                                  std::vector<Buffer>& staging_buffers) {
-  const auto& staging_buffer = EmplaceStagingBuffer(data_view, allocator, staging_buffers);
-  Buffer buffer{data_view.size_bytes(), usage_flags | vk::BufferUsageFlagBits::eTransferDst, allocator};
-  command_buffer.copyBuffer(*staging_buffer, *buffer, vk::BufferCopy{.size = data_view.size_bytes()});
+export [[nodiscard]] Buffer CreateBuffer(const Buffer& staging_buffer,
+                                         const vk::BufferUsageFlags usage_flags,
+                                         const vk::CommandBuffer command_buffer,
+                                         const VmaAllocator allocator) {
+  Buffer buffer{staging_buffer.size_bytes(), usage_flags | vk::BufferUsageFlagBits::eTransferDst, allocator};
+  command_buffer.copyBuffer(*staging_buffer, *buffer, vk::BufferCopy{.size = staging_buffer.size_bytes()});
   return buffer;
 }
 
@@ -91,7 +87,7 @@ Buffer::Buffer(const vk::DeviceSize size_bytes,
                const VmaAllocationCreateInfo& allocation_create_info)
     : size_bytes_{size_bytes}, allocator_{allocator} {
   const VkBufferCreateInfo buffer_create_info{.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-                                              .size = size_bytes,
+                                              .size = size_bytes_,
                                               .usage = static_cast<VkBufferUsageFlags>(usage_flags)};
   VkBuffer buffer = nullptr;
   const auto result =

@@ -92,9 +92,8 @@ Window::Window(const char* const title) {
   const auto* const video_mode = glfwGetVideoMode(primary_monitor);
   if (video_mode == nullptr) throw std::runtime_error{"Failed to get the primary monitor video mode"};
 
-  glfw_window_ =
-      UniqueGlfwWindow{glfwCreateWindow(video_mode->width, video_mode->height, title, primary_monitor, nullptr),
-                       glfwDestroyWindow};
+  glfw_window_ = UniqueGlfwWindow{glfwCreateWindow(video_mode->width, video_mode->height, title, nullptr, nullptr),
+                                  glfwDestroyWindow};
 
   if (glfw_window_ == nullptr) throw std::runtime_error{"GLFW window creation failed"};
 }
