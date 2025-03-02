@@ -60,9 +60,11 @@ export template <typename T>
                         vk::BufferUsageFlagBits::eTransferSrc,
                         allocator,
                         kHostVisibleAllocationCreateInfo};
+
   staging_buffer.MapMemory();
   staging_buffer.Copy(data_view);
   staging_buffer.UnmapMemory();
+
   return staging_buffer;
 }
 

@@ -604,45 +604,13 @@ void ValidateAttributes(const VertexAttribute<float, 3>& position_attribute,
 #endif
 }
 
-std::vector<vktf::Vertex> CreateVertices(const std::vector<glm::vec3>& positions,
-                                         const std::vector<glm::vec3>& normals,
-                                         const std::vector<glm::vec4>& tangents,
-                                         const std::vector<glm::vec2>& texture_coordinates_0s) {
-  return std::views::zip_transform(
-             [](const auto& position, const auto& normal, const auto& tangent, const auto& texture_coordinates_0) {
-               // the glTF specification requires unit length normals and tangent vectors
-               static constexpr auto kEpsilon = 1.0e-6f;
-               assert(glm::epsilonEqual(glm::length(normal), 1.0f, kEpsilon));
-               assert(glm::epsilonEqual(glm::length(glm::vec3{tangent}), 1.0f, kEpsilon));
-               return vktf::Vertex{.position = position,
-                                   .normal = normal,
-                                   .tangent = tangent,
-                                   .texture_coordinates_0 = texture_coordinates_0};
-             },
-             positions,
-             normals,
-             tangents,
-             texture_coordinates_0s)
-         | std::ranges::to<std::vector>();
-}
-
-template <vktf::IndexType T>
-std::vector<T> UnpackIndices(const cgltf_accessor& gltf_accessor) {
-  std::vector<T> indices(gltf_accessor.count);
-  if (const auto index_size_bytes = sizeof(T);
-      cgltf_accessor_unpack_indices(&gltf_accessor, indices.data(), index_size_bytes, indices.size()) == 0) {
-    throw std::runtime_error{std::format("Failed to unpack indices for accessor {}", GetName(gltf_accessor))};
-  }
-  return indices;
-}
-
-vktf::StagingPrimitive CreateStagingPrimitive(const cgltf_primitive& gltf_primitive, const VmaAllocator allocator) {
+std::vector<vktf::Vertex> CreateVertices(const std::span<const cgltf_attribute> gltf_attributes) {
   VertexAttribute<float, 3> position_attribute{.name = "POSITION"};
   VertexAttribute<float, 3> normal_attribute{.name = "NORMAL"};
   VertexAttribute<float, 4> tangent_attribute{.name = "TANGENT"};
   VertexAttribute<float, 2> texture_coordinates_0_attribute{.name = "TEXCOORD_0"};
 
-  for (const auto& gltf_attribute : std::span{gltf_primitive.attributes, gltf_primitive.attributes_count}) {
+  for (const auto& gltf_attribute : gltf_attributes) {
     switch (gltf_attribute.type) {
       case cgltf_attribute_type_position:
         if (TryUnpackAttribute(gltf_attribute, position_attribute)) continue;
@@ -664,10 +632,37 @@ vktf::StagingPrimitive CreateStagingPrimitive(const cgltf_primitive& gltf_primit
 
   ValidateAttributes(position_attribute, normal_attribute, tangent_attribute, texture_coordinates_0_attribute);
 
-  const auto vertices = CreateVertices(*position_attribute.maybe_data,
-                                       *normal_attribute.maybe_data,
-                                       *tangent_attribute.maybe_data,
-                                       *texture_coordinates_0_attribute.maybe_data);
+  return std::views::zip_transform(
+             [](const auto& position, const auto& normal, const auto& tangent, const auto& texture_coordinates_0) {
+               // the glTF specification requires unit length normals and tangent vectors
+               static constexpr auto kEpsilon = 1.0e-6f;
+               assert(glm::epsilonEqual(glm::length(normal), 1.0f, kEpsilon));
+               assert(glm::epsilonEqual(glm::length(glm::vec3{tangent}), 1.0f, kEpsilon));
+               return vktf::Vertex{.position = position,
+                                   .normal = normal,
+                                   .tangent = tangent,
+                                   .texture_coordinates_0 = texture_coordinates_0};
+             },
+             *position_attribute.maybe_data,
+             *normal_attribute.maybe_data,
+             *tangent_attribute.maybe_data,
+             *texture_coordinates_0_attribute.maybe_data)
+         | std::ranges::to<std::vector>();
+}
+
+template <vktf::IndexType T>
+std::vector<T> UnpackIndices(const cgltf_accessor& gltf_accessor) {
+  std::vector<T> indices(gltf_accessor.count);
+  if (const auto index_size_bytes = sizeof(T);
+      cgltf_accessor_unpack_indices(&gltf_accessor, indices.data(), index_size_bytes, indices.size()) == 0) {
+    throw std::runtime_error{std::format("Failed to unpack indices for accessor {}", GetName(gltf_accessor))};
+  }
+  return indices;
+}
+
+vktf::StagingPrimitive CreateStagingPrimitive(const cgltf_primitive& gltf_primitive, const VmaAllocator allocator) {
+  const std::span primitive_attributes{gltf_primitive.attributes, gltf_primitive.attributes_count};
+  const auto vertices = CreateVertices(primitive_attributes);
 
   switch (const auto* const indices_accessor = gltf_primitive.indices;
           cgltf_component_size(indices_accessor->component_type)) {
@@ -682,50 +677,50 @@ vktf::StagingPrimitive CreateStagingPrimitive(const cgltf_primitive& gltf_primit
   }
 }
 
-vktf::StagingMesh CreateStagingMesh(const cgltf_mesh& gltf_mesh,
-                                    const VmaAllocator allocator,
-                                    const Materials& materials) {
-  const auto create_staging_primitive = [&gltf_mesh, allocator, &materials](
-                                            const auto& gltf_primitive,
-                                            const auto index) -> std::optional<vktf::StagingPrimitive> {
+using IndexedStagingPrimitive = std::pair<std::size_t, vktf::StagingPrimitive>;
+using StagingMesh = std::vector<IndexedStagingPrimitive>;
+
+StagingMesh CreateStagingMesh(const cgltf_mesh& gltf_mesh, const VmaAllocator allocator, const Materials& materials) {
+  std::vector<IndexedStagingPrimitive> staging_primitives;
+  staging_primitives.reserve(gltf_mesh.primitives_count);
+
+  for (const auto& [primitive_index, gltf_primitive] :
+       std::span{gltf_mesh.primitives, gltf_mesh.primitives_count} | std::views::enumerate) {
     if (gltf_primitive.type != cgltf_primitive_type_triangles) {
       static constexpr auto* kMessageFormat = "Failed to create mesh primitive {}[{}] with type {}";
-      std::println(std::cerr, kMessageFormat, GetName(gltf_mesh), index, gltf_primitive.type);
-      return std::nullopt;  // TODO: support alternative primitive types
+      std::println(std::cerr, kMessageFormat, GetName(gltf_mesh), primitive_index, gltf_primitive.type);
+      continue;  // TODO: support alternative primitive types
     }
     if (gltf_primitive.indices == nullptr || gltf_primitive.indices->count == 0) {
       static constexpr auto* kMessageFormat = "Failed to create mesh primitive {}[{}] with invalid indices accessor";
-      std::println(std::cerr, kMessageFormat, GetName(gltf_mesh), index);
-      return std::nullopt;  // TODO: support non-indexed triangle meshes
+      std::println(std::cerr, kMessageFormat, GetName(gltf_mesh), primitive_index);
+      continue;  // TODO: support non-indexed triangle meshes
     }
     const auto& material = Get(gltf_primitive.material, materials);
     if (material == nullptr) {
       static constexpr auto* kMessageFormat = "Failed to create mesh primitive {}[{}] with unsupported material";
-      std::println(std::cerr, kMessageFormat, GetName(gltf_mesh), index);
-      return std::nullopt;  // TODO: support dynamic material layouts
+      std::println(std::cerr, kMessageFormat, GetName(gltf_mesh), primitive_index);
+      continue;  // TODO: support dynamic material layouts
     }
-    return CreateStagingPrimitive(gltf_primitive, allocator);
-  };
+    staging_primitives.emplace_back(primitive_index, CreateStagingPrimitive(gltf_primitive, allocator));
+  }
 
-  return vktf::StagingMesh{.maybe_primitives =
-                               std::views::zip_transform(create_staging_primitive,
-                                                         std::span{gltf_mesh.primitives, gltf_mesh.primitives_count},
-                                                         std::views::iota(0u, gltf_mesh.primitives_count))
-                               | std::ranges::to<std::vector>()};
+  return staging_primitives;
 }
 
 std::unique_ptr<const vktf::Mesh> CreateMesh(const cgltf_mesh& gltf_mesh,
-                                             const vktf::StagingMesh& staging_mesh,
+                                             const StagingMesh& staging_mesh,
                                              const vk::CommandBuffer command_buffer,
                                              const VmaAllocator allocator,
                                              const Materials& materials) {
   std::vector<vktf::Primitive> primitives;
-  primitives.reserve(staging_mesh.maybe_primitives.size());
+  primitives.reserve(staging_mesh.size());
 
-  for (const auto& [index, maybe_staging_primitive] : std::views::enumerate(staging_mesh.maybe_primitives)) {
-    if (!maybe_staging_primitive.has_value()) continue;
-    const auto& material = Get(gltf_mesh.primitives[index].material, materials);
-    primitives.emplace_back(*maybe_staging_primitive, command_buffer, allocator, material.get());
+  for (const auto& [primitive_index, staging_primitive] : staging_mesh) {
+    const auto& gltf_primitive = gltf_mesh.primitives[primitive_index];
+    const auto& material = Get(gltf_primitive.material, materials);
+    assert(material != nullptr);
+    primitives.emplace_back(staging_primitive, material.get(), command_buffer, allocator);
   }
 
   return std::make_unique<const vktf::Mesh>(std::move(primitives));
@@ -1036,7 +1031,7 @@ void UpdateWorldTransforms(const vktf::Node& node,
   }
 
   if (const auto* const mesh = node.mesh; mesh != nullptr) {
-    for (const auto& primitive : mesh->primitives) {
+    for (const auto& primitive : *mesh) {
       world_primitives_by_material[primitive.material()].emplace_back(&primitive, world_transform);
     }
   }

@@ -53,16 +53,12 @@ export struct StagingPrimitive {
   std::uint32_t index_count;
 };
 
-export struct StagingMesh {
-  std::vector<std::optional<StagingPrimitive>> maybe_primitives;
-};
-
 export class Primitive {
 public:
   Primitive(const StagingPrimitive& staging_primitive,
+            const Material* const material,
             const vk::CommandBuffer command_buffer,
-            const VmaAllocator allocator,
-            const Material* material);
+            const VmaAllocator allocator);
 
   [[nodiscard]] const Material* material() const noexcept { return material_; }
 
@@ -80,9 +76,7 @@ private:
   const Material* material_;
 };
 
-export struct Mesh {
-  std::vector<Primitive> primitives;
-};
+export using Mesh = std::vector<Primitive>;
 
 }  // namespace vktf
 
@@ -93,9 +87,9 @@ namespace vktf {
 using enum vk::BufferUsageFlagBits;
 
 Primitive::Primitive(const StagingPrimitive& staging_primitive,
+                     const Material* const material,
                      const vk::CommandBuffer command_buffer,
-                     const VmaAllocator allocator,
-                     const Material* material)
+                     const VmaAllocator allocator)
     : vertex_buffer_{CreateBuffer(staging_primitive.vertex_buffer, eVertexBuffer, command_buffer, allocator)},
       index_buffer_{CreateBuffer(staging_primitive.index_buffer, eIndexBuffer, command_buffer, allocator)},
       index_type_{staging_primitive.index_type},
