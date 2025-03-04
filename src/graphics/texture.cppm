@@ -328,10 +328,9 @@ vktf::Image CreateImage(const ktxTexture2& ktx_texture2,
                         const vk::CommandBuffer command_buffer,
                         const VmaAllocator allocator,
                         std::vector<vktf::Buffer>& staging_buffers) {
-  const auto& staging_buffer =
-      vktf::EmplaceStagingBuffer(vktf::DataView<const ktx_uint8_t>{ktx_texture2.pData, ktx_texture2.dataSize},
-                                 allocator,
-                                 staging_buffers);
+  const auto& staging_buffer = staging_buffers.emplace_back(
+      vktf::CreateStagingBuffer(vktf::DataView<const ktx_uint8_t>{ktx_texture2.pData, ktx_texture2.dataSize},
+                                allocator));
 
   vktf::Image image{device,
                     static_cast<vk::Format>(ktx_texture2.vkFormat),
