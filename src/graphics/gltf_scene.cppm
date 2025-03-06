@@ -81,8 +81,8 @@ private:
   std::vector<std::unique_ptr<const Mesh>> meshes_;
   std::vector<std::unique_ptr<const Light>> lights_;
   std::unique_ptr<const Node> root_node_;
-  std::vector<Buffer> camera_buffers_;
-  std::vector<Buffer> lights_buffers_;
+  std::vector<HostVisibleBuffer> camera_uniform_buffers_;
+  std::vector<HostVisibleBuffer> lights_uniform_buffers_;
   std::optional<DescriptorPool> global_descriptor_pool_;
   std::optional<DescriptorPool> material_descriptor_pool_;
   vk::UniquePipelineLayout graphics_pipeline_layout_;
@@ -412,7 +412,7 @@ std::unique_ptr<vktf::Material> CreateMaterial(MaterialFutures& material_futures
                                                const vk::Device device,
                                                const vk::CommandBuffer command_buffer,
                                                const VmaAllocator allocator,
-                                               std::vector<vktf::Buffer>& staging_buffers) {
+                                               std::vector<vktf::HostVisibleBuffer>& staging_buffers) {
   auto& [gltf_material, base_color_texture_future, metallic_roughness_texture_future, normal_texture_future] =
       material_futures;
 
@@ -768,17 +768,16 @@ struct CameraTransforms {
   glm::mat4 projection_transform{0.0f};
 };
 
-std::vector<vktf::Buffer> CreateMappedUniformBuffers(const std::size_t buffer_count,
-                                                     const std::size_t buffer_size_bytes,
-                                                     const VmaAllocator allocator) {
-  return std::views::iota(0uz, buffer_count)  //
-         | std::views::transform([buffer_size_bytes, allocator](const auto /*frame_index*/) {
-             vktf::Buffer buffer{buffer_size_bytes,
-                                 vk::BufferUsageFlagBits::eUniformBuffer,
-                                 allocator,
-                                 vktf::kHostVisibleAllocationCreateInfo};
-             buffer.MapMemory();  // enable persistent mapping
-             return buffer;
+std::vector<vktf::HostVisibleBuffer> CreateUniformBuffers(const std::size_t buffer_count,
+                                                          const std::size_t buffer_size_bytes,
+                                                          const VmaAllocator allocator) {
+  return std::views::iota(0uz, buffer_count)
+         | std::views::transform([buffer_size_bytes, allocator](const auto /*index*/) {
+             vktf::HostVisibleBuffer uniform_buffer{buffer_size_bytes,
+                                                    vk::BufferUsageFlagBits::eUniformBuffer,
+                                                    allocator};
+             uniform_buffer.MapMemory();  // enable persistent mapping
+             return uniform_buffer;
            })
          | std::ranges::to<std::vector>();
 }
@@ -805,23 +804,23 @@ std::optional<vktf::DescriptorPool> CreateGlobalDescriptorPool(const vk::Device 
 
 void UpdateGlobalDescriptorSets(const vk::Device device,
                                 const vktf::DescriptorPool& global_descriptor_pool,
-                                const std::vector<vktf::Buffer>& camera_buffers,
-                                const std::vector<vktf::Buffer>& lights_buffers) {
+                                const std::vector<vktf::HostVisibleBuffer>& camera_uniform_buffers,
+                                const std::vector<vktf::HostVisibleBuffer>& lights_uniform_buffers) {
   const auto& descriptor_sets = global_descriptor_pool.descriptor_sets();
-  assert(camera_buffers.size() == descriptor_sets.size());
-  assert(lights_buffers.size() == descriptor_sets.size());
+  assert(camera_uniform_buffers.size() == descriptor_sets.size());
+  assert(lights_uniform_buffers.size() == descriptor_sets.size());
 
-  const auto buffer_count = camera_buffers.size() + lights_buffers.size();
+  const auto buffer_count = camera_uniform_buffers.size() + lights_uniform_buffers.size();
   std::vector<vk::DescriptorBufferInfo> descriptor_buffer_infos;
   descriptor_buffer_infos.reserve(buffer_count);
 
   std::vector<vk::WriteDescriptorSet> descriptor_set_writes;
   descriptor_set_writes.reserve(buffer_count);
 
-  for (const auto& [camera_buffer, lights_buffer, descriptor_set] :
-       std::views::zip(camera_buffers, lights_buffers, descriptor_sets)) {
+  for (const auto& [camera_uniform_buffer, lights_uniform_buffer, descriptor_set] :
+       std::views::zip(camera_uniform_buffers, lights_uniform_buffers, descriptor_sets)) {
     const auto& camera_descriptor_buffer_info = descriptor_buffer_infos.emplace_back(
-        vk::DescriptorBufferInfo{.buffer = *camera_buffer, .range = vk::WholeSize});
+        vk::DescriptorBufferInfo{.buffer = *camera_uniform_buffer, .range = vk::WholeSize});
 
     descriptor_set_writes.push_back(vk::WriteDescriptorSet{.dstSet = descriptor_set,
                                                            .dstBinding = 0,
@@ -831,7 +830,7 @@ void UpdateGlobalDescriptorSets(const vk::Device device,
                                                            .pBufferInfo = &camera_descriptor_buffer_info});
 
     const auto& lights_descriptor_buffer_info = descriptor_buffer_infos.emplace_back(
-        vk::DescriptorBufferInfo{.buffer = *lights_buffer, .range = vk::WholeSize});
+        vk::DescriptorBufferInfo{.buffer = *lights_uniform_buffer, .range = vk::WholeSize});
 
     descriptor_set_writes.push_back(vk::WriteDescriptorSet{.dstSet = descriptor_set,
                                                            .dstBinding = 1,
@@ -1088,7 +1087,7 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
   command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
 
   const auto staging_buffer_count = gltf_data->buffers_count + gltf_data->images_count;
-  std::vector<Buffer> staging_buffers;
+  std::vector<HostVisibleBuffer> staging_buffers;
   staging_buffers.reserve(staging_buffer_count);
 
   auto samplers =
@@ -1158,10 +1157,10 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
                                             glm::mat4{1.0f},
                                             CreateNodes(gltf_scene.nodes, gltf_scene.nodes_count, meshes, lights));
 
-  camera_buffers_ = CreateMappedUniformBuffers(max_render_frames, sizeof(CameraTransforms), allocator);
-  lights_buffers_ = CreateMappedUniformBuffers(max_render_frames, sizeof(Light) * lights.size(), allocator);
+  camera_uniform_buffers_ = CreateUniformBuffers(max_render_frames, sizeof(CameraTransforms), allocator);
+  lights_uniform_buffers_ = CreateUniformBuffers(max_render_frames, sizeof(Light) * lights.size(), allocator);
   global_descriptor_pool_ = CreateGlobalDescriptorPool(device, static_cast<std::uint32_t>(max_render_frames));
-  UpdateGlobalDescriptorSets(device, *global_descriptor_pool_, camera_buffers_, lights_buffers_);
+  UpdateGlobalDescriptorSets(device, *global_descriptor_pool_, camera_uniform_buffers_, lights_uniform_buffers_);
 
   material_descriptor_pool_ = CreateMaterialDescriptorPool(device, static_cast<std::uint32_t>(materials.size()));
   UpdateMaterialDescriptorSets(device, *material_descriptor_pool_, materials);
@@ -1206,11 +1205,11 @@ void GltfScene::Render(const Camera& camera,
                                     global_descriptor_sets[frame_index],
                                     nullptr);
 
-  camera_buffers_[frame_index].Copy<CameraTransforms>(
+  camera_uniform_buffers_[frame_index].Copy<CameraTransforms>(
       CameraTransforms{.view_transform = camera.view_transform(),
                        .projection_transform = camera.projection_transform()});
 
-  lights_buffers_[frame_index].Copy<Light>(world_lights);
+  lights_uniform_buffers_[frame_index].Copy<Light>(world_lights);
 
   using ViewPosition = decltype(PushConstants::view_position);
   command_buffer.pushConstants<ViewPosition>(*graphics_pipeline_layout_,

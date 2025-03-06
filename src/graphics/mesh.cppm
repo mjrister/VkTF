@@ -46,8 +46,8 @@ export struct StagingPrimitive {
         index_type{GetIndexType<T>()},
         index_count{static_cast<std::uint32_t>(indices.size())} {}
 
-  Buffer vertex_buffer;
-  Buffer index_buffer;
+  HostVisibleBuffer vertex_buffer;
+  HostVisibleBuffer index_buffer;
   vk::IndexType index_type;
   std::uint32_t index_count;
 };

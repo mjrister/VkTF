@@ -52,7 +52,7 @@ public:
   void CreateImage(const vk::Device device,
                    const vk::CommandBuffer command_buffer,
                    const VmaAllocator allocator,
-                   std::vector<Buffer>& staging_buffers);
+                   std::vector<HostVisibleBuffer>& staging_buffers);
 
 private:
   std::variant<UniqueKtxTexture2, Image> image_;
@@ -327,7 +327,7 @@ vktf::Image CreateImage(const ktxTexture2& ktx_texture2,
                         const vk::Device device,
                         const vk::CommandBuffer command_buffer,
                         const VmaAllocator allocator,
-                        std::vector<vktf::Buffer>& staging_buffers) {
+                        std::vector<vktf::HostVisibleBuffer>& staging_buffers) {
   const auto& staging_buffer = staging_buffers.emplace_back(
       vktf::CreateStagingBuffer(vktf::DataView<const ktx_uint8_t>{ktx_texture2.pData, ktx_texture2.dataSize},
                                 allocator));
@@ -360,7 +360,7 @@ Texture::Texture(const std::filesystem::path& texture_filepath,
 void Texture::CreateImage(const vk::Device device,
                           const vk::CommandBuffer command_buffer,
                           const VmaAllocator allocator,
-                          std::vector<Buffer>& staging_buffers) {
+                          std::vector<HostVisibleBuffer>& staging_buffers) {
   const auto* const ktx_texture2 = std::get_if<UniqueKtxTexture2>(&image_);
   assert(ktx_texture2 != nullptr);
   image_ = ::CreateImage(**ktx_texture2, device, command_buffer, allocator, staging_buffers);

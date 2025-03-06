@@ -29,10 +29,6 @@ private:
   VmaAllocator allocator_ = nullptr;
 };
 
-export constexpr VmaAllocationCreateInfo kHostVisibleAllocationCreateInfo{
-    .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-    .usage = VMA_MEMORY_USAGE_AUTO};
-
 export constexpr VmaAllocationCreateInfo kDefaultAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO};
 
 }  // namespace vktf
