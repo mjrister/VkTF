@@ -1122,12 +1122,11 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
 
   auto materials =
       staging_materials  //
-      | std::views::transform([device, command_buffer, allocator](
-                                  auto& material_pair) -> std::pair<const cgltf_material*, std::unique_ptr<Material>> {
+      | std::views::transform([device, command_buffer, allocator](auto& material_pair) {
           const auto& [gltf_material, maybe_staging_material] = material_pair;
           if (!maybe_staging_material.has_value()) {
             std::println(std::cerr, "Failed to create unsupported material {}", GetName(*gltf_material));
-            return std::pair{gltf_material, nullptr};
+            return std::pair{gltf_material, std::unique_ptr<Material>{nullptr}};
           }
           return std::pair{gltf_material, CreateMaterial(*maybe_staging_material, device, command_buffer, allocator)};
         })
