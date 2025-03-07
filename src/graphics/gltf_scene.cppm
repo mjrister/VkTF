@@ -370,11 +370,11 @@ std::optional<std::filesystem::path> TryImageUri(const cgltf_texture_view& gltf_
   return gltf_image_uri;
 }
 
-std::optional<StagingMaterial> CreateStagingMaterial(const cgltf_material& gltf_material,
-                                                     const std::filesystem::path& gltf_directory,
-                                                     const vk::PhysicalDevice physical_device,
-                                                     const VmaAllocator allocator,
-                                                     const Samplers& samplers) {
+std::optional<StagingMaterial> TryCreateStagingMaterial(const cgltf_material& gltf_material,
+                                                        const std::filesystem::path& gltf_directory,
+                                                        const vk::PhysicalDevice physical_device,
+                                                        const VmaAllocator allocator,
+                                                        const Samplers& samplers) {
   if (gltf_material.has_pbr_metallic_roughness == 0) {
     return std::nullopt;  // TODO: add support for non PBR metallic-roughness materials
   }
@@ -1104,7 +1104,7 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
       std::span{gltf_data->materials, gltf_data->materials_count}
       | std::views::transform([&gltf_directory, physical_device, allocator, &samplers](const auto& gltf_material) {
           return std::pair{&gltf_material,
-                           std::async(CreateStagingMaterial,
+                           std::async(TryCreateStagingMaterial,
                                       gltf_material,
                                       std::cref(gltf_directory),
                                       physical_device,

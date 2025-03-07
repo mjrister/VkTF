@@ -26,17 +26,26 @@ import data_view;
 
 namespace vktf {
 
-export enum class ColorSpace : std::uint8_t { kLinear, kSrgb };
-
 using UniqueKtxTexture2 = std::unique_ptr<ktxTexture2, void (*)(ktxTexture2*)>;
 
-export struct KtxTexture {
+export enum class ColorSpace : std::uint8_t { kLinear, kSrgb };
+
+export class KtxTexture {
+public:
   KtxTexture(const std::filesystem::path& texture_filepath,
              const ColorSpace color_space,
              const vk::PhysicalDevice physical_device);
 
-  UniqueKtxTexture2 ktx_texture2;
-  std::vector<vk::BufferImageCopy> buffer_image_copies;
+  [[nodiscard]] const ktxTexture2& operator*() const noexcept { return *ktx_texture2_; }
+  [[nodiscard]] const ktxTexture2* operator->() const noexcept { return ktx_texture2_.get(); }
+
+  [[nodiscard]] const std::vector<vk::BufferImageCopy>& buffer_image_copies() const noexcept {
+    return buffer_image_copies_;
+  }
+
+private:
+  UniqueKtxTexture2 ktx_texture2_;
+  std::vector<vk::BufferImageCopy> buffer_image_copies_;
 };
 
 }  // namespace vktf
@@ -310,7 +319,7 @@ namespace vktf {
 KtxTexture::KtxTexture(const std::filesystem::path& texture_filepath,
                        const ColorSpace color_space,
                        const vk::PhysicalDevice physical_device)
-    : ktx_texture2{CreateKtxTexture2(texture_filepath, color_space, physical_device)},
-      buffer_image_copies{GetBufferImageCopies(*ktx_texture2)} {}
+    : ktx_texture2_{CreateKtxTexture2(texture_filepath, color_space, physical_device)},
+      buffer_image_copies_{GetBufferImageCopies(*ktx_texture2_)} {}
 
 }  // namespace vktf
