@@ -39,6 +39,7 @@ import command_pool;
 import data_view;
 import descriptor_pool;
 import image;
+import ktx_texture;
 import material;
 import mesh;
 import shader_module;
@@ -351,7 +352,7 @@ struct StagingMaterial {
 
 using Materials = std::unordered_map<const cgltf_material*, std::unique_ptr<vktf::Material>>;
 
-std::optional<std::filesystem::path> TryGetImageUri(const cgltf_texture_view& gltf_texture_view) {
+std::optional<std::filesystem::path> GetImageUri(const cgltf_texture_view& gltf_texture_view) {
   const auto* const gltf_texture = gltf_texture_view.texture;
   if (gltf_texture == nullptr) return std::nullopt;
 
@@ -386,9 +387,9 @@ std::optional<StagingMaterial> TryCreateStagingMaterial(const cgltf_material& gl
                roughness_factor] = gltf_material.pbr_metallic_roughness;
   const auto& normal_texture_view = gltf_material.normal_texture;
 
-  const auto maybe_base_color_texture_uri = TryGetImageUri(base_color_texture_view);
-  const auto maybe_metallic_roughness_texture_uri = TryGetImageUri(metallic_roughness_texture_view);
-  const auto maybe_normal_texture_uri = TryGetImageUri(normal_texture_view);
+  const auto maybe_base_color_texture_uri = GetImageUri(base_color_texture_view);
+  const auto maybe_metallic_roughness_texture_uri = GetImageUri(metallic_roughness_texture_view);
+  const auto maybe_normal_texture_uri = GetImageUri(normal_texture_view);
 
   if (std::ranges::any_of(
           std::array{maybe_base_color_texture_uri, maybe_metallic_roughness_texture_uri, maybe_normal_texture_uri},
@@ -452,8 +453,7 @@ std::unique_ptr<vktf::Material> CreateMaterial(const StagingMaterial& staging_ma
       vktf::Texture{normal_texture, normal_texture_sampler, device, command_buffer, allocator});
 }
 
-std::optional<vktf::DescriptorPool> CreateMaterialDescriptorPool(const vk::Device device,
-                                                                 const std::uint32_t material_count) {
+vktf::DescriptorPool CreateMaterialDescriptorPool(const vk::Device device, const std::uint32_t material_count) {
   static constexpr std::uint32_t kImagesPerMaterial = 3;
   const std::array descriptor_pool_sizes{
       vk::DescriptorPoolSize{.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = material_count},
@@ -780,8 +780,7 @@ std::vector<vktf::HostVisibleBuffer> CreateUniformBuffers(const std::size_t buff
          | std::ranges::to<std::vector>();
 }
 
-std::optional<vktf::DescriptorPool> CreateGlobalDescriptorPool(const vk::Device device,
-                                                               const std::uint32_t max_render_frames) {
+vktf::DescriptorPool CreateGlobalDescriptorPool(const vk::Device device, const std::uint32_t max_render_frames) {
   static constexpr std::uint32_t kBuffersPerRenderFrame = 2;
   const std::array descriptor_pool_sizes{
       vk::DescriptorPoolSize{.type = vk::DescriptorType::eUniformBuffer,
