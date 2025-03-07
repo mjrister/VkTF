@@ -84,6 +84,7 @@ export template <typename T>
   return staging_buffer;
 }
 
+// TODO: should this be a constructor?
 export [[nodiscard]] Buffer CreateBuffer(const HostVisibleBuffer& staging_buffer,
                                          const vk::BufferUsageFlags usage_flags,
                                          const vk::CommandBuffer command_buffer,

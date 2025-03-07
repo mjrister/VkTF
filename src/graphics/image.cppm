@@ -14,13 +14,13 @@ namespace vktf {
 
 export class Image {
 public:
-  Image(const vk::Device device,
-        const vk::Format format,
+  Image(const vk::Format format,
         const vk::Extent2D extent,
         const std::uint32_t mip_levels,
         const vk::SampleCountFlagBits sample_count,
         const vk::ImageUsageFlags usage_flags,
         const vk::ImageAspectFlagBits aspect_mask,
+        const vk::Device device,
         const VmaAllocator allocator,
         const VmaAllocationCreateInfo& allocation_create_info = kDefaultAllocationCreateInfo);
 
@@ -82,13 +82,13 @@ void TransitionImageLayout(const vk::Image image,
 
 namespace vktf {
 
-Image::Image(const vk::Device device,
-             const vk::Format format,
+Image::Image(const vk::Format format,
              const vk::Extent2D extent,
              const std::uint32_t mip_levels,
              const vk::SampleCountFlagBits sample_count,
              const vk::ImageUsageFlags usage_flags,
              const vk::ImageAspectFlagBits aspect_mask,
+             const vk::Device device,
              const VmaAllocator allocator,
              const VmaAllocationCreateInfo& allocation_create_info)
     : format_{format}, mip_levels_{mip_levels}, aspect_mask_{aspect_mask}, allocator_{allocator} {

@@ -14,7 +14,6 @@ module;
 #include <string>
 #include <unordered_set>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include <ktx.h>
@@ -30,32 +29,39 @@ import image;
 
 namespace vktf {
 
+export using UniqueKtxTexture2 = std::unique_ptr<ktxTexture2, void (*)(ktxTexture2*)>;
+
 export enum class ColorSpace : std::uint8_t { kLinear, kSrgb };
 
-using UniqueKtxTexture2 = std::unique_ptr<ktxTexture2, void (*)(ktxTexture2*)>;
+// TODO: consider moving KTX2 logic to a separate module
+export [[nodiscard]] UniqueKtxTexture2 CreateKtxTexture2(const std::filesystem::path& texture_filepath,
+                                                         const ColorSpace color_space,
+                                                         const vk::PhysicalDevice physical_device);
+
+export struct StagingTexture {
+  // TODO: consider making this a free function instead
+  StagingTexture(const UniqueKtxTexture2& ktx_texture2, const VmaAllocator allocator);
+
+  HostVisibleBuffer staging_buffer;
+  vk::Format image_format = vk::Format::eUndefined;
+  vk::Extent2D image_extent;
+  std::uint32_t mip_levels = 0;
+  std::vector<vk::BufferImageCopy> buffer_image_copies;
+};
 
 export class Texture {
 public:
-  Texture(const std::filesystem::path& texture_filepath,
-          const ColorSpace color_space,
-          const vk::PhysicalDevice physical_device,
-          const vk::Sampler sampler);
+  Texture(const StagingTexture& staging_texture,
+          const vk::Sampler sampler,
+          const vk::Device device,
+          const vk::CommandBuffer command_buffer,
+          const VmaAllocator allocator);
 
-  [[nodiscard]] vk::ImageView image_view() const noexcept {
-    const auto* const image = std::get_if<Image>(&image_);
-    assert(image != nullptr);
-    return image->image_view();
-  }
-
+  [[nodiscard]] vk::ImageView image_view() const noexcept { return image_.image_view(); }
   [[nodiscard]] vk::Sampler sampler() const noexcept { return sampler_; }
 
-  void CreateImage(const vk::Device device,
-                   const vk::CommandBuffer command_buffer,
-                   const VmaAllocator allocator,
-                   std::vector<HostVisibleBuffer>& staging_buffers);
-
 private:
-  std::variant<UniqueKtxTexture2, Image> image_;
+  Image image_;
   vk::Sampler sampler_;
 };
 
@@ -323,47 +329,47 @@ std::vector<vk::BufferImageCopy> GetBufferImageCopies(const ktxTexture2& ktx_tex
          | std::ranges::to<std::vector>();
 }
 
-vktf::Image CreateImage(const ktxTexture2& ktx_texture2,
-                        const vk::Device device,
-                        const vk::CommandBuffer command_buffer,
-                        const VmaAllocator allocator,
-                        std::vector<vktf::HostVisibleBuffer>& staging_buffers) {
-  const auto& staging_buffer = staging_buffers.emplace_back(
-      vktf::CreateStagingBuffer(vktf::DataView<const ktx_uint8_t>{ktx_texture2.pData, ktx_texture2.dataSize},
-                                allocator));
-
-  vktf::Image image{device,
-                    static_cast<vk::Format>(ktx_texture2.vkFormat),
-                    vk::Extent2D{.width = ktx_texture2.baseWidth, .height = ktx_texture2.baseHeight},
-                    ktx_texture2.numLevels,
-                    vk::SampleCountFlagBits::e1,
-                    vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
-                    vk::ImageAspectFlagBits::eColor,
-                    allocator};
-
-  const auto buffer_image_copies = GetBufferImageCopies(ktx_texture2);
-  image.Copy(*staging_buffer, buffer_image_copies, command_buffer);
-
-  return image;
-}
-
 }  // namespace
 
 namespace vktf {
 
-Texture::Texture(const std::filesystem::path& texture_filepath,
-                 const ColorSpace color_space,
-                 const vk::PhysicalDevice physical_device,
-                 const vk::Sampler sampler)
-    : image_{CreateKtxTexture2(texture_filepath, color_space, physical_device)}, sampler_{sampler} {}
+UniqueKtxTexture2 CreateKtxTexture2(const std::filesystem::path& texture_filepath,
+                                    const ColorSpace color_space,
+                                    const vk::PhysicalDevice physical_device) {
+#ifndef NDEBUG
+  // R8G8B8A8 format support for images with VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT is required by the Vulkan specification
+  const auto& [rgba32_srgb_format, rgba32_unorm_format, _] = kRgba32TranscodeTarget;
+  assert(IsFormatSupported(physical_device, rgba32_srgb_format));
+  assert(IsFormatSupported(physical_device, rgba32_unorm_format));
+#endif
+  return texture_filepath.extension() == ".ktx2"
+             ? CreateKtxTexture2FromKtxFile(texture_filepath, color_space, physical_device)
+             : CreateKtxTexture2FromImageFile(texture_filepath, color_space);
+}
 
-void Texture::CreateImage(const vk::Device device,
-                          const vk::CommandBuffer command_buffer,
-                          const VmaAllocator allocator,
-                          std::vector<HostVisibleBuffer>& staging_buffers) {
-  const auto* const ktx_texture2 = std::get_if<UniqueKtxTexture2>(&image_);
-  assert(ktx_texture2 != nullptr);
-  image_ = ::CreateImage(**ktx_texture2, device, command_buffer, allocator, staging_buffers);
+StagingTexture::StagingTexture(const UniqueKtxTexture2& ktx_texture2, const VmaAllocator allocator)
+    : staging_buffer{CreateStagingBuffer(DataView<const ktx_uint8_t>{ktx_texture2->pData, ktx_texture2->dataSize},
+                                         allocator)},
+      image_format{static_cast<vk::Format>(ktx_texture2->vkFormat)},
+      image_extent{ktx_texture2->baseWidth, ktx_texture2->baseHeight},
+      mip_levels{ktx_texture2->numLevels},
+      buffer_image_copies{GetBufferImageCopies(*ktx_texture2)} {}
+
+Texture::Texture(const StagingTexture& staging_texture,
+                 const vk::Sampler sampler,
+                 const vk::Device device,
+                 const vk::CommandBuffer command_buffer,
+                 const VmaAllocator allocator)
+    : image_{staging_texture.image_format,
+             staging_texture.image_extent,
+             staging_texture.mip_levels,
+             vk::SampleCountFlagBits::e1,
+             vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
+             vk::ImageAspectFlagBits::eColor,
+             device,
+             allocator},
+      sampler_{sampler} {
+  image_.Copy(*staging_texture.staging_buffer, staging_texture.buffer_image_copies, command_buffer);
 }
 
 }  // namespace vktf
