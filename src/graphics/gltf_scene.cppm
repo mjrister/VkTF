@@ -351,7 +351,7 @@ struct StagingMaterial {
 
 using Materials = std::unordered_map<const cgltf_material*, std::unique_ptr<vktf::Material>>;
 
-std::optional<std::filesystem::path> TryImageUri(const cgltf_texture_view& gltf_texture_view) {
+std::optional<std::filesystem::path> TryGetImageUri(const cgltf_texture_view& gltf_texture_view) {
   const auto* const gltf_texture = gltf_texture_view.texture;
   if (gltf_texture == nullptr) return std::nullopt;
 
@@ -386,9 +386,9 @@ std::optional<StagingMaterial> TryCreateStagingMaterial(const cgltf_material& gl
                roughness_factor] = gltf_material.pbr_metallic_roughness;
   const auto& normal_texture_view = gltf_material.normal_texture;
 
-  const auto maybe_base_color_texture_uri = TryImageUri(base_color_texture_view);
-  const auto maybe_metallic_roughness_texture_uri = TryImageUri(metallic_roughness_texture_view);
-  const auto maybe_normal_texture_uri = TryImageUri(normal_texture_view);
+  const auto maybe_base_color_texture_uri = TryGetImageUri(base_color_texture_view);
+  const auto maybe_metallic_roughness_texture_uri = TryGetImageUri(metallic_roughness_texture_view);
+  const auto maybe_normal_texture_uri = TryGetImageUri(normal_texture_view);
 
   if (std::ranges::any_of(
           std::array{maybe_base_color_texture_uri, maybe_metallic_roughness_texture_uri, maybe_normal_texture_uri},
@@ -399,20 +399,20 @@ std::optional<StagingMaterial> TryCreateStagingMaterial(const cgltf_material& gl
     return std::nullopt;  // TODO: add support for optional material textures
   }
 
-  auto base_color_ktx_texture2_future = std::async(vktf::CreateKtxTexture2,
-                                                   gltf_directory / *maybe_base_color_texture_uri,
-                                                   vktf::ColorSpace::kSrgb,
-                                                   physical_device);
+  auto base_color_ktx_texture_future =
+      std::async([texture_filepath = gltf_directory / *maybe_base_color_texture_uri, physical_device] {
+        return vktf::KtxTexture{texture_filepath, vktf::ColorSpace::kSrgb, physical_device};
+      });
 
-  auto metallic_roughness_ktx_texture2_future = std::async(vktf::CreateKtxTexture2,
-                                                           gltf_directory / *maybe_metallic_roughness_texture_uri,
-                                                           vktf::ColorSpace::kLinear,
-                                                           physical_device);
+  auto metallic_roughness_ktx_texture_future =
+      std::async([texture_filepath = gltf_directory / *maybe_metallic_roughness_texture_uri, physical_device] {
+        return vktf::KtxTexture{texture_filepath, vktf::ColorSpace::kLinear, physical_device};
+      });
 
-  auto normal_ktx_texture2_future = std::async(vktf::CreateKtxTexture2,
-                                               gltf_directory / *maybe_normal_texture_uri,
-                                               vktf::ColorSpace::kLinear,
-                                               physical_device);
+  auto normal_ktx_texture_future =
+      std::async([texture_filepath = gltf_directory / *maybe_normal_texture_uri, physical_device] {
+        return vktf::KtxTexture{texture_filepath, vktf::ColorSpace::kLinear, physical_device};
+      });
 
   const auto& base_color_sampler = Find(base_color_texture_view.texture->sampler, samplers);
   const auto& metallic_roughness_sampler = Find(metallic_roughness_texture_view.texture->sampler, samplers);
@@ -425,11 +425,11 @@ std::optional<StagingMaterial> TryCreateStagingMaterial(const cgltf_material& gl
                              .normal_scale = gltf_material.normal_texture.scale},
           allocator),
       .base_color_texture =
-          std::pair{vktf::StagingTexture{*base_color_ktx_texture2_future.get(), allocator}, *base_color_sampler},
+          std::pair{vktf::StagingTexture{base_color_ktx_texture_future.get(), allocator}, *base_color_sampler},
       .metallic_roughness_texture =
-          std::pair{vktf::StagingTexture{*metallic_roughness_ktx_texture2_future.get(), allocator},
+          std::pair{vktf::StagingTexture{metallic_roughness_ktx_texture_future.get(), allocator},
                     *metallic_roughness_sampler},
-      .normal_texture = std::pair{vktf::StagingTexture{*normal_ktx_texture2_future.get(), allocator}, *normal_sampler}};
+      .normal_texture = std::pair{vktf::StagingTexture{normal_ktx_texture_future.get(), allocator}, *normal_sampler}};
 }
 
 std::unique_ptr<vktf::Material> CreateMaterial(const StagingMaterial& staging_material,
