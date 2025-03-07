@@ -425,11 +425,11 @@ std::optional<StagingMaterial> TryCreateStagingMaterial(const cgltf_material& gl
                              .normal_scale = gltf_material.normal_texture.scale},
           allocator),
       .base_color_texture =
-          std::pair{vktf::StagingTexture{base_color_ktx_texture2_future.get(), allocator}, *base_color_sampler},
+          std::pair{vktf::StagingTexture{*base_color_ktx_texture2_future.get(), allocator}, *base_color_sampler},
       .metallic_roughness_texture =
-          std::pair{vktf::StagingTexture{metallic_roughness_ktx_texture2_future.get(), allocator},
+          std::pair{vktf::StagingTexture{*metallic_roughness_ktx_texture2_future.get(), allocator},
                     *metallic_roughness_sampler},
-      .normal_texture = std::pair{vktf::StagingTexture{normal_ktx_texture2_future.get(), allocator}, *normal_sampler}};
+      .normal_texture = std::pair{vktf::StagingTexture{*normal_ktx_texture2_future.get(), allocator}, *normal_sampler}};
 }
 
 std::unique_ptr<vktf::Material> CreateMaterial(const StagingMaterial& staging_material,

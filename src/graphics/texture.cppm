@@ -33,19 +33,18 @@ export using UniqueKtxTexture2 = std::unique_ptr<ktxTexture2, void (*)(ktxTextur
 
 export enum class ColorSpace : std::uint8_t { kLinear, kSrgb };
 
-// TODO: consider moving KTX2 logic to a separate module
 export [[nodiscard]] UniqueKtxTexture2 CreateKtxTexture2(const std::filesystem::path& texture_filepath,
                                                          const ColorSpace color_space,
                                                          const vk::PhysicalDevice physical_device);
 
 export struct StagingTexture {
-  // TODO: consider making this a free function instead
-  StagingTexture(const UniqueKtxTexture2& ktx_texture2, const VmaAllocator allocator);
+  StagingTexture(const ktxTexture2& ktx_texture2, const VmaAllocator allocator);
 
   HostVisibleBuffer staging_buffer;
-  vk::Format image_format = vk::Format::eUndefined;
-  vk::Extent2D image_extent;
-  std::uint32_t mip_levels = 0;
+  std::uint32_t width;
+  std::uint32_t height;
+  std::uint32_t mip_levels;
+  vk::Format format;
   std::vector<vk::BufferImageCopy> buffer_image_copies;
 };
 
@@ -347,21 +346,22 @@ UniqueKtxTexture2 CreateKtxTexture2(const std::filesystem::path& texture_filepat
              : CreateKtxTexture2FromImageFile(texture_filepath, color_space);
 }
 
-StagingTexture::StagingTexture(const UniqueKtxTexture2& ktx_texture2, const VmaAllocator allocator)
-    : staging_buffer{CreateStagingBuffer(DataView<const ktx_uint8_t>{ktx_texture2->pData, ktx_texture2->dataSize},
+StagingTexture::StagingTexture(const ktxTexture2& ktx_texture2, const VmaAllocator allocator)
+    : staging_buffer{CreateStagingBuffer(DataView<const ktx_uint8_t>{ktx_texture2.pData, ktx_texture2.dataSize},
                                          allocator)},
-      image_format{static_cast<vk::Format>(ktx_texture2->vkFormat)},
-      image_extent{ktx_texture2->baseWidth, ktx_texture2->baseHeight},
-      mip_levels{ktx_texture2->numLevels},
-      buffer_image_copies{GetBufferImageCopies(*ktx_texture2)} {}
+      width{ktx_texture2.baseWidth},
+      height{ktx_texture2.baseHeight},
+      mip_levels{ktx_texture2.numLevels},
+      format{static_cast<vk::Format>(ktx_texture2.vkFormat)},
+      buffer_image_copies{GetBufferImageCopies(ktx_texture2)} {}
 
 Texture::Texture(const StagingTexture& staging_texture,
                  const vk::Sampler sampler,
                  const vk::Device device,
                  const vk::CommandBuffer command_buffer,
                  const VmaAllocator allocator)
-    : image_{staging_texture.image_format,
-             staging_texture.image_extent,
+    : image_{staging_texture.format,
+             vk::Extent2D{.width = staging_texture.width, .height = staging_texture.height},
              staging_texture.mip_levels,
              vk::SampleCountFlagBits::e1,
              vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
