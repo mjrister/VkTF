@@ -17,7 +17,7 @@ namespace vktf {
 export class Buffer {
 public:
   Buffer(const std::size_t size_bytes,
-         const vk::BufferUsageFlags usage_flags,
+         const vk::BufferUsageFlags buffer_usage_flags,
          const VmaAllocator allocator,
          const VmaAllocationCreateInfo& allocation_create_info = kDefaultAllocationCreateInfo);
 
@@ -31,21 +31,20 @@ public:
 
   [[nodiscard]] vk::Buffer operator*() const noexcept { return buffer_; }
 
-  [[nodiscard]] std::size_t size_bytes() const noexcept { return size_bytes_; }
-
 protected:
   Buffer() noexcept = default;
 
   vk::Buffer buffer_;
-  vk::DeviceSize size_bytes_ = 0;
   VmaAllocator allocator_ = nullptr;
   VmaAllocation allocation_ = nullptr;
 };
 
 export class HostVisibleBuffer final : public Buffer {
 public:
-  HostVisibleBuffer(const std::size_t size_bytes, const vk::BufferUsageFlags usage_flags, const VmaAllocator allocator)
-      : Buffer{size_bytes, usage_flags, allocator, kHostVisibleAllocationCreateInfo} {}
+  HostVisibleBuffer(const std::size_t size_bytes,
+                    const vk::BufferUsageFlags buffer_usage_flags,
+                    const VmaAllocator allocator)
+      : Buffer{size_bytes, buffer_usage_flags, allocator, kHostVisibleAllocationCreateInfo}, size_bytes_{size_bytes} {}
 
   HostVisibleBuffer(const HostVisibleBuffer&) = delete;
   HostVisibleBuffer(HostVisibleBuffer&& host_visible_buffer) noexcept { *this = std::move(host_visible_buffer); }
@@ -54,6 +53,9 @@ public:
   HostVisibleBuffer& operator=(HostVisibleBuffer&& host_visible_buffer) noexcept;
 
   ~HostVisibleBuffer() noexcept override { UnmapMemory(); }
+
+  void MapMemory();
+  void UnmapMemory() noexcept;
 
   template <typename T>
   void Copy(const DataView<const T> data_view) const {
@@ -64,14 +66,15 @@ public:
     vk::detail::resultCheck(static_cast<vk::Result>(result), "Flush allocation failed");
   }
 
-  void MapMemory();
-  void UnmapMemory() noexcept;
+  [[nodiscard]] Buffer CreateDeviceLocalBuffer(const vk::BufferUsageFlagBits buffer_usage_flags,
+                                               const vk::CommandBuffer command_buffer) const;
 
 private:
   static constexpr VmaAllocationCreateInfo kHostVisibleAllocationCreateInfo{
       .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
       .usage = VMA_MEMORY_USAGE_AUTO};
 
+  vk::DeviceSize size_bytes_ = 0;
   void* mapped_memory_ = nullptr;
 };
 
@@ -84,16 +87,6 @@ export template <typename T>
   return staging_buffer;
 }
 
-// TODO: should this be a constructor?
-export [[nodiscard]] Buffer CreateBuffer(const HostVisibleBuffer& staging_buffer,
-                                         const vk::BufferUsageFlags usage_flags,
-                                         const vk::CommandBuffer command_buffer,
-                                         const VmaAllocator allocator) {
-  Buffer buffer{staging_buffer.size_bytes(), usage_flags | vk::BufferUsageFlagBits::eTransferDst, allocator};
-  command_buffer.copyBuffer(*staging_buffer, *buffer, vk::BufferCopy{.size = staging_buffer.size_bytes()});
-  return buffer;
-}
-
 }  // namespace vktf
 
 module :private;
@@ -101,13 +94,13 @@ module :private;
 namespace vktf {
 
 Buffer::Buffer(const std::size_t size_bytes,
-               const vk::BufferUsageFlags usage_flags,
+               const vk::BufferUsageFlags buffer_usage_flags,
                const VmaAllocator allocator,
                const VmaAllocationCreateInfo& allocation_create_info)
-    : size_bytes_{size_bytes}, allocator_{allocator} {
+    : allocator_{allocator} {
   const VkBufferCreateInfo buffer_create_info{.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
                                               .size = static_cast<VkDeviceSize>(size_bytes),
-                                              .usage = static_cast<VkBufferUsageFlags>(usage_flags)};
+                                              .usage = static_cast<VkBufferUsageFlags>(buffer_usage_flags)};
 
   VkBuffer buffer = nullptr;
   const auto result =
@@ -120,7 +113,6 @@ Buffer::Buffer(const std::size_t size_bytes,
 Buffer& Buffer::operator=(Buffer&& buffer) noexcept {
   if (this != &buffer) {
     buffer_ = std::exchange(buffer.buffer_, nullptr);
-    size_bytes_ = std::exchange(buffer.size_bytes_, 0);
     allocator_ = std::exchange(buffer.allocator_, nullptr);
     allocation_ = std::exchange(buffer.allocation_, nullptr);
   }
@@ -136,10 +128,23 @@ Buffer::~Buffer() noexcept {
 HostVisibleBuffer& HostVisibleBuffer::operator=(HostVisibleBuffer&& host_visible_buffer) noexcept {
   if (this != &host_visible_buffer) {
     UnmapMemory();
+    size_bytes_ = std::exchange(host_visible_buffer.size_bytes_, 0);
     mapped_memory_ = std::exchange(host_visible_buffer.mapped_memory_, nullptr);
     Buffer::operator=(std::move(host_visible_buffer));
   }
   return *this;
+}
+
+Buffer HostVisibleBuffer::CreateDeviceLocalBuffer(const vk::BufferUsageFlagBits buffer_usage_flags,
+                                                  const vk::CommandBuffer command_buffer) const {
+  static constexpr VmaAllocationCreateInfo kAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+  const auto& host_visible_buffer = buffer_;
+  Buffer device_local_buffer{size_bytes_,
+                             buffer_usage_flags | vk::BufferUsageFlagBits::eTransferDst,
+                             allocator_,
+                             kAllocationCreateInfo};
+  command_buffer.copyBuffer(host_visible_buffer, *device_local_buffer, vk::BufferCopy{.size = size_bytes_});
+  return device_local_buffer;
 }
 
 void HostVisibleBuffer::MapMemory() {

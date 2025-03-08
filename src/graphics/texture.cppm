@@ -19,10 +19,8 @@ export struct StagingTexture {
   StagingTexture(const KtxTexture& ktx_texture, const VmaAllocator allocator);
 
   HostVisibleBuffer staging_buffer;
-  std::uint32_t width;
-  std::uint32_t height;
-  std::uint32_t mip_levels;
-  vk::Format format;
+  vk::Format image_format;
+  vk::Extent2D image_extent;
   std::vector<vk::BufferImageCopy> buffer_image_copies;
 };
 
@@ -51,10 +49,8 @@ namespace vktf {
 StagingTexture::StagingTexture(const KtxTexture& ktx_texture, const VmaAllocator allocator)
     : staging_buffer{CreateStagingBuffer(DataView<const std::uint8_t>{ktx_texture->pData, ktx_texture->dataSize},
                                          allocator)},
-      width{ktx_texture->baseWidth},
-      height{ktx_texture->baseHeight},
-      mip_levels{ktx_texture->numLevels},
-      format{static_cast<vk::Format>(ktx_texture->vkFormat)},
+      image_format{static_cast<vk::Format>(ktx_texture->vkFormat)},
+      image_extent{.width = ktx_texture->baseWidth, .height = ktx_texture->baseHeight},
       buffer_image_copies{ktx_texture.GetBufferImageCopies()} {}
 
 Texture::Texture(const StagingTexture& staging_texture,
@@ -62,9 +58,9 @@ Texture::Texture(const StagingTexture& staging_texture,
                  const vk::Device device,
                  const vk::CommandBuffer command_buffer,
                  const VmaAllocator allocator)
-    : image_{staging_texture.format,
-             vk::Extent2D{.width = staging_texture.width, .height = staging_texture.height},
-             staging_texture.mip_levels,
+    : image_{staging_texture.image_format,
+             staging_texture.image_extent,
+             static_cast<std::uint32_t>(staging_texture.buffer_image_copies.size()),
              vk::SampleCountFlagBits::e1,
              vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
              vk::ImageAspectFlagBits::eColor,

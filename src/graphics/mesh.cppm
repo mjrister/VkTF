@@ -41,13 +41,13 @@ consteval vk::IndexType GetIndexType() {
 export struct StagingPrimitive {
   template <IndexType T>
   StagingPrimitive(const std::vector<Vertex>& vertices, const std::vector<T>& indices, const VmaAllocator allocator)
-      : vertex_buffer{CreateStagingBuffer<Vertex>(vertices, allocator)},
-        index_buffer{CreateStagingBuffer<T>(indices, allocator)},
+      : vertex_staging_buffer{CreateStagingBuffer<Vertex>(vertices, allocator)},
+        index_staging_buffer{CreateStagingBuffer<T>(indices, allocator)},
         index_type{GetIndexType<T>()},
         index_count{static_cast<std::uint32_t>(indices.size())} {}
 
-  HostVisibleBuffer vertex_buffer;
-  HostVisibleBuffer index_buffer;
+  HostVisibleBuffer vertex_staging_buffer;
+  HostVisibleBuffer index_staging_buffer;
   vk::IndexType index_type;
   std::uint32_t index_count;
 };
@@ -56,8 +56,7 @@ export class Primitive {
 public:
   Primitive(const StagingPrimitive& staging_primitive,
             const Material* const material,
-            const vk::CommandBuffer command_buffer,
-            const VmaAllocator allocator);
+            const vk::CommandBuffer command_buffer);
 
   [[nodiscard]] const Material* material() const noexcept { return material_; }
 
@@ -83,10 +82,9 @@ using enum vk::BufferUsageFlagBits;
 
 Primitive::Primitive(const StagingPrimitive& staging_primitive,
                      const Material* const material,
-                     const vk::CommandBuffer command_buffer,
-                     const VmaAllocator allocator)
-    : vertex_buffer_{CreateBuffer(staging_primitive.vertex_buffer, eVertexBuffer, command_buffer, allocator)},
-      index_buffer_{CreateBuffer(staging_primitive.index_buffer, eIndexBuffer, command_buffer, allocator)},
+                     const vk::CommandBuffer command_buffer)
+    : vertex_buffer_{staging_primitive.vertex_staging_buffer.CreateDeviceLocalBuffer(eVertexBuffer, command_buffer)},
+      index_buffer_{staging_primitive.index_staging_buffer.CreateDeviceLocalBuffer(eIndexBuffer, command_buffer)},
       index_type_{staging_primitive.index_type},
       index_count_{staging_primitive.index_count},
       material_{material} {}
