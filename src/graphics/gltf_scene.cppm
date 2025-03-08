@@ -448,7 +448,10 @@ std::unique_ptr<vktf::Material> CreateMaterial(const StagingMaterial& staging_ma
   const auto& [normal_texture, normal_texture_sampler] = normal_staging_texture;
 
   return std::make_unique<vktf::Material>(
-      properties_staging_buffer.CreateDeviceLocalBuffer(vk::BufferUsageFlagBits::eUniformBuffer, command_buffer),
+      vktf::CreateDeviceLocalBuffer(properties_staging_buffer,
+                                    vk::BufferUsageFlagBits::eUniformBuffer,
+                                    command_buffer,
+                                    allocator),
       vktf::Texture{base_color_texture, base_color_sampler, device, command_buffer, allocator},
       vktf::Texture{metallic_roughness_texture, metallic_roughness_sampler, device, command_buffer, allocator},
       vktf::Texture{normal_texture, normal_texture_sampler, device, command_buffer, allocator});
@@ -707,12 +710,14 @@ StagingMesh CreateStagingMesh(const cgltf_mesh& gltf_mesh, const VmaAllocator al
   return staging_primitives;
 }
 
-std::unique_ptr<const vktf::Mesh> CreateMesh(const StagingMesh& staging_mesh, const vk::CommandBuffer command_buffer) {
+std::unique_ptr<const vktf::Mesh> CreateMesh(const StagingMesh& staging_mesh,
+                                             const vk::CommandBuffer command_buffer,
+                                             const VmaAllocator allocator) {
   std::vector<vktf::Primitive> primitives;
   primitives.reserve(staging_mesh.size());
 
   for (const auto& [staging_primitive, material] : staging_mesh) {
-    primitives.emplace_back(staging_primitive, material, command_buffer);
+    primitives.emplace_back(staging_primitive, material, command_buffer, allocator);
   }
 
   return std::make_unique<const vktf::Mesh>(std::move(primitives));
@@ -1137,9 +1142,9 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
                               | std::ranges::to<std::vector>();
 
   auto meshes = staging_meshes  //
-                | std::views::transform([command_buffer](const auto& mesh_pair) {
+                | std::views::transform([command_buffer, allocator](const auto& mesh_pair) {
                     const auto& [gltf_mesh, staging_mesh] = mesh_pair;
-                    return std::pair{gltf_mesh, CreateMesh(staging_mesh, command_buffer)};
+                    return std::pair{gltf_mesh, CreateMesh(staging_mesh, command_buffer, allocator)};
                   })
                 | std::ranges::to<std::unordered_map>();
 

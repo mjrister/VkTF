@@ -42,19 +42,19 @@ export class StagingPrimitive {
 public:
   template <IndexType T>
   StagingPrimitive(const std::vector<Vertex>& vertices, const std::vector<T>& indices, const VmaAllocator allocator)
-      : vertex_staging_buffer_{CreateStagingBuffer<Vertex>(vertices, allocator)},
-        index_staging_buffer_{CreateStagingBuffer<T>(indices, allocator)},
+      : vertex_buffer_{CreateStagingBuffer<Vertex>(vertices, allocator)},
+        index_buffer_{CreateStagingBuffer<T>(indices, allocator)},
         index_type_{GetIndexType<T>()},
         index_count_{static_cast<std::uint32_t>(indices.size())} {}
 
-  [[nodiscard]] const auto& vertex_staging_buffer() const noexcept { return vertex_staging_buffer_; }
-  [[nodiscard]] const auto& index_staging_buffer() const noexcept { return index_staging_buffer_; }
+  [[nodiscard]] const auto& vertex_buffer() const noexcept { return vertex_buffer_; }
+  [[nodiscard]] const auto& index_buffer() const noexcept { return index_buffer_; }
   [[nodiscard]] auto index_type() const noexcept { return index_type_; }
   [[nodiscard]] auto index_count() const noexcept { return index_count_; }
 
 private:
-  HostVisibleBuffer vertex_staging_buffer_;
-  HostVisibleBuffer index_staging_buffer_;
+  HostVisibleBuffer vertex_buffer_;
+  HostVisibleBuffer index_buffer_;
   vk::IndexType index_type_;
   std::uint32_t index_count_;
 };
@@ -63,7 +63,8 @@ export class Primitive {
 public:
   Primitive(const StagingPrimitive& staging_primitive,
             const Material* const material,
-            const vk::CommandBuffer command_buffer);
+            const vk::CommandBuffer command_buffer,
+            const VmaAllocator allocator);
 
   [[nodiscard]] const auto* material() const noexcept { return material_; }
 
@@ -85,13 +86,18 @@ module :private;
 
 namespace vktf {
 
-using enum vk::BufferUsageFlagBits;
-
 Primitive::Primitive(const StagingPrimitive& staging_primitive,
                      const Material* const material,
-                     const vk::CommandBuffer command_buffer)
-    : vertex_buffer_{staging_primitive.vertex_staging_buffer().CreateDeviceLocalBuffer(eVertexBuffer, command_buffer)},
-      index_buffer_{staging_primitive.index_staging_buffer().CreateDeviceLocalBuffer(eIndexBuffer, command_buffer)},
+                     const vk::CommandBuffer command_buffer,
+                     const VmaAllocator allocator)
+    : vertex_buffer_{CreateDeviceLocalBuffer(staging_primitive.vertex_buffer(),
+                                             vk::BufferUsageFlagBits::eVertexBuffer,
+                                             command_buffer,
+                                             allocator)},
+      index_buffer_{CreateDeviceLocalBuffer(staging_primitive.index_buffer(),
+                                            vk::BufferUsageFlagBits::eIndexBuffer,
+                                            command_buffer,
+                                            allocator)},
       index_type_{staging_primitive.index_type()},
       index_count_{staging_primitive.index_count()},
       material_{material} {}

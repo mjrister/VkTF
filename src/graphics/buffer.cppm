@@ -54,6 +54,8 @@ public:
 
   ~HostVisibleBuffer() noexcept override { UnmapMemory(); }
 
+  [[nodiscard]] auto size_bytes() const noexcept { return size_bytes_; }
+
   void MapMemory();
   void UnmapMemory() noexcept;
 
@@ -65,9 +67,6 @@ public:
     const auto result = vmaFlushAllocation(allocator_, allocation_, 0, vk::WholeSize);
     vk::detail::resultCheck(static_cast<vk::Result>(result), "Flush allocation failed");
   }
-
-  [[nodiscard]] Buffer CreateDeviceLocalBuffer(const vk::BufferUsageFlagBits buffer_usage_flags,
-                                               const vk::CommandBuffer command_buffer) const;
 
 private:
   static constexpr VmaAllocationCreateInfo kHostVisibleAllocationCreateInfo{
@@ -86,6 +85,11 @@ export template <typename T>
   staging_buffer.UnmapMemory();  // staging buffers are copied once so they can be unmapped immediately
   return staging_buffer;
 }
+
+export [[nodiscard]] Buffer CreateDeviceLocalBuffer(const HostVisibleBuffer& host_visible_buffer,
+                                                    const vk::BufferUsageFlagBits buffer_usage_flags,
+                                                    const vk::CommandBuffer command_buffer,
+                                                    const VmaAllocator allocator);
 
 }  // namespace vktf
 
@@ -135,18 +139,6 @@ HostVisibleBuffer& HostVisibleBuffer::operator=(HostVisibleBuffer&& host_visible
   return *this;
 }
 
-Buffer HostVisibleBuffer::CreateDeviceLocalBuffer(const vk::BufferUsageFlagBits buffer_usage_flags,
-                                                  const vk::CommandBuffer command_buffer) const {
-  static constexpr VmaAllocationCreateInfo kAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
-  const auto& host_visible_buffer = buffer_;
-  Buffer device_local_buffer{size_bytes_,
-                             buffer_usage_flags | vk::BufferUsageFlagBits::eTransferDst,
-                             allocator_,
-                             kAllocationCreateInfo};
-  command_buffer.copyBuffer(host_visible_buffer, *device_local_buffer, vk::BufferCopy{.size = size_bytes_});
-  return device_local_buffer;
-}
-
 void HostVisibleBuffer::MapMemory() {
   if (mapped_memory_ == nullptr) {
     const auto result = vmaMapMemory(allocator_, allocation_, &mapped_memory_);
@@ -159,6 +151,21 @@ void HostVisibleBuffer::UnmapMemory() noexcept {
     vmaUnmapMemory(allocator_, allocation_);
     mapped_memory_ = nullptr;
   }
+}
+
+Buffer CreateDeviceLocalBuffer(const HostVisibleBuffer& host_visible_buffer,
+                               const vk::BufferUsageFlagBits buffer_usage_flags,
+                               const vk::CommandBuffer command_buffer,
+                               const VmaAllocator allocator) {
+  static constexpr VmaAllocationCreateInfo kAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+  Buffer device_local_buffer{host_visible_buffer.size_bytes(),
+                             buffer_usage_flags | vk::BufferUsageFlagBits::eTransferDst,
+                             allocator,
+                             kAllocationCreateInfo};
+  command_buffer.copyBuffer(*host_visible_buffer,
+                            *device_local_buffer,
+                            vk::BufferCopy{.size = host_visible_buffer.size_bytes()});
+  return device_local_buffer;
 }
 
 }  // namespace vktf
