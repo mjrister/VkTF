@@ -73,7 +73,7 @@ private:
       .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
       .usage = VMA_MEMORY_USAGE_AUTO};
 
-  vk::DeviceSize size_bytes_ = 0;
+  std::size_t size_bytes_ = 0;
   void* mapped_memory_ = nullptr;
 };
 
@@ -87,9 +87,19 @@ export template <typename T>
 }
 
 export [[nodiscard]] Buffer CreateDeviceLocalBuffer(const HostVisibleBuffer& host_visible_buffer,
-                                                    const vk::BufferUsageFlagBits buffer_usage_flags,
+                                                    const vk::BufferUsageFlags buffer_usage_flags,
                                                     const vk::CommandBuffer command_buffer,
-                                                    const VmaAllocator allocator);
+                                                    const VmaAllocator allocator) {
+  static constexpr VmaAllocationCreateInfo kAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+  Buffer device_local_buffer{host_visible_buffer.size_bytes(),
+                             buffer_usage_flags | vk::BufferUsageFlagBits::eTransferDst,
+                             allocator,
+                             kAllocationCreateInfo};
+  command_buffer.copyBuffer(*host_visible_buffer,
+                            *device_local_buffer,
+                            vk::BufferCopy{.size = host_visible_buffer.size_bytes()});
+  return device_local_buffer;
+}
 
 }  // namespace vktf
 
@@ -151,21 +161,6 @@ void HostVisibleBuffer::UnmapMemory() noexcept {
     vmaUnmapMemory(allocator_, allocation_);
     mapped_memory_ = nullptr;
   }
-}
-
-Buffer CreateDeviceLocalBuffer(const HostVisibleBuffer& host_visible_buffer,
-                               const vk::BufferUsageFlagBits buffer_usage_flags,
-                               const vk::CommandBuffer command_buffer,
-                               const VmaAllocator allocator) {
-  static constexpr VmaAllocationCreateInfo kAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
-  Buffer device_local_buffer{host_visible_buffer.size_bytes(),
-                             buffer_usage_flags | vk::BufferUsageFlagBits::eTransferDst,
-                             allocator,
-                             kAllocationCreateInfo};
-  command_buffer.copyBuffer(*host_visible_buffer,
-                            *device_local_buffer,
-                            vk::BufferCopy{.size = host_visible_buffer.size_bytes()});
-  return device_local_buffer;
 }
 
 }  // namespace vktf
