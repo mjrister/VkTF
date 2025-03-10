@@ -88,8 +88,8 @@ export template <typename T>
 
 export [[nodiscard]] Buffer CreateDeviceLocalBuffer(const HostVisibleBuffer& host_visible_buffer,
                                                     const vk::BufferUsageFlags buffer_usage_flags,
-                                                    const vk::CommandBuffer command_buffer,
-                                                    const VmaAllocator allocator) {
+                                                    const VmaAllocator allocator,
+                                                    const vk::CommandBuffer command_buffer) {
   static constexpr VmaAllocationCreateInfo kAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
   Buffer device_local_buffer{host_visible_buffer.size_bytes(),
                              buffer_usage_flags | vk::BufferUsageFlagBits::eTransferDst,

@@ -63,8 +63,8 @@ export class Primitive {
 public:
   Primitive(const StagingPrimitive& staging_primitive,
             const Material* const material,
-            const vk::CommandBuffer command_buffer,
-            const VmaAllocator allocator);
+            const VmaAllocator allocator,
+            const vk::CommandBuffer command_buffer);
 
   [[nodiscard]] const Material* material() const noexcept { return material_; }
 
@@ -88,16 +88,16 @@ namespace vktf {
 
 Primitive::Primitive(const StagingPrimitive& staging_primitive,
                      const Material* const material,
-                     const vk::CommandBuffer command_buffer,
-                     const VmaAllocator allocator)
+                     const VmaAllocator allocator,
+                     const vk::CommandBuffer command_buffer)
     : vertex_buffer_{CreateDeviceLocalBuffer(staging_primitive.vertex_buffer(),
                                              vk::BufferUsageFlagBits::eVertexBuffer,
-                                             command_buffer,
-                                             allocator)},
+                                             allocator,
+                                             command_buffer)},
       index_buffer_{CreateDeviceLocalBuffer(staging_primitive.index_buffer(),
                                             vk::BufferUsageFlagBits::eIndexBuffer,
-                                            command_buffer,
-                                            allocator)},
+                                            allocator,
+                                            command_buffer)},
       index_type_{staging_primitive.index_type()},
       index_count_{staging_primitive.index_count()},
       material_{material} {}

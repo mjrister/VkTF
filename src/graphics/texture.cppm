@@ -36,8 +36,8 @@ public:
   Texture(const StagingTexture& staging_texture,
           const vk::Sampler sampler,
           const vk::Device device,
-          const vk::CommandBuffer command_buffer,
-          const VmaAllocator allocator);
+          const VmaAllocator allocator,
+          const vk::CommandBuffer command_buffer);
 
   [[nodiscard]] auto image_view() const noexcept { return image_.image_view(); }
   [[nodiscard]] auto sampler() const noexcept { return sampler_; }
@@ -63,8 +63,8 @@ StagingTexture::StagingTexture(const KtxTexture& ktx_texture, const VmaAllocator
 Texture::Texture(const StagingTexture& staging_texture,
                  const vk::Sampler sampler,
                  const vk::Device device,
-                 const vk::CommandBuffer command_buffer,
-                 const VmaAllocator allocator)
+                 const VmaAllocator allocator,
+                 const vk::CommandBuffer command_buffer)
     : image_{staging_texture.image_format(),
              staging_texture.image_extent(),
              static_cast<std::uint32_t>(staging_texture.buffer_image_copies().size()),

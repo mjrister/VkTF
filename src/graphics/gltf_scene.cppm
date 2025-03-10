@@ -371,11 +371,11 @@ std::optional<std::filesystem::path> GetImageUri(const cgltf_texture_view& gltf_
   return gltf_image_uri;
 }
 
-std::optional<StagingMaterial> TryCreateStagingMaterial(const cgltf_material& gltf_material,
-                                                        const std::filesystem::path& gltf_directory,
-                                                        const vk::PhysicalDevice physical_device,
-                                                        const VmaAllocator allocator,
-                                                        const Samplers& samplers) {
+std::optional<StagingMaterial> CreateStagingMaterial(const cgltf_material& gltf_material,
+                                                     const std::filesystem::path& gltf_directory,
+                                                     const vk::PhysicalDevice physical_device,
+                                                     const VmaAllocator allocator,
+                                                     const Samplers& samplers) {
   if (gltf_material.has_pbr_metallic_roughness == 0) {
     return std::nullopt;  // TODO: add support for non PBR metallic-roughness materials
   }
@@ -436,8 +436,8 @@ std::optional<StagingMaterial> TryCreateStagingMaterial(const cgltf_material& gl
 
 std::unique_ptr<vktf::Material> CreateMaterial(const StagingMaterial& staging_material,
                                                const vk::Device device,
-                                               const vk::CommandBuffer command_buffer,
-                                               const VmaAllocator allocator) {
+                                               const VmaAllocator allocator,
+                                               const vk::CommandBuffer command_buffer) {
   const auto& [properties_staging_buffer,
                base_color_staging_texture,
                metallic_roughness_staging_texture,
@@ -450,11 +450,11 @@ std::unique_ptr<vktf::Material> CreateMaterial(const StagingMaterial& staging_ma
   return std::make_unique<vktf::Material>(
       vktf::CreateDeviceLocalBuffer(properties_staging_buffer,
                                     vk::BufferUsageFlagBits::eUniformBuffer,
-                                    command_buffer,
-                                    allocator),
-      vktf::Texture{base_color_texture, base_color_sampler, device, command_buffer, allocator},
-      vktf::Texture{metallic_roughness_texture, metallic_roughness_sampler, device, command_buffer, allocator},
-      vktf::Texture{normal_texture, normal_texture_sampler, device, command_buffer, allocator});
+                                    allocator,
+                                    command_buffer),
+      vktf::Texture{base_color_texture, base_color_sampler, device, allocator, command_buffer},
+      vktf::Texture{metallic_roughness_texture, metallic_roughness_sampler, device, allocator, command_buffer},
+      vktf::Texture{normal_texture, normal_texture_sampler, device, allocator, command_buffer});
 }
 
 vktf::DescriptorPool CreateMaterialDescriptorPool(const vk::Device device, const std::uint32_t material_count) {
@@ -711,13 +711,13 @@ StagingMesh CreateStagingMesh(const cgltf_mesh& gltf_mesh, const VmaAllocator al
 }
 
 std::unique_ptr<const vktf::Mesh> CreateMesh(const StagingMesh& staging_mesh,
-                                             const vk::CommandBuffer command_buffer,
-                                             const VmaAllocator allocator) {
+                                             const VmaAllocator allocator,
+                                             const vk::CommandBuffer command_buffer) {
   std::vector<vktf::Primitive> primitives;
   primitives.reserve(staging_mesh.size());
 
   for (const auto& [staging_primitive, material] : staging_mesh) {
-    primitives.emplace_back(staging_primitive, material, command_buffer, allocator);
+    primitives.emplace_back(staging_primitive, material, allocator, command_buffer);
   }
 
   return std::make_unique<const vktf::Mesh>(std::move(primitives));
@@ -1107,7 +1107,7 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
       std::span{gltf_data->materials, gltf_data->materials_count}
       | std::views::transform([&gltf_directory, physical_device, allocator, &samplers](const auto& gltf_material) {
           return std::pair{&gltf_material,
-                           std::async(TryCreateStagingMaterial,
+                           std::async(CreateStagingMaterial,
                                       gltf_material,
                                       std::cref(gltf_directory),
                                       physical_device,
@@ -1125,13 +1125,13 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
 
   auto materials =
       staging_materials  //
-      | std::views::transform([device, command_buffer, allocator](auto& material_pair) {
+      | std::views::transform([device, allocator, command_buffer](auto& material_pair) {
           const auto& [gltf_material, maybe_staging_material] = material_pair;
           if (!maybe_staging_material.has_value()) {
             std::println(std::cerr, "Failed to create unsupported material {}", GetName(*gltf_material));
             return std::pair{gltf_material, std::unique_ptr<Material>{nullptr}};
           }
-          return std::pair{gltf_material, CreateMaterial(*maybe_staging_material, device, command_buffer, allocator)};
+          return std::pair{gltf_material, CreateMaterial(*maybe_staging_material, device, allocator, command_buffer)};
         })
       | std::ranges::to<std::unordered_map>();
 
@@ -1142,9 +1142,9 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
                               | std::ranges::to<std::vector>();
 
   auto meshes = staging_meshes  //
-                | std::views::transform([command_buffer, allocator](const auto& mesh_pair) {
+                | std::views::transform([allocator, command_buffer](const auto& mesh_pair) {
                     const auto& [gltf_mesh, staging_mesh] = mesh_pair;
-                    return std::pair{gltf_mesh, CreateMesh(staging_mesh, command_buffer, allocator)};
+                    return std::pair{gltf_mesh, CreateMesh(staging_mesh, allocator, command_buffer)};
                   })
                 | std::ranges::to<std::unordered_map>();
 
