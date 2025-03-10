@@ -59,6 +59,8 @@ private:
   std::uint32_t index_count_;
 };
 
+export using StagingMesh = std::vector<StagingPrimitive>;
+
 export class Primitive {
 public:
   Primitive(const StagingPrimitive& staging_primitive,

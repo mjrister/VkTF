@@ -541,8 +541,6 @@ void UpdateMaterialDescriptorSets(const vk::Device device,
 
 #pragma region meshes
 
-using Meshes = std::unordered_map<const cgltf_mesh*, std::unique_ptr<const vktf::Mesh>>;
-
 template <typename T, glm::length_t N>
   requires VecConstructible<T, N>
 struct VertexAttribute {
@@ -679,12 +677,22 @@ vktf::StagingPrimitive CreateStagingPrimitive(const cgltf_primitive& gltf_primit
   }
 }
 
-using StagingPrimitive = std::pair<vktf::StagingPrimitive, const vktf::Material*>;
-using StagingMesh = std::vector<StagingPrimitive>;
+struct MeshTransfer {
+  vktf::StagingMesh staging_mesh;
+  std::unique_ptr<const vktf::Mesh> mesh;
+};
 
-StagingMesh CreateStagingMesh(const cgltf_mesh& gltf_mesh, const VmaAllocator allocator, const Materials& materials) {
-  std::vector<StagingPrimitive> staging_primitives;
+using MeshTransfers = std::unordered_map<const cgltf_mesh*, MeshTransfer>;
+
+MeshTransfer CreateMeshTransfer(const cgltf_mesh& gltf_mesh,
+                                const Materials& materials,
+                                const VmaAllocator allocator,
+                                const vk::CommandBuffer command_buffer) {
+  std::vector<vktf::StagingPrimitive> staging_primitives;
   staging_primitives.reserve(gltf_mesh.primitives_count);
+
+  std::vector<vktf::Primitive> primitives;
+  primitives.reserve(gltf_mesh.primitives_count);
 
   for (const auto& [index, gltf_primitive] :
        std::span{gltf_mesh.primitives, gltf_mesh.primitives_count} | std::views::enumerate) {
@@ -704,23 +712,12 @@ StagingMesh CreateStagingMesh(const cgltf_mesh& gltf_mesh, const VmaAllocator al
       std::println(std::cerr, kMessageFormat, GetName(gltf_mesh), index);
       continue;  // TODO: support dynamic material layouts
     }
-    staging_primitives.emplace_back(CreateStagingPrimitive(gltf_primitive, allocator), material.get());
+    const auto& staging_primitive = staging_primitives.emplace_back(CreateStagingPrimitive(gltf_primitive, allocator));
+    primitives.emplace_back(staging_primitive, material.get(), allocator, command_buffer);
   }
 
-  return staging_primitives;
-}
-
-std::unique_ptr<const vktf::Mesh> CreateMesh(const StagingMesh& staging_mesh,
-                                             const VmaAllocator allocator,
-                                             const vk::CommandBuffer command_buffer) {
-  std::vector<vktf::Primitive> primitives;
-  primitives.reserve(staging_mesh.size());
-
-  for (const auto& [staging_primitive, material] : staging_mesh) {
-    primitives.emplace_back(staging_primitive, material, allocator, command_buffer);
-  }
-
-  return std::make_unique<const vktf::Mesh>(std::move(primitives));
+  return MeshTransfer{.staging_mesh = std::move(staging_primitives),
+                      .mesh = std::make_unique<const vktf::Mesh>(std::move(primitives))};
 }
 
 #pragma endregion
@@ -748,15 +745,15 @@ glm::mat4 GetLocalTransform(const cgltf_node& gltf_node) {
 
 std::vector<std::unique_ptr<const vktf::Node>> CreateNodes(const cgltf_node* const* const gltf_nodes,
                                                            const cgltf_size gltf_nodes_count,
-                                                           const Meshes& meshes,
+                                                           const MeshTransfers& meshes_transfers,
                                                            const Lights& lights) {
   return std::span{gltf_nodes, gltf_nodes_count}
-         | std::views::transform([&meshes, &lights](const auto* const gltf_node) {
+         | std::views::transform([&meshes_transfers, &lights](const auto* const gltf_node) {
              return std::make_unique<const vktf::Node>(
-                 gltf_node->mesh == nullptr ? nullptr : Find(gltf_node->mesh, meshes).get(),
+                 gltf_node->mesh == nullptr ? nullptr : Find(gltf_node->mesh, meshes_transfers).mesh.get(),
                  gltf_node->light == nullptr ? nullptr : Find(gltf_node->light, lights).get(),
                  GetLocalTransform(*gltf_node),
-                 CreateNodes(gltf_node->children, gltf_node->children_count, meshes, lights));
+                 CreateNodes(gltf_node->children, gltf_node->children_count, meshes_transfers, lights));
            })
          | std::ranges::to<std::vector>();
 }
@@ -1135,18 +1132,12 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
         })
       | std::ranges::to<std::unordered_map>();
 
-  const auto staging_meshes = std::span{gltf_data->meshes, gltf_data->meshes_count}
-                              | std::views::transform([allocator, &materials](const auto& gltf_mesh) {
-                                  return std::pair{&gltf_mesh, CreateStagingMesh(gltf_mesh, allocator, materials)};
-                                })
-                              | std::ranges::to<std::vector>();
-
-  auto meshes = staging_meshes  //
-                | std::views::transform([allocator, command_buffer](const auto& mesh_pair) {
-                    const auto& [gltf_mesh, staging_mesh] = mesh_pair;
-                    return std::pair{gltf_mesh, CreateMesh(staging_mesh, allocator, command_buffer)};
-                  })
-                | std::ranges::to<std::unordered_map>();
+  auto mesh_transfers =
+      std::span{gltf_data->meshes, gltf_data->meshes_count}
+      | std::views::transform([&materials, allocator, command_buffer](const auto& gltf_mesh) {
+          return std::pair{&gltf_mesh, CreateMeshTransfer(gltf_mesh, materials, allocator, command_buffer)};
+        })
+      | std::ranges::to<std::unordered_map>();
 
   command_buffer.end();
   const auto copy_fence = device.createFenceUnique(vk::FenceCreateInfo{});
@@ -1173,10 +1164,11 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
       | std::ranges::to<std::unordered_map>();
 
   const auto& gltf_scene = GetDefaultScene(*gltf_data);
-  root_node_ = std::make_unique<const Node>(nullptr,
-                                            nullptr,
-                                            glm::mat4{1.0f},
-                                            CreateNodes(gltf_scene.nodes, gltf_scene.nodes_count, meshes, lights));
+  root_node_ =
+      std::make_unique<const Node>(nullptr,
+                                   nullptr,
+                                   glm::mat4{1.0f},
+                                   CreateNodes(gltf_scene.nodes, gltf_scene.nodes_count, mesh_transfers, lights));
 
   camera_uniform_buffers_ = CreateUniformBuffers(max_render_frames, sizeof(CameraTransforms), allocator);
   lights_uniform_buffers_ = CreateUniformBuffers(max_render_frames, sizeof(Light) * lights.size(), allocator);
@@ -1198,7 +1190,9 @@ GltfScene::GltfScene(const std::filesystem::path& gltf_filepath,
 
   materials_ = materials | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
   samplers_ = samplers | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
-  meshes_ = meshes | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
+  meshes_ = mesh_transfers | std::views::values
+            | std::views::transform([](auto& mesh_transfer) { return std::move(mesh_transfer.mesh); })
+            | std::ranges::to<std::vector>();
   lights_ = lights | std::views::values | std::views::as_rvalue | std::ranges::to<std::vector>();
 
   static constexpr auto kMaxTimeout = std::numeric_limits<std::uint64_t>::max();
