@@ -47,10 +47,10 @@ public:
         index_type_{GetIndexType<T>()},
         index_count_{static_cast<std::uint32_t>(indices.size())} {}
 
-  [[nodiscard]] const auto& vertex_buffer() const noexcept { return vertex_buffer_; }
-  [[nodiscard]] const auto& index_buffer() const noexcept { return index_buffer_; }
-  [[nodiscard]] auto index_type() const noexcept { return index_type_; }
-  [[nodiscard]] auto index_count() const noexcept { return index_count_; }
+  [[nodiscard]] const HostVisibleBuffer& vertex_buffer() const noexcept { return vertex_buffer_; }
+  [[nodiscard]] const HostVisibleBuffer& index_buffer() const noexcept { return index_buffer_; }
+  [[nodiscard]] vk::IndexType index_type() const noexcept { return index_type_; }
+  [[nodiscard]] std::uint32_t index_count() const noexcept { return index_count_; }
 
 private:
   HostVisibleBuffer vertex_buffer_;
@@ -66,7 +66,7 @@ public:
             const vk::CommandBuffer command_buffer,
             const VmaAllocator allocator);
 
-  [[nodiscard]] const auto* material() const noexcept { return material_; }
+  [[nodiscard]] const Material* material() const noexcept { return material_; }
 
   void Render(const vk::CommandBuffer command_buffer) const;
 
