@@ -15,20 +15,13 @@ import ktx_texture;
 
 namespace vktf {
 
-export class StagingTexture {
-public:
+export struct StagingTexture {
   StagingTexture(const KtxTexture& ktx_texture, const VmaAllocator allocator);
 
-  [[nodiscard]] const auto& staging_buffer() const noexcept { return staging_buffer_; }
-  [[nodiscard]] const auto& buffer_image_copies() const noexcept { return buffer_image_copies_; }
-  [[nodiscard]] auto image_format() const noexcept { return image_format_; }
-  [[nodiscard]] auto image_extent() const noexcept { return image_extent_; }
-
-private:
-  HostVisibleBuffer staging_buffer_;
-  std::vector<vk::BufferImageCopy> buffer_image_copies_;
-  vk::Format image_format_;
-  vk::Extent2D image_extent_;
+  HostVisibleBuffer staging_buffer;
+  std::vector<vk::BufferImageCopy> buffer_image_copies;
+  vk::Format image_format;
+  vk::Extent2D image_extent;
 };
 
 export class Texture {
@@ -39,8 +32,8 @@ public:
           const VmaAllocator allocator,
           const vk::CommandBuffer command_buffer);
 
-  [[nodiscard]] auto image_view() const noexcept { return image_.image_view(); }
-  [[nodiscard]] auto sampler() const noexcept { return sampler_; }
+  [[nodiscard]] vk::ImageView image_view() const noexcept { return image_.image_view(); }
+  [[nodiscard]] vk::Sampler sampler() const noexcept { return sampler_; }
 
 private:
   Image image_;
@@ -54,27 +47,27 @@ module :private;
 namespace vktf {
 
 StagingTexture::StagingTexture(const KtxTexture& ktx_texture, const VmaAllocator allocator)
-    : staging_buffer_{CreateStagingBuffer(DataView<const std::uint8_t>{ktx_texture->pData, ktx_texture->dataSize},
-                                          allocator)},
-      buffer_image_copies_{ktx_texture.GetBufferImageCopies()},
-      image_format_{static_cast<vk::Format>(ktx_texture->vkFormat)},
-      image_extent_{.width = ktx_texture->baseWidth, .height = ktx_texture->baseHeight} {}
+    : staging_buffer{CreateStagingBuffer(DataView<const std::uint8_t>{ktx_texture->pData, ktx_texture->dataSize},
+                                         allocator)},
+      buffer_image_copies{ktx_texture.GetBufferImageCopies()},
+      image_format{static_cast<vk::Format>(ktx_texture->vkFormat)},
+      image_extent{.width = ktx_texture->baseWidth, .height = ktx_texture->baseHeight} {}
 
 Texture::Texture(const StagingTexture& staging_texture,
                  const vk::Sampler sampler,
                  const vk::Device device,
                  const VmaAllocator allocator,
                  const vk::CommandBuffer command_buffer)
-    : image_{staging_texture.image_format(),
-             staging_texture.image_extent(),
-             static_cast<std::uint32_t>(staging_texture.buffer_image_copies().size()),
+    : image_{staging_texture.image_format,
+             staging_texture.image_extent,
+             static_cast<std::uint32_t>(staging_texture.buffer_image_copies.size()),
              vk::SampleCountFlagBits::e1,
              vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
              vk::ImageAspectFlagBits::eColor,
              device,
              allocator},
       sampler_{sampler} {
-  image_.Copy(*staging_texture.staging_buffer(), staging_texture.buffer_image_copies(), command_buffer);
+  image_.Copy(*staging_texture.staging_buffer, staging_texture.buffer_image_copies, command_buffer);
 }
 
 }  // namespace vktf

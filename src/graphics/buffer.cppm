@@ -54,7 +54,7 @@ public:
 
   ~HostVisibleBuffer() noexcept override { UnmapMemory(); }
 
-  [[nodiscard]] auto size_bytes() const noexcept { return size_bytes_; }
+  [[nodiscard]] std::size_t size_bytes() const noexcept { return size_bytes_; }
 
   void MapMemory();
   void UnmapMemory() noexcept;

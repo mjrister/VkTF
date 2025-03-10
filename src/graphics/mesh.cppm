@@ -38,25 +38,18 @@ consteval vk::IndexType GetIndexType() {
   }
 }
 
-export class StagingPrimitive {
-public:
+export struct StagingPrimitive {
   template <IndexType T>
   StagingPrimitive(const std::vector<Vertex>& vertices, const std::vector<T>& indices, const VmaAllocator allocator)
-      : vertex_buffer_{CreateStagingBuffer<Vertex>(vertices, allocator)},
-        index_buffer_{CreateStagingBuffer<T>(indices, allocator)},
-        index_type_{GetIndexType<T>()},
-        index_count_{static_cast<std::uint32_t>(indices.size())} {}
+      : vertex_buffer{CreateStagingBuffer<Vertex>(vertices, allocator)},
+        index_buffer{CreateStagingBuffer<T>(indices, allocator)},
+        index_type{GetIndexType<T>()},
+        index_count{static_cast<std::uint32_t>(indices.size())} {}
 
-  [[nodiscard]] const HostVisibleBuffer& vertex_buffer() const noexcept { return vertex_buffer_; }
-  [[nodiscard]] const HostVisibleBuffer& index_buffer() const noexcept { return index_buffer_; }
-  [[nodiscard]] vk::IndexType index_type() const noexcept { return index_type_; }
-  [[nodiscard]] std::uint32_t index_count() const noexcept { return index_count_; }
-
-private:
-  HostVisibleBuffer vertex_buffer_;
-  HostVisibleBuffer index_buffer_;
-  vk::IndexType index_type_;
-  std::uint32_t index_count_;
+  HostVisibleBuffer vertex_buffer;
+  HostVisibleBuffer index_buffer;
+  vk::IndexType index_type;
+  std::uint32_t index_count;
 };
 
 export using StagingMesh = std::vector<StagingPrimitive>;
@@ -92,16 +85,16 @@ Primitive::Primitive(const StagingPrimitive& staging_primitive,
                      const Material* const material,
                      const VmaAllocator allocator,
                      const vk::CommandBuffer command_buffer)
-    : vertex_buffer_{CreateDeviceLocalBuffer(staging_primitive.vertex_buffer(),
+    : vertex_buffer_{CreateDeviceLocalBuffer(staging_primitive.vertex_buffer,
                                              vk::BufferUsageFlagBits::eVertexBuffer,
                                              allocator,
                                              command_buffer)},
-      index_buffer_{CreateDeviceLocalBuffer(staging_primitive.index_buffer(),
+      index_buffer_{CreateDeviceLocalBuffer(staging_primitive.index_buffer,
                                             vk::BufferUsageFlagBits::eIndexBuffer,
                                             allocator,
                                             command_buffer)},
-      index_type_{staging_primitive.index_type()},
-      index_count_{staging_primitive.index_count()},
+      index_type_{staging_primitive.index_type},
+      index_count_{staging_primitive.index_count},
       material_{material} {}
 
 void Primitive::Render(const vk::CommandBuffer command_buffer) const {
