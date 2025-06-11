@@ -12,17 +12,20 @@ module;
 
 export module swapchain;
 
-import physical_device;
+import queue;
 
 namespace vktf {
 
-export class Swapchain {
+export class [[nodiscard]] Swapchain {
 public:
-  Swapchain(const vk::SurfaceKHR surface,
-            const vk::PhysicalDevice physical_device,
-            const vk::Device device,
-            const vk::Extent2D framebuffer_extent,
-            const QueueFamilyIndices& queue_family_indices);
+  struct [[nodiscard]] CreateInfo {
+    vk::Extent2D framebuffer_extent;
+    vk::SurfaceKHR surface;
+    vk::PhysicalDevice physical_device;
+    const QueueFamilies& queue_families;
+  };
+
+  Swapchain(vk::Device device, const CreateInfo& create_info);
 
   [[nodiscard]] vk::SwapchainKHR operator*() const noexcept { return *swapchain_; }
 
@@ -31,8 +34,6 @@ public:
   [[nodiscard]] const std::vector<vk::UniqueImageView>& image_views() const noexcept { return image_views_; }
 
 private:
-  Swapchain(vk::Device device, const vk::SwapchainCreateInfoKHR& swapchain_create_info);
-
   vk::UniqueSwapchainKHR swapchain_;
   vk::Format image_format_ = vk::Format::eUndefined;
   vk::Extent2D image_extent_;
@@ -42,6 +43,8 @@ private:
 }  // namespace vktf
 
 module :private;
+
+namespace vktf {
 
 namespace {
 
@@ -57,7 +60,7 @@ vk::SurfaceFormatKHR GetSwapchainSurfaceFormat(const vk::PhysicalDevice physical
 }
 
 vk::PresentModeKHR GetSwapchainPresentMode(const vk::PhysicalDevice physical_device, const vk::SurfaceKHR surface) {
-  static constexpr auto kTargetPresentMode = vk::PresentModeKHR::eFifoRelaxed;
+  static constexpr auto kTargetPresentMode = vk::PresentModeKHR::eMailbox;
   const auto present_modes = physical_device.getSurfacePresentModesKHR(surface);
   if (std::ranges::contains(present_modes, kTargetPresentMode)) {
     return kTargetPresentMode;
@@ -81,45 +84,13 @@ vk::Extent2D GetSwapchainImageExtent(const vk::SurfaceCapabilitiesKHR& surface_c
       surface_capabilities.currentExtent != vk::Extent2D{.width = kUndefinedExtent, .height = kUndefinedExtent}) {
     return surface_capabilities.currentExtent;
   }
+
   const auto& [framebuffer_width, framebuffer_height] = framebuffer_extent;
   const auto& [min_image_width, min_image_height] = surface_capabilities.minImageExtent;
   const auto& [max_image_width, max_image_height] = surface_capabilities.maxImageExtent;
+
   return vk::Extent2D{.width = std::clamp(framebuffer_width, min_image_width, max_image_width),
                       .height = std::clamp(framebuffer_height, min_image_height, max_image_height)};
-}
-
-vk::SwapchainCreateInfoKHR GetSwapchainCreateInfo(const vk::SurfaceKHR surface,
-                                                  const vk::PhysicalDevice physical_device,
-                                                  const vk::Extent2D framebuffer_extent,
-                                                  const vktf::QueueFamilyIndices& queue_family_indices) {
-  const auto surface_capabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
-  const auto [image_format, image_color_space] = GetSwapchainSurfaceFormat(physical_device, surface);
-
-  vk::SwapchainCreateInfoKHR swapchain_create_info{
-      .surface = surface,
-      .minImageCount = GetSwapchainImageCount(surface_capabilities),
-      .imageFormat = image_format,
-      .imageColorSpace = image_color_space,
-      .imageExtent = GetSwapchainImageExtent(surface_capabilities, framebuffer_extent),
-      .imageArrayLayers = 1,
-      .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
-      .presentMode = GetSwapchainPresentMode(physical_device, surface),
-      .clipped = vk::True};
-
-  const auto& [graphics_index, present_index] = queue_family_indices;
-  const std::array graphics_and_present_index{graphics_index, present_index};
-
-  if (graphics_index != present_index) {
-    swapchain_create_info.imageSharingMode = vk::SharingMode::eConcurrent;
-    swapchain_create_info.queueFamilyIndexCount = 2;
-    swapchain_create_info.pQueueFamilyIndices = graphics_and_present_index.data();
-  } else {
-    swapchain_create_info.imageSharingMode = vk::SharingMode::eExclusive;
-    swapchain_create_info.queueFamilyIndexCount = 1;
-    swapchain_create_info.pQueueFamilyIndices = &graphics_index;
-  }
-
-  return swapchain_create_info;
 }
 
 std::vector<vk::UniqueImageView> CreateSwapchainImageViews(const vk::Device device,
@@ -140,19 +111,35 @@ std::vector<vk::UniqueImageView> CreateSwapchainImageViews(const vk::Device devi
 
 }  // namespace
 
-namespace vktf {
+Swapchain::Swapchain(const vk::Device device, const CreateInfo& create_info) {
+  const auto& [framebuffer_extent, surface, physical_device, queue_families] = create_info;
+  const auto surface_capabilities = physical_device.getSurfaceCapabilitiesKHR(surface);
+  const auto [image_format, image_color_space] = GetSwapchainSurfaceFormat(physical_device, surface);
 
-Swapchain::Swapchain(const vk::SurfaceKHR surface,
-                     const vk::PhysicalDevice physical_device,
-                     const vk::Device device,
-                     const vk::Extent2D framebuffer_extent,
-                     const QueueFamilyIndices& queue_family_indices)
-    : Swapchain{device, GetSwapchainCreateInfo(surface, physical_device, framebuffer_extent, queue_family_indices)} {}
+  vk::SwapchainCreateInfoKHR swapchain_create_info{
+      .surface = surface,
+      .minImageCount = GetSwapchainImageCount(surface_capabilities),
+      .imageFormat = image_format,
+      .imageColorSpace = image_color_space,
+      .imageExtent = GetSwapchainImageExtent(surface_capabilities, framebuffer_extent),
+      .imageArrayLayers = 1,
+      .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
+      .presentMode = GetSwapchainPresentMode(physical_device, surface),
+      .clipped = vk::True};
 
-Swapchain::Swapchain(const vk::Device device, const vk::SwapchainCreateInfoKHR& swapchain_create_info)
-    : swapchain_{device.createSwapchainKHRUnique(swapchain_create_info)},
-      image_format_{swapchain_create_info.imageFormat},
-      image_extent_{swapchain_create_info.imageExtent},
-      image_views_{CreateSwapchainImageViews(device, *swapchain_, image_format_)} {}
+  const auto& [graphics_queue_family, present_queue_family] = queue_families;
+  const std::array queue_family_indices{graphics_queue_family.index, present_queue_family.index};
+
+  if (graphics_queue_family.index != present_queue_family.index) {
+    swapchain_create_info.imageSharingMode = vk::SharingMode::eConcurrent;
+    swapchain_create_info.queueFamilyIndexCount = 2;
+    swapchain_create_info.pQueueFamilyIndices = queue_family_indices.data();
+  }
+
+  swapchain_ = device.createSwapchainKHRUnique(swapchain_create_info);
+  image_format_ = swapchain_create_info.imageFormat;
+  image_extent_ = swapchain_create_info.imageExtent;
+  image_views_ = CreateSwapchainImageViews(device, *swapchain_, image_format_);
+}
 
 }  // namespace vktf

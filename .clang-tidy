@@ -16,10 +16,8 @@ Checks: >-
   -bugprone-easily-swappable-parameters,
   -google-readability-todo,
   -misc-include-cleaner,
-  -misc-misplaced-const,
   -misc-no-recursion,
-  -modernize-use-trailing-return-type,
-  -readability-avoid-const-params-in-decls
+  -modernize-use-trailing-return-type
 CheckOptions:
   - key: hicpp-signed-bitwise.IgnorePositiveIntegerLiterals
     value: true

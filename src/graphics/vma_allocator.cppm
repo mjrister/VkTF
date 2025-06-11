@@ -1,39 +1,52 @@
 module;
 
-#include <utility>
+#include <cstdint>
+#include <memory>
 
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.hpp>
 
-export module allocator;
+export module vma_allocator;
 
-import instance;
+namespace vktf::vma {
 
-namespace vktf {
+using UniqueAllocator = std::unique_ptr<VmaAllocator_T, decltype(&vmaDestroyAllocator)>;
 
-export class Allocator {
+export class [[nodiscard]] Allocator {
 public:
-  Allocator(const vk::Instance instance, const vk::PhysicalDevice physical_device, const vk::Device device);
+  struct [[nodiscard]] CreateInfo {
+    vk::Instance instance;
+    vk::PhysicalDevice physical_device;
+    std::uint32_t vulkan_api_version = 0;
+  };
 
-  Allocator(const Allocator&) = delete;
-  Allocator(Allocator&& allocator) noexcept { *this = std::move(allocator); }
+  Allocator(vk::Device device, const CreateInfo& create_info);
 
-  Allocator& operator=(const Allocator&) = delete;
-  Allocator& operator=(Allocator&& allocator) noexcept;
+  [[nodiscard]] VmaAllocator operator*() const noexcept { return allocator_.get(); }
 
-  ~Allocator() noexcept { vmaDestroyAllocator(allocator_); }
-
-  [[nodiscard]] VmaAllocator operator*() const noexcept { return allocator_; }
+  [[nodiscard]] vk::Device device() const noexcept { return device_; }
 
 private:
-  VmaAllocator allocator_ = nullptr;
+  vk::Device device_;
+  UniqueAllocator allocator_;
 };
 
-export constexpr VmaAllocationCreateInfo kDefaultAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO};
+export constexpr VmaAllocationCreateInfo kDedicatedMemoryAllocationCreateInfo{
+    .flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+    .usage = VMA_MEMORY_USAGE_AUTO,
+    .priority = 1.0f};
 
-}  // namespace vktf
+export constexpr VmaAllocationCreateInfo kHostVisibleAllocationCreateInfo{
+    .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+    .usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST};
+
+export constexpr VmaAllocationCreateInfo kDeviceLocalAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+
+}  // namespace vktf::vma
 
 module :private;
+
+namespace vktf::vma {
 
 namespace {
 
@@ -70,26 +83,24 @@ VmaVulkanFunctions GetVulkanFunctions() {
   };
 }
 
-}  // namespace
-
-namespace vktf {
-
-Allocator::Allocator(const vk::Instance instance, const vk::PhysicalDevice physical_device, const vk::Device device) {
+UniqueAllocator CreateAllocator(const vk::Device device, const Allocator::CreateInfo& create_info) {
+  const auto& [instance, physical_device, vulkan_api_version] = create_info;
   const auto vulkan_functions = GetVulkanFunctions();
   const VmaAllocatorCreateInfo allocator_create_info{.physicalDevice = physical_device,
                                                      .device = device,
                                                      .pVulkanFunctions = &vulkan_functions,
                                                      .instance = instance,
-                                                     .vulkanApiVersion = Instance::kApiVersion};
-  const auto result = vmaCreateAllocator(&allocator_create_info, &allocator_);
+                                                     .vulkanApiVersion = vulkan_api_version};
+
+  VmaAllocator allocator = nullptr;
+  const auto result = vmaCreateAllocator(&allocator_create_info, &allocator);
   vk::detail::resultCheck(static_cast<vk::Result>(result), "Allocator creation failed");
+  return UniqueAllocator{allocator, vmaDestroyAllocator};
 }
 
-Allocator& Allocator::operator=(Allocator&& allocator) noexcept {
-  if (this != &allocator) {
-    allocator_ = std::exchange(allocator.allocator_, nullptr);
-  }
-  return *this;
-}
+}  // namespace
 
-}  // namespace vktf
+Allocator::Allocator(const vk::Device device, const CreateInfo& create_info)
+    : device_{device}, allocator_{CreateAllocator(device_, create_info)} {}
+
+}  // namespace vktf::vma

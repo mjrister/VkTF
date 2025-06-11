@@ -3,7 +3,6 @@ module;
 #include <algorithm>
 #include <cassert>
 #include <cmath>
-#include <limits>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -12,19 +11,19 @@ export module camera;
 
 namespace vktf {
 
-export struct ViewFrustum {
+export struct [[nodiscard]] ViewFrustum {
   float field_of_view_y = 0.0f;
   float aspect_ratio = 0.0f;
   float z_near = 0.0f;
   float z_far = 0.0f;
 };
 
-export struct EulerAngles {
+export struct [[nodiscard]] EulerAngles {
   float pitch = 0.0f;
   float yaw = 0.0f;
 };
 
-export class Camera {
+export class [[nodiscard]] Camera {
 public:
   Camera(const glm::vec3& position, const glm::vec3& direction, const ViewFrustum& view_frustum);
 
@@ -46,6 +45,8 @@ private:
 
 module :private;
 
+namespace vktf {
+
 namespace {
 
 constexpr glm::vec3 kUp{0.0f, 1.0f, 0.0f};
@@ -55,22 +56,20 @@ glm::mat4 GetViewTransform(const glm::vec3& position, const glm::vec3& direction
   return glm::lookAt(position, target, kUp);
 }
 
-glm::mat4 GetProjectionTransform(const vktf::ViewFrustum& view_frustum) {
+glm::mat4 GetProjectionTransform(const ViewFrustum& view_frustum) {
   const auto& [field_of_view_y, aspect_ratio, z_near, z_far] = view_frustum;
   auto projection_transform = glm::perspective(field_of_view_y, aspect_ratio, z_near, z_far);
   projection_transform[1][1] *= -1.0f;  // account for inverted y-axis convention in OpenGL
   return projection_transform;
 }
 
-vktf::EulerAngles operator+(const vktf::EulerAngles& orientation, const vktf::EulerAngles rotation) {
+EulerAngles operator+(const EulerAngles& orientation, const EulerAngles rotation) {
   static constexpr auto kPitchLimit = glm::radians(89.0f);
-  return vktf::EulerAngles{.pitch = std::clamp(orientation.pitch + rotation.pitch, -kPitchLimit, kPitchLimit),
-                           .yaw = orientation.yaw + rotation.yaw};
+  return EulerAngles{.pitch = std::clamp(orientation.pitch + rotation.pitch, -kPitchLimit, kPitchLimit),
+                     .yaw = orientation.yaw + rotation.yaw};
 }
 
 }  // namespace
-
-namespace vktf {
 
 Camera::Camera(const glm::vec3& position, const glm::vec3& direction, const ViewFrustum& view_frustum)
     : view_transform_{GetViewTransform(position, direction)},

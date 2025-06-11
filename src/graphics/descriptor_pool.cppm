@@ -1,8 +1,6 @@
 module;
 
-#include <cassert>
 #include <cstdint>
-#include <span>
 #include <vector>
 
 #include <vulkan/vulkan.hpp>
@@ -11,19 +9,20 @@ export module descriptor_pool;
 
 namespace vktf {
 
-export class DescriptorPool {
+export class [[nodiscard]] DescriptorPool {
 public:
-  DescriptorPool(const vk::Device device,
-                 const std::span<const vk::DescriptorPoolSize> descriptor_pool_sizes,
-                 const std::span<const vk::DescriptorSetLayoutBinding> descriptor_set_layout_bindings,
-                 const std::uint32_t descriptor_set_count);
+  struct [[nodiscard]] CreateInfo {
+    const std::vector<vk::DescriptorPoolSize>& descriptor_pool_sizes;
+    vk::DescriptorSetLayout descriptor_set_layout;
+    std::uint32_t descriptor_set_count = 0;
+  };
 
-  [[nodiscard]] vk::DescriptorSetLayout descriptor_set_layout() const noexcept { return *descriptor_set_layout_; }
+  DescriptorPool(vk::Device device, const CreateInfo& create_info);
+
   [[nodiscard]] const std::vector<vk::DescriptorSet>& descriptor_sets() const noexcept { return descriptor_sets_; }
 
 private:
   vk::UniqueDescriptorPool descriptor_pool_;
-  vk::UniqueDescriptorSetLayout descriptor_set_layout_;
   std::vector<vk::DescriptorSet> descriptor_sets_;  // descriptor sets are freed when the descriptor pool is destroyed
 };
 
@@ -33,23 +32,34 @@ module :private;
 
 namespace vktf {
 
-DescriptorPool::DescriptorPool(const vk::Device device,
-                               const std::span<const vk::DescriptorPoolSize> descriptor_pool_sizes,
-                               const std::span<const vk::DescriptorSetLayoutBinding> descriptor_set_layout_bindings,
-                               const std::uint32_t descriptor_set_count)
-    : descriptor_pool_{device.createDescriptorPoolUnique(
-          vk::DescriptorPoolCreateInfo{.maxSets = descriptor_set_count,
-                                       .poolSizeCount = static_cast<std::uint32_t>(descriptor_pool_sizes.size()),
-                                       .pPoolSizes = descriptor_pool_sizes.data()})},
-      descriptor_set_layout_{device.createDescriptorSetLayoutUnique(vk::DescriptorSetLayoutCreateInfo{
-          .bindingCount = static_cast<std::uint32_t>(descriptor_set_layout_bindings.size()),
-          .pBindings = descriptor_set_layout_bindings.data()})} {
-  const std::vector descriptor_set_layouts(descriptor_set_count, *descriptor_set_layout_);
+namespace {
 
-  descriptor_sets_ =
-      device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo{.descriptorPool = *descriptor_pool_,
-                                                                  .descriptorSetCount = descriptor_set_count,
-                                                                  .pSetLayouts = descriptor_set_layouts.data()});
+vk::UniqueDescriptorPool CreateDescriptorPool(const vk::Device device, const DescriptorPool::CreateInfo& create_info) {
+  const auto& [descriptor_pool_sizes, _, descriptor_set_count] = create_info;
+  return device.createDescriptorPoolUnique(
+      vk::DescriptorPoolCreateInfo{.maxSets = descriptor_set_count,
+                                   .poolSizeCount = static_cast<std::uint32_t>(descriptor_pool_sizes.size()),
+                                   .pPoolSizes = descriptor_pool_sizes.data()});
 }
+
+std::vector<vk::DescriptorSet> AllocateDescriptorSets(const vk::Device device,
+                                                      const vk::DescriptorPool descriptor_pool,
+                                                      const vk::DescriptorSetLayout descriptor_set_layout,
+                                                      const std::uint32_t descriptor_set_count) {
+  const std::vector descriptor_set_layouts(descriptor_set_count, descriptor_set_layout);
+
+  return device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo{.descriptorPool = descriptor_pool,
+                                                                     .descriptorSetCount = descriptor_set_count,
+                                                                     .pSetLayouts = descriptor_set_layouts.data()});
+}
+
+}  // namespace
+
+DescriptorPool::DescriptorPool(const vk::Device device, const CreateInfo& create_info)
+    : descriptor_pool_{CreateDescriptorPool(device, create_info)},
+      descriptor_sets_{AllocateDescriptorSets(device,
+                                              *descriptor_pool_,
+                                              create_info.descriptor_set_layout,
+                                              create_info.descriptor_set_count)} {}
 
 }  // namespace vktf

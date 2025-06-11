@@ -2,10 +2,9 @@ module;
 
 #include <cstdint>
 #include <format>
-#include <iostream>
 #include <memory>
-#include <print>
 #include <stdexcept>
+#include <vector>
 
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -13,17 +12,17 @@ module;
 
 export module window;
 
+import log;
+
 namespace vktf {
 
-export class Window {
-public:
-  explicit Window(const char* const title);
+using UniqueGlfwWindow = std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)>;
 
-  [[nodiscard]] static std::span<const char* const> GetInstanceExtensions();
-  [[nodiscard]] vk::UniqueSurfaceKHR CreateSurface(vk::Instance instance) const;
+export class [[nodiscard]] Window {
+public:
+  explicit Window(const char* title);
 
   [[nodiscard]] vk::Extent2D GetFramebufferExtent() const noexcept;
-  [[nodiscard]] float GetAspectRatio() const noexcept;
   [[nodiscard]] glm::vec2 GetCursorPosition() const noexcept;
 
   [[nodiscard]] bool IsKeyPressed(const int key) const noexcept {
@@ -39,21 +38,24 @@ public:
 
   static void Update() noexcept { glfwPollEvents(); }
 
-private:
-  using UniqueGlfwWindow = std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)>;
+  [[nodiscard]] static std::vector<const char*> GetInstanceExtensions();
+  [[nodiscard]] vk::UniqueSurfaceKHR CreateSurface(vk::Instance instance) const;
 
-  UniqueGlfwWindow glfw_window_{nullptr, nullptr};
+private:
+  UniqueGlfwWindow glfw_window_;
 };
 
 }  // namespace vktf
 
 module :private;
 
+namespace vktf {
+
 namespace {
 
 class GlfwContext {
 public:
-  static const GlfwContext& Get() {
+  static const GlfwContext& Instance() {
     static const GlfwContext kInstance;
     return kInstance;
   }
@@ -70,7 +72,9 @@ private:
   GlfwContext() {
 #ifndef NDEBUG
     glfwSetErrorCallback([](const int error_code, const char* const description) {
-      std::println(std::cerr, "GLFW error {}: {}", error_code, description);
+      using Severity = Log::Severity;
+      auto& log = Log::Default();
+      log(Severity::kError) << std::format("GLFW error {}: {}", error_code, description);
     });
 #endif
     if (glfwInit() == GLFW_FALSE) throw std::runtime_error{"GLFW initialization failed"};
@@ -79,31 +83,36 @@ private:
   }
 };
 
-}  // namespace
+UniqueGlfwWindow CreateGlfwWindow(const char* const title) {
+  [[maybe_unused]] const auto& glfw_context = GlfwContext::Instance();
 
-namespace vktf {
-
-Window::Window(const char* const title) {
-  [[maybe_unused]] const auto& glfw_context = GlfwContext::Get();
-
-  auto* const primary_monitor = glfwGetPrimaryMonitor();
+  auto* primary_monitor = glfwGetPrimaryMonitor();
   if (primary_monitor == nullptr) throw std::runtime_error{"Failed to locate the primary monitor"};
 
   const auto* const video_mode = glfwGetVideoMode(primary_monitor);
   if (video_mode == nullptr) throw std::runtime_error{"Failed to get the primary monitor video mode"};
 
-  glfw_window_ =
-      UniqueGlfwWindow{glfwCreateWindow(video_mode->width, video_mode->height, title, primary_monitor, nullptr),
-                       glfwDestroyWindow};
+#ifndef NDEBUG
+  primary_monitor = nullptr;  // avoid creating the window in full-screen mode when debugging
+#endif
 
-  if (glfw_window_ == nullptr) throw std::runtime_error{"GLFW window creation failed"};
+  UniqueGlfwWindow glfw_window{glfwCreateWindow(video_mode->width, video_mode->height, title, primary_monitor, nullptr),
+                               glfwDestroyWindow};
+  if (glfw_window == nullptr) {
+    throw std::runtime_error{"GLFW window creation failed"};
+  }
+  return glfw_window;
 }
 
-std::span<const char* const> Window::GetInstanceExtensions() {
+}  // namespace
+
+Window::Window(const char* const title) : glfw_window_{CreateGlfwWindow(title)} {}
+
+std::vector<const char*> Window::GetInstanceExtensions() {
   std::uint32_t required_extension_count = 0;
-  const auto* const* required_extensions = glfwGetRequiredInstanceExtensions(&required_extension_count);
+  const auto** required_extensions = glfwGetRequiredInstanceExtensions(&required_extension_count);
   if (required_extensions == nullptr) throw std::runtime_error{"No window surface instance extensions"};
-  return std::span{required_extensions, required_extension_count};  // pointer lifetime is managed by GLFW
+  return std::vector(required_extensions, required_extensions + required_extension_count);
 }
 
 vk::UniqueSurfaceKHR Window::CreateSurface(const vk::Instance instance) const {
@@ -118,11 +127,6 @@ vk::Extent2D Window::GetFramebufferExtent() const noexcept {
   auto height = 0;
   glfwGetFramebufferSize(glfw_window_.get(), &width, &height);
   return vk::Extent2D{.width = static_cast<std::uint32_t>(width), .height = static_cast<std::uint32_t>(height)};
-}
-
-float Window::GetAspectRatio() const noexcept {
-  const auto [width, height] = GetFramebufferExtent();
-  return height == 0 ? 0.0f : static_cast<float>(width) / static_cast<float>(height);
 }
 
 glm::vec2 Window::GetCursorPosition() const noexcept {

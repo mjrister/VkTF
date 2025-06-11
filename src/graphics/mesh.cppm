@@ -4,7 +4,6 @@ module;
 #include <cstdint>
 #include <vector>
 
-#include <vk_mem_alloc.h>
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.hpp>
 
@@ -13,14 +12,15 @@ export module mesh;
 import buffer;
 import data_view;
 import material;
+import vma_allocator;
 
 namespace vktf {
 
-export struct Vertex {
+export struct [[nodiscard]] Vertex {
   glm::vec3 position{0.0f};
   glm::vec3 normal{0.0f};
   glm::vec4 tangent{0.0f};
-  glm::vec2 texture_coordinates_0{0.0f};
+  glm::vec2 texcoord_0{0.0f};
 };
 
 export template <typename T>
@@ -33,35 +33,56 @@ consteval vk::IndexType GetIndexType() {
   } else if constexpr (std::same_as<T, std::uint16_t>) {
     return vk::IndexType::eUint16;
   } else {
-    static_assert(std::same_as<T, std::uint32_t>);
+    static_assert(std::same_as<T, std::uint32_t>, "Unsupported index type");
     return vk::IndexType::eUint32;
   }
 }
 
-export struct StagingPrimitive {
+export class [[nodiscard]] StagingPrimitive {
+public:
   template <IndexType T>
-  StagingPrimitive(const std::vector<Vertex>& vertices, const std::vector<T>& indices, const VmaAllocator allocator)
-      : vertex_buffer{CreateStagingBuffer<Vertex>(vertices, allocator)},
-        index_buffer{CreateStagingBuffer<T>(indices, allocator)},
-        index_type{GetIndexType<T>()},
-        index_count{static_cast<std::uint32_t>(indices.size())} {}
+  struct [[nodiscard]] CreateInfo {
+    const std::vector<Vertex>& vertices;
+    const std::vector<T>& indices;
+  };
 
-  HostVisibleBuffer vertex_buffer;
-  HostVisibleBuffer index_buffer;
-  vk::IndexType index_type;
-  std::uint32_t index_count;
+  template <IndexType T>
+  StagingPrimitive(const vma::Allocator& allocator, const CreateInfo<T>& create_info)
+      : vertex_buffer_{CreateStagingBuffer<Vertex>(allocator, create_info.vertices)},
+        index_buffer_{CreateStagingBuffer<T>(allocator, create_info.indices)},
+        index_type_{GetIndexType<T>()},
+        index_count_{static_cast<std::uint32_t>(create_info.indices.size())} {}
+
+  [[nodiscard]] const HostVisibleBuffer& vertex_buffer() const noexcept { return vertex_buffer_; }
+  [[nodiscard]] const HostVisibleBuffer& index_buffer() const noexcept { return index_buffer_; }
+  [[nodiscard]] vk::IndexType index_type() const noexcept { return index_type_; }
+  [[nodiscard]] std::uint32_t index_count() const noexcept { return index_count_; }
+
+private:
+  HostVisibleBuffer vertex_buffer_;
+  HostVisibleBuffer index_buffer_;
+  vk::IndexType index_type_;
+  std::uint32_t index_count_;
 };
 
-export class Primitive {
+export class [[nodiscard]] Primitive {
+  using Material = pbr_metallic_roughness::Material;
+
 public:
-  Primitive(const StagingPrimitive& staging_primitive,
-            const Material* const material,
-            const vk::CommandBuffer command_buffer,
-            const VmaAllocator allocator);
+  struct [[nodiscard]] CreateInfo {
+    const StagingPrimitive& staging_primitive;
+    const Material* material = nullptr;
+  };
+
+  Primitive(const vma::Allocator& allocator, vk::CommandBuffer command_buffer, const CreateInfo& create_info);
 
   [[nodiscard]] const Material* material() const noexcept { return material_; }
 
-  void Render(const vk::CommandBuffer command_buffer) const;
+  void Render(const vk::CommandBuffer command_buffer) const {
+    command_buffer.bindVertexBuffers(0, *vertex_buffer_, static_cast<vk::DeviceSize>(0));
+    command_buffer.bindIndexBuffer(*index_buffer_, 0, index_type_);
+    command_buffer.drawIndexed(index_count_, 1, 0, 0, 0);
+  }
 
 private:
   Buffer vertex_buffer_;
@@ -79,22 +100,19 @@ module :private;
 
 namespace vktf {
 
-using enum vk::BufferUsageFlagBits;
-
-Primitive::Primitive(const StagingPrimitive& staging_primitive,
-                     const Material* const material,
+Primitive::Primitive(const vma::Allocator& allocator,
                      const vk::CommandBuffer command_buffer,
-                     const VmaAllocator allocator)
-    : vertex_buffer_{CreateBuffer(staging_primitive.vertex_buffer, eVertexBuffer, command_buffer, allocator)},
-      index_buffer_{CreateBuffer(staging_primitive.index_buffer, eIndexBuffer, command_buffer, allocator)},
-      index_type_{staging_primitive.index_type},
-      index_count_{staging_primitive.index_count},
-      material_{material} {}
-
-void Primitive::Render(const vk::CommandBuffer command_buffer) const {
-  command_buffer.bindVertexBuffers(0, *vertex_buffer_, static_cast<vk::DeviceSize>(0));
-  command_buffer.bindIndexBuffer(*index_buffer_, 0, index_type_);
-  command_buffer.drawIndexed(index_count_, 1, 0, 0, 0);
-}
+                     const CreateInfo& create_info)
+    : vertex_buffer_{CreateDeviceLocalBuffer(allocator,
+                                             command_buffer,
+                                             create_info.staging_primitive.vertex_buffer(),
+                                             vk::BufferUsageFlagBits::eVertexBuffer)},
+      index_buffer_{CreateDeviceLocalBuffer(allocator,
+                                            command_buffer,
+                                            create_info.staging_primitive.index_buffer(),
+                                            vk::BufferUsageFlagBits::eIndexBuffer)},
+      index_type_{create_info.staging_primitive.index_type()},
+      index_count_{create_info.staging_primitive.index_count()},
+      material_{create_info.material} {}
 
 }  // namespace vktf

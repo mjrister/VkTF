@@ -116,12 +116,12 @@ INSTANTIATE_TEST_SUITE_P(CameraRotateTestSuite,
                          });
 
 TEST(CameraDeathTest, TestDebugAssertWhenCameraDirectionIsTheZeroVector) {
-  EXPECT_DEBUG_DEATH({ (vktf::Camera{kDefaultPosition, kZeroVector, kDefaultViewFrustum}); }, "");
+  EXPECT_DEBUG_DEATH({ (std::ignore = vktf::Camera{kDefaultPosition, kZeroVector, kDefaultViewFrustum}); }, "");
 }
 
 TEST(CameraDeathTest, TestDebugAssertWhenCameraDirectionIsCollinearWithUpDirection) {
-  EXPECT_DEBUG_DEATH({ (vktf::Camera{kDefaultPosition, kUp, kDefaultViewFrustum}); }, "");
-  EXPECT_DEBUG_DEATH({ (vktf::Camera{kDefaultPosition, kDown, kDefaultViewFrustum}); }, "");
+  EXPECT_DEBUG_DEATH({ (std::ignore = vktf::Camera{kDefaultPosition, kUp, kDefaultViewFrustum}); }, "");
+  EXPECT_DEBUG_DEATH({ (std::ignore = vktf::Camera{kDefaultPosition, kDown, kDefaultViewFrustum}); }, "");
 }
 
 }  // namespace

@@ -1,8 +1,7 @@
 add_library(graphics STATIC)
 
 target_sources(graphics PUBLIC FILE_SET CXX_MODULES
-                               FILES allocator.cppm
-                                     buffer.cppm
+                               FILES buffer.cppm
                                      camera.cppm
                                      command_pool.cppm
                                      data_view.cppm
@@ -11,15 +10,21 @@ target_sources(graphics PUBLIC FILE_SET CXX_MODULES
                                      device.cppm
                                      engine.cppm
                                      glslang_compiler.cppm
-                                     gltf_scene.cppm
+                                     gltf_asset.cppm
                                      image.cppm
                                      instance.cppm
+                                     ktx_texture.cppm
+                                     log.cppm
                                      material.cppm
                                      mesh.cppm
+                                     model.cppm
                                      physical_device.cppm
+                                     queue.cppm
+                                     scene.cppm
                                      shader_module.cppm
                                      swapchain.cppm
                                      texture.cppm
+                                     vma_allocator.cppm
                                      window.cppm)
 
 find_package(Ktx CONFIG REQUIRED)

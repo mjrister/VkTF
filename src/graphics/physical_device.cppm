@@ -1,118 +1,150 @@
 module;
 
+#include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <ranges>
 #include <stdexcept>
+#include <unordered_set>
+#include <vector>
 
 #include <vulkan/vulkan.hpp>
 
 export module physical_device;
 
+import queue;
+
 namespace vktf {
+struct RankedPhysicalDevice;
 
-export struct QueueFamilyIndices {
-  std::uint32_t graphics_index = 0;
-  std::uint32_t present_index = 0;
-};
-
-struct RankedPhysicalDevice {
-  vk::PhysicalDevice physical_device;
-  vk::PhysicalDeviceLimits physical_device_limits;
-  QueueFamilyIndices queue_family_indices;
-  int rank = 0;
-};
-
-export class PhysicalDevice {
+export class [[nodiscard]] PhysicalDevice {
 public:
-  PhysicalDevice(const vk::Instance instance, const vk::SurfaceKHR surface);
+  struct [[nodiscard]] CreateInfo {
+    vk::SurfaceKHR surface;
+    const std::vector<const char*>& required_extensions;
+  };
+
+  PhysicalDevice(vk::Instance instance, const CreateInfo& create_info);
 
   [[nodiscard]] vk::PhysicalDevice operator*() const noexcept { return physical_device_; }
-  [[nodiscard]] const vk::PhysicalDevice* operator->() const noexcept { return &physical_device_; }
 
-  [[nodiscard]] const vk::PhysicalDeviceLimits& limits() const noexcept { return physical_device_limits_; }
   [[nodiscard]] const vk::PhysicalDeviceFeatures& features() const noexcept { return physical_device_features_; }
-  [[nodiscard]] const QueueFamilyIndices& queue_family_indices() const noexcept { return queue_family_indices_; }
+  [[nodiscard]] const vk::PhysicalDeviceLimits& limits() const noexcept { return physical_device_limits_; }
+  [[nodiscard]] const QueueFamilies& queue_families() const noexcept { return queue_families_; }
 
 private:
   explicit PhysicalDevice(const RankedPhysicalDevice& ranked_physical_device);
 
   vk::PhysicalDevice physical_device_;
-  vk::PhysicalDeviceLimits physical_device_limits_;
   vk::PhysicalDeviceFeatures physical_device_features_;
-  QueueFamilyIndices queue_family_indices_;
+  vk::PhysicalDeviceLimits physical_device_limits_;
+  QueueFamilies queue_families_;
 };
 
 }  // namespace vktf
 
 module :private;
 
+namespace vktf {
+
+struct RankedPhysicalDevice {
+  static constexpr auto kInvalidRank = std::numeric_limits<std::int32_t>::min();
+  vk::PhysicalDevice physical_device;
+  vk::PhysicalDeviceLimits physical_device_limits;
+  QueueFamilies queue_families;
+  std::int32_t rank = kInvalidRank;
+};
+
 namespace {
 
-constexpr auto kInvalidRank = -1;
+bool HasRequiredExtensions(const vk::PhysicalDevice physical_device,
+                           const std::vector<const char*>& required_extensions) {
+  const auto device_extension_properties = physical_device.enumerateDeviceExtensionProperties();
+  const auto device_extensions = device_extension_properties
+                                 | std::views::transform([](const auto& extension_properties) -> std::string_view {
+                                     return extension_properties.extensionName;
+                                   })
+                                 | std::ranges::to<std::unordered_set>();
 
-std::optional<vktf::QueueFamilyIndices> FindQueueFamilyIndices(const vk::PhysicalDevice physical_device,
-                                                               const vk::SurfaceKHR surface) {
-  std::optional<std::uint32_t> maybe_graphics_index;
-  std::optional<std::uint32_t> maybe_present_index;
+  return std::ranges::all_of(required_extensions, [&device_extensions](const std::string_view required_extension) {
+    return device_extensions.contains(required_extension);
+  });
+}
+
+std::optional<QueueFamilies> FindQueueFamilies(const vk::PhysicalDevice physical_device, const vk::SurfaceKHR surface) {
+  std::optional<QueueFamily> graphics_queue_family;
+  std::optional<QueueFamily> present_queue_family;
 
   for (std::uint32_t index = 0; const auto& queue_family_properties : physical_device.getQueueFamilyProperties()) {
-    if (!maybe_graphics_index.has_value() && queue_family_properties.queueFlags & vk::QueueFlagBits::eGraphics) {
-      maybe_graphics_index = index;
+    assert(queue_family_properties.queueCount > 0);  // required by the Vulkan specification
+    const QueueFamily queue_family{.index = index++, .queue_count = queue_family_properties.queueCount};
+    const auto has_graphics_support = queue_family_properties.queueFlags & vk::QueueFlagBits::eGraphics;
+    const auto has_present_support = physical_device.getSurfaceSupportKHR(queue_family.index, surface) == vk::True;
+
+    if (has_graphics_support && has_present_support) {  // prefer combined graphics and present queue family
+      return QueueFamilies{.graphics_queue_family = queue_family, .present_queue_family = queue_family};
     }
-    if (!maybe_present_index.has_value() && physical_device.getSurfaceSupportKHR(index, surface) == vk::True) {
-      maybe_present_index = index;
+    if (!graphics_queue_family.has_value() && has_graphics_support) {
+      graphics_queue_family = queue_family;
     }
-    if (maybe_graphics_index.has_value() && maybe_present_index.has_value()) {
-      return vktf::QueueFamilyIndices{.graphics_index = *maybe_graphics_index, .present_index = *maybe_present_index};
+    if (!present_queue_family.has_value() && has_present_support) {
+      present_queue_family = queue_family;
     }
-    ++index;
   }
 
-  return std::nullopt;
+  if (!graphics_queue_family.has_value() || !present_queue_family.has_value()) {
+    return std::nullopt;
+  }
+
+  return QueueFamilies{.graphics_queue_family = *graphics_queue_family, .present_queue_family = *present_queue_family};
 }
 
-// TODO: implement a more robust ranking system based on device features, limits, and format support
-vktf::RankedPhysicalDevice GetRankedPhysicalDevice(const vk::PhysicalDevice physical_device,
-                                                   const vk::SurfaceKHR surface) {
-  return FindQueueFamilyIndices(physical_device, surface)
-      .transform([physical_device](const auto queue_family_indices) {
-        const auto physical_device_properties = physical_device.getProperties();
-        return vktf::RankedPhysicalDevice{
-            .physical_device = physical_device,
-            .physical_device_limits = physical_device_properties.limits,
-            .queue_family_indices = queue_family_indices,
-            .rank = physical_device_properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu};
-      })
-      .value_or(vktf::RankedPhysicalDevice{.rank = kInvalidRank});
+RankedPhysicalDevice GetRankedPhysicalDevice(const vk::PhysicalDevice physical_device,
+                                             const vk::SurfaceKHR surface,
+                                             const std::vector<const char*>& required_extensions) {
+  static const RankedPhysicalDevice kInvalidPhysicalDevice{.rank = RankedPhysicalDevice::kInvalidRank};
+  if (!HasRequiredExtensions(physical_device, required_extensions)) return kInvalidPhysicalDevice;
+
+  const auto& queue_families = FindQueueFamilies(physical_device, surface);
+  if (!queue_families.has_value()) return kInvalidPhysicalDevice;
+
+  const auto physical_device_properties = physical_device.getProperties();
+  return RankedPhysicalDevice{
+      .physical_device = physical_device,
+      .physical_device_limits = physical_device_properties.limits,
+      .queue_families = *queue_families,
+      // TODO: consider a more robust ranking system based on device features, limits, and format support
+      .rank = physical_device_properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu};
 }
 
-vktf::RankedPhysicalDevice SelectPhysicalDevice(const vk::Instance instance, const vk::SurfaceKHR surface) {
-  const auto ranked_physical_devices = instance.enumeratePhysicalDevices()
-                                       | std::views::transform([surface](const auto physical_device) {
-                                           return GetRankedPhysicalDevice(physical_device, surface);
-                                         })
-                                       | std::views::filter([](const auto& ranked_physical_device) {
-                                           return ranked_physical_device.rank != kInvalidRank;
-                                         })
-                                       | std::ranges::to<std::vector>();
+RankedPhysicalDevice SelectPhysicalDevice(const vk::Instance instance,
+                                          const vk::SurfaceKHR surface,
+                                          const std::vector<const char*>& required_extensions) {
+  const auto ranked_physical_devices =
+      instance.enumeratePhysicalDevices()
+      | std::views::transform([surface, required_extensions](const auto physical_device) {
+          return GetRankedPhysicalDevice(physical_device, surface, required_extensions);
+        })
+      | std::views::filter([](const auto& ranked_physical_device) {
+          return ranked_physical_device.rank != RankedPhysicalDevice::kInvalidRank;
+        })
+      | std::ranges::to<std::vector>();
 
   return ranked_physical_devices.empty()
              ? throw std::runtime_error{"No supported physical device could be found"}
-             : *std::ranges::max_element(ranked_physical_devices, {}, &vktf::RankedPhysicalDevice::rank);
+             : *std::ranges::max_element(ranked_physical_devices, {}, &RankedPhysicalDevice::rank);
 }
 
 }  // namespace
 
-namespace vktf {
-
-PhysicalDevice::PhysicalDevice(const vk::Instance instance, const vk::SurfaceKHR surface)
-    : PhysicalDevice{SelectPhysicalDevice(instance, surface)} {}
+PhysicalDevice::PhysicalDevice(const vk::Instance instance, const CreateInfo& create_info)
+    : PhysicalDevice{SelectPhysicalDevice(instance, create_info.surface, create_info.required_extensions)} {}
 
 PhysicalDevice::PhysicalDevice(const RankedPhysicalDevice& ranked_physical_device)
     : physical_device_{ranked_physical_device.physical_device},
-      physical_device_limits_{ranked_physical_device.physical_device_limits},
       physical_device_features_{physical_device_.getFeatures()},
-      queue_family_indices_{ranked_physical_device.queue_family_indices} {}
+      physical_device_limits_{ranked_physical_device.physical_device_limits},
+      queue_families_{ranked_physical_device.queue_families} {}
 
 }  // namespace vktf

@@ -1,14 +1,14 @@
 # VkTF
 
-A cross-platform Vulkan glTF Physically Based Renderer written in C++23.
+A Vulkan glTF Physically Based Renderer written in C++23.
 
 ## Requirements
 
-This project requires CMake 3.31 and a compiler that supports the C++23 language standard. To assist with CMake configuration, building, and testing, [CMake Presets](https://cmake.org/cmake/help/v3.22/manual/cmake-presets.7.html) are used with [ninja](https://ninja-build.org/) as a build generator.
+This project requires CMake 3.31 and a compiler that supports the C++23 language standard. To assist with CMake configuration, building, and testing, [CMake Presets](https://cmake.org/cmake/help/latest/manual/cmake-presets.7.html) are used with [ninja](https://ninja-build.org/) as a build generator.
 
 ### Vulkan
 
-This project requires a graphics driver with Vulkan 1.3 support. Because it uses [Vulkan-Hpp](https://github.com/KhronosGroup/Vulkan-Hpp) which provides a dynamic loader implementation, it is unnecessary to manually link against `vulkan-1.lib`. It is therefore not required to download the [Vulkan SDK](https://www.lunarg.com/vulkan-sdk/) for release builds, however, it is still required for debug builds which enable [validation layers](https://vulkan.lunarg.com/doc/view/latest/windows/validation_layers.html) by default.
+This project requires a graphics driver with Vulkan 1.4 support. Because it uses [Vulkan-Hpp](https://github.com/KhronosGroup/Vulkan-Hpp) which provides a dynamic loader implementation, it is unnecessary to manually link against `vulkan-1.lib`. It is therefore not required to download the [Vulkan SDK](https://www.lunarg.com/vulkan-sdk/) for release builds, however, it is still required for debug builds which enable [validation layers](https://vulkan.lunarg.com/doc/view/latest/windows/validation_layers.html) by default.
 
 ### Package Management
 

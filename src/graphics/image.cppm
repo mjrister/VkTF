@@ -1,5 +1,6 @@
 module;
 
+#include <cstdint>
 #include <utility>
 #include <vector>
 
@@ -8,21 +9,24 @@ module;
 
 export module image;
 
-import allocator;
+import buffer;
+import vma_allocator;
 
 namespace vktf {
 
-export class Image {
+export class [[nodiscard]] Image {
 public:
-  Image(const vk::Device device,
-        const vk::Format format,
-        const vk::Extent2D extent,
-        const std::uint32_t mip_levels,
-        const vk::SampleCountFlagBits sample_count,
-        const vk::ImageUsageFlags usage_flags,
-        const vk::ImageAspectFlagBits aspect_mask,
-        const VmaAllocator allocator,
-        const VmaAllocationCreateInfo& allocation_create_info = kDefaultAllocationCreateInfo);
+  struct [[nodiscard]] CreateInfo {
+    vk::Format format = vk::Format::eUndefined;
+    vk::Extent2D extent;
+    std::uint32_t mip_levels = 0;
+    vk::SampleCountFlagBits sample_count = vk::SampleCountFlagBits::e1;
+    vk::ImageUsageFlags usage_flags;
+    vk::ImageAspectFlagBits aspect_mask = vk::ImageAspectFlagBits::eNone;
+    const VmaAllocationCreateInfo& allocation_create_info;
+  };
+
+  Image(const vma::Allocator& allocator, const CreateInfo& create_info);
 
   Image(const Image&) = delete;
   Image(Image&& image) noexcept { *this = std::move(image); }
@@ -35,25 +39,69 @@ public:
   [[nodiscard]] vk::ImageView image_view() const noexcept { return *image_view_; }
   [[nodiscard]] vk::Format format() const noexcept { return format_; }
 
-  void Copy(const vk::Buffer buffer,
+  void Copy(vk::Buffer src_buffer,
             const std::vector<vk::BufferImageCopy>& buffer_image_copies,
-            const vk::CommandBuffer command_buffer) const;
+            vk::CommandBuffer command_buffer);
 
 private:
+  VmaAllocator allocator_ = nullptr;
+  VmaAllocation allocation_ = nullptr;
   vk::Image image_;
   vk::UniqueImageView image_view_;
   vk::Format format_ = vk::Format::eUndefined;
   std::uint32_t mip_levels_ = 0;
   vk::ImageAspectFlagBits aspect_mask_ = vk::ImageAspectFlagBits::eNone;
-  VmaAllocator allocator_ = nullptr;
-  VmaAllocation allocation_ = nullptr;
 };
 
 }  // namespace vktf
 
 module :private;
 
+namespace vktf {
+
 namespace {
+
+std::pair<VmaAllocation, vk::Image> CreateImage(const vma::Allocator& allocator, const Image::CreateInfo& create_info) {
+  const auto& [format, extent, mip_levels, sample_count, usage_flags, aspect_mask, allocation_create_info] =
+      create_info;
+
+  const VkImageCreateInfo image_create_info{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .imageType = VK_IMAGE_TYPE_2D,
+      .format = static_cast<VkFormat>(format),
+      .extent = VkExtent3D{.width = extent.width, .height = extent.height, .depth = 1},
+      .mipLevels = mip_levels,
+      .arrayLayers = 1,
+      .samples = static_cast<VkSampleCountFlagBits>(sample_count),
+      .usage = static_cast<VkImageUsageFlags>(usage_flags)};
+
+  VkImage image = nullptr;
+  VmaAllocation allocation = nullptr;
+  const auto result =
+      vmaCreateImage(*allocator, &image_create_info, &allocation_create_info, &image, &allocation, nullptr);
+  vk::detail::resultCheck(static_cast<vk::Result>(result), "Image creation failed");
+
+  return std::pair{allocation, image};
+}
+
+vk::UniqueImageView CreateImageView(const vk::Device device,
+                                    const vk::Image image,
+                                    const vk::Format format,
+                                    const std::uint32_t mip_levels,
+                                    const vk::ImageAspectFlagBits aspect_mask) {
+  return device.createImageViewUnique(vk::ImageViewCreateInfo{
+      .image = image,
+      .viewType = vk::ImageViewType::e2D,
+      .format = format,
+      .subresourceRange =
+          vk::ImageSubresourceRange{.aspectMask = aspect_mask, .levelCount = mip_levels, .layerCount = 1}});
+}
+
+void DestroyImage(const VmaAllocator allocator, const vk::Image image, const VmaAllocation allocation) noexcept {
+  if (allocator != nullptr) {
+    vmaDestroyImage(allocator, image, allocation);
+  }
+}
 
 void TransitionImageLayout(const vk::Image image,
                            const vk::ImageSubresourceRange& image_subresource_range,
@@ -80,74 +128,46 @@ void TransitionImageLayout(const vk::Image image,
 
 }  // namespace
 
-namespace vktf {
-
-Image::Image(const vk::Device device,
-             const vk::Format format,
-             const vk::Extent2D extent,
-             const std::uint32_t mip_levels,
-             const vk::SampleCountFlagBits sample_count,
-             const vk::ImageUsageFlags usage_flags,
-             const vk::ImageAspectFlagBits aspect_mask,
-             const VmaAllocator allocator,
-             const VmaAllocationCreateInfo& allocation_create_info)
-    : format_{format}, mip_levels_{mip_levels}, aspect_mask_{aspect_mask}, allocator_{allocator} {
-  const VkImageCreateInfo image_create_info{
-      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-      .imageType = VK_IMAGE_TYPE_2D,
-      .format = static_cast<VkFormat>(format),
-      .extent = VkExtent3D{.width = extent.width, .height = extent.height, .depth = 1},
-      .mipLevels = mip_levels_,
-      .arrayLayers = 1,
-      .samples = static_cast<VkSampleCountFlagBits>(sample_count),
-      .usage = static_cast<VkImageUsageFlags>(usage_flags)};
-
-  VkImage image = nullptr;
-  const auto result =
-      vmaCreateImage(allocator_, &image_create_info, &allocation_create_info, &image, &allocation_, nullptr);
-  vk::detail::resultCheck(static_cast<vk::Result>(result), "Image creation failed");
-  image_ = vk::Image{image};
-
-  image_view_ = device.createImageViewUnique(vk::ImageViewCreateInfo{
-      .image = image_,
-      .viewType = vk::ImageViewType::e2D,
-      .format = format,
-      .subresourceRange =
-          vk::ImageSubresourceRange{.aspectMask = aspect_mask_, .levelCount = mip_levels, .layerCount = 1}});
+Image::Image(const vma::Allocator& allocator, const CreateInfo& create_info)
+    : allocator_{*allocator},
+      format_{create_info.format},
+      mip_levels_{create_info.mip_levels},
+      aspect_mask_{create_info.aspect_mask} {
+  std::tie(allocation_, image_) = CreateImage(allocator, create_info);
+  image_view_ = CreateImageView(allocator.device(), image_, format_, mip_levels_, aspect_mask_);
 }
 
 Image& Image::operator=(Image&& image) noexcept {
   if (this != &image) {
+    DestroyImage(allocator_, image_, allocation_);
     image_ = std::exchange(image.image_, nullptr);
     image_view_ = std::exchange(image.image_view_, vk::UniqueImageView{});
     format_ = std::exchange(image.format_, vk::Format::eUndefined);
+    mip_levels_ = std::exchange(image.mip_levels_, 0);
+    aspect_mask_ = std::exchange(image.aspect_mask_, vk::ImageAspectFlagBits::eNone);
     allocator_ = std::exchange(image.allocator_, nullptr);
     allocation_ = std::exchange(image.allocation_, nullptr);
   }
   return *this;
 }
 
-Image::~Image() noexcept {
-  if (allocator_ != nullptr) {
-    vmaDestroyImage(allocator_, image_, allocation_);
-  }
-}
+Image::~Image() noexcept { DestroyImage(allocator_, image_, allocation_); }
 
-void Image::Copy(const vk::Buffer buffer,
+void Image::Copy(const vk::Buffer src_buffer,
                  const std::vector<vk::BufferImageCopy>& buffer_image_copies,
-                 const vk::CommandBuffer command_buffer) const {
+                 const vk::CommandBuffer command_buffer) {
   const vk::ImageSubresourceRange image_subresource_range{.aspectMask = aspect_mask_,
                                                           .levelCount = mip_levels_,
                                                           .layerCount = 1};
 
   TransitionImageLayout(image_,
                         image_subresource_range,
-                        std::pair{vk::PipelineStageFlagBits::eHost, vk::PipelineStageFlagBits::eTransfer},
+                        std::pair{vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eTransfer},
                         std::pair{vk::AccessFlagBits::eNone, vk::AccessFlagBits::eTransferWrite},
                         std::pair{vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal},
                         command_buffer);
 
-  command_buffer.copyBufferToImage(buffer, image_, vk::ImageLayout::eTransferDstOptimal, buffer_image_copies);
+  command_buffer.copyBufferToImage(src_buffer, image_, vk::ImageLayout::eTransferDstOptimal, buffer_image_copies);
 
   TransitionImageLayout(image_,
                         image_subresource_range,

@@ -20,8 +20,8 @@ This project follows the [Google C++ Style Guide](https://google.github.io/style
 
 1. 120-character limit per line.
 2. Exceptions are allowed.
-3. Forward declarations are allowed.
-4. Objects with static storage duration are allowed.
+3. Objects with static storage duration are allowed.
+4. Forward declarations are allowed.
 5. APIs are documented with [Doxygen](https://www.doxygen.nl/).
 
 Code style is enforced with `clang-format` which is run prior to check-in using a pre-commit hook.
@@ -47,7 +47,7 @@ The header should be a one-line summary of the form:
  │       │
  │       └─⫸ summary: present tense without punctuation
  │
- └─⫸ type: build|docs|feat|fix|refactor|style|test
+ └─⫸ type: build|docs|feat|fix|perf|refactor|style|test
 ```
 
 Commit changes can be categorized into the following types:
@@ -58,7 +58,7 @@ Commit changes can be categorized into the following types:
 | `docs`     | Updates project or source code documentation         |
 | `feat`     | Adds a new feature for a user                        |
 | `fix`      | Fixes a user facing defect                           |
-| `pref`     | Improves application performance                     |
+| `perf`     | Improves application performance                     |
 | `refactor` | Alters code structure without changing functionality |
 | `style`    | Applies formatting or changes code style conventions |
 | `test`     | Relates to tests and testing infrastructure          |

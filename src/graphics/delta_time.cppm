@@ -6,24 +6,33 @@ export module delta_time;
 
 namespace vktf {
 
-export class DeltaTime {
-  using Clock = std::chrono::steady_clock;
-  using Duration = std::chrono::duration<float>;  // float seconds
-  using TimePoint = std::chrono::time_point<Clock, Duration>;
-
+export class [[nodiscard]] DeltaTime {
 public:
-  // NOLINTNEXTLINE(*-explicit-*): allow implicit conversion to underlying duration representation
-  [[nodiscard]] operator Duration::rep() const noexcept { return delta_time_; }
+  using FloatSeconds = std::chrono::duration<float>;
 
-  void Update() noexcept {
-    const TimePoint current_time = Clock::now();
-    delta_time_ = (current_time - previous_time_).count();
-    previous_time_ = current_time;
-  }
+  [[nodiscard]] FloatSeconds::rep get() const noexcept { return delta_time_; }
+
+  void Update() noexcept;
 
 private:
+  using Clock = std::chrono::steady_clock;
+  using TimePoint = std::chrono::time_point<Clock>;
+
   TimePoint previous_time_ = Clock::now();
-  Duration::rep delta_time_ = 0;
+  FloatSeconds::rep delta_time_ = 0.0f;
 };
+
+}  // namespace vktf
+
+module :private;
+
+namespace vktf {
+
+void DeltaTime::Update() noexcept {
+  const auto current_time = Clock::now();
+  const auto float_seconds = std::chrono::duration_cast<FloatSeconds>(current_time - previous_time_);
+  delta_time_ = float_seconds.count();
+  previous_time_ = current_time;
+}
 
 }  // namespace vktf

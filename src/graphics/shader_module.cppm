@@ -15,14 +15,19 @@ module;
 export module shader_module;
 
 import glslang_compiler;
+import log;
 
 namespace vktf {
 
-export class ShaderModule {
+export class [[nodiscard]] ShaderModule {
 public:
-  ShaderModule(const vk::Device device,
-               const std::filesystem::path& shader_filepath,
-               const vk::ShaderStageFlagBits shader_stage);
+  struct [[nodiscard]] CreateInfo {
+    const std::filesystem::path& shader_filepath;
+    const vk::ShaderStageFlagBits shader_stage{};
+    Log& log;
+  };
+
+  ShaderModule(vk::Device device, const CreateInfo& create_info);
 
   [[nodiscard]] vk::ShaderModule operator*() const noexcept { return *shader_module_; }
 
@@ -34,10 +39,9 @@ private:
 
 module :private;
 
-namespace {
+namespace vktf {
 
-using SpirvWord = std::uint32_t;
-constexpr auto kSpirvWordSize = sizeof(SpirvWord);
+namespace {
 
 std::vector<SpirvWord> ReadSpirvFile(const std::filesystem::path& spirv_filepath) {
   std::ifstream spirv_ifstream;
@@ -111,30 +115,34 @@ glslang_stage_t GetGlslangStage(const vk::ShaderStageFlagBits shader_stage) {
 }
 
 std::vector<SpirvWord> GetSpirvBinary(const std::filesystem::path& shader_filepath,
-                                      const vk::ShaderStageFlagBits shader_stage) {
+                                      const vk::ShaderStageFlagBits shader_stage,
+                                      Log& log) {
   try {
     if (shader_filepath.extension() == ".spv") return ReadSpirvFile(shader_filepath);
 
     const auto glsl_shader = ReadGlslFile(shader_filepath);
     const auto glslang_stage = GetGlslangStage(shader_stage);
-    return vktf::glslang::Compile(glsl_shader, glslang_stage);
+    return glslang::Compile(glsl_shader, glslang_stage, log);
 
   } catch (const std::ios::failure&) {
     std::throw_with_nested(std::runtime_error{std::format("Failed to read {}", shader_filepath.string())});
   }
 }
 
-}  // namespace
+vk::UniqueShaderModule CreateShaderModule(const vk::Device device,
+                                          const std::filesystem::path& shader_filepath,
+                                          const vk::ShaderStageFlagBits shader_stage,
+                                          Log& log) {
+  const auto spirv_binary = GetSpirvBinary(shader_filepath, shader_stage, log);
 
-namespace vktf {
-
-ShaderModule::ShaderModule(const vk::Device device,
-                           const std::filesystem::path& shader_filepath,
-                           const vk::ShaderStageFlagBits shader_stage) {
-  const auto spirv_binary = GetSpirvBinary(shader_filepath, shader_stage);
-
-  shader_module_ = device.createShaderModuleUnique(
+  return device.createShaderModuleUnique(
       vk::ShaderModuleCreateInfo{.codeSize = spirv_binary.size() * kSpirvWordSize, .pCode = spirv_binary.data()});
 }
+
+}  // namespace
+
+ShaderModule::ShaderModule(const vk::Device device, const CreateInfo& create_info)
+    : shader_module_{
+          CreateShaderModule(device, create_info.shader_filepath, create_info.shader_stage, create_info.log)} {}
 
 }  // namespace vktf

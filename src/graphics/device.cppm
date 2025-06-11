@@ -1,6 +1,6 @@
 module;
 
-#include <array>
+#include <cstdint>
 #include <ranges>
 #include <unordered_set>
 #include <vector>
@@ -9,16 +9,22 @@ module;
 
 export module device;
 
-import physical_device;
+import queue;
 
 namespace vktf {
 
-export class Device {
+export class [[nodiscard]] Device {
 public:
-  explicit Device(const PhysicalDevice& physical_device);
+  struct [[nodiscard]] CreateInfo {
+    const QueueFamilies& queue_families;
+    const std::vector<const char*>& enabled_extensions;
+    const vk::PhysicalDeviceFeatures& enabled_features;
+  };
+
+  Device(vk::PhysicalDevice physical_device, const CreateInfo& create_info);
 
   [[nodiscard]] vk::Device operator*() const noexcept { return *device_; }
-  [[nodiscard]] const vk::Device* operator->() const noexcept { return &(*device_); }
+  [[nodiscard]] const vk::Device* operator->() const noexcept { return device_.operator->(); }
 
 private:
   vk::UniqueDevice device_;
@@ -28,47 +34,46 @@ private:
 
 module :private;
 
+namespace vktf {
+
 namespace {
 
-std::vector<vk::DeviceQueueCreateInfo> GetDeviceQueueCreateInfo(const vktf::QueueFamilyIndices& queue_family_indices) {
-  const auto& [graphics_index, present_index] = queue_family_indices;
-  return std::unordered_set{graphics_index, present_index}  //
+std::vector<vk::DeviceQueueCreateInfo> GetDeviceQueueCreateInfos(const QueueFamilies& queue_families) {
+  const auto& [graphics_queue_family, present_queue_family] = queue_families;
+
+  return std::unordered_set{graphics_queue_family.index, present_queue_family.index}
          | std::views::transform([](const auto queue_family_index) {
-             static constexpr auto kHighestNormalizedQueuePriority = 1.0f;
-             return vk::DeviceQueueCreateInfo{.queueFamilyIndex = queue_family_index,
-                                              .queueCount = 1,
-                                              .pQueuePriorities = &kHighestNormalizedQueuePriority};
+             static constexpr auto kDefaultQueuePriority = 0.5f;
+             return vk::DeviceQueueCreateInfo{
+                 .queueFamilyIndex = queue_family_index,
+                 // TODO: add support for multiple queues to enable multithreaded command buffer submission
+                 .queueCount = 1,
+                 .pQueuePriorities = &kDefaultQueuePriority};
            })
          | std::ranges::to<std::vector>();
 }
 
-vk::PhysicalDeviceFeatures GetEnabledFeatures(const vktf::PhysicalDevice& physical_device) {
-  const auto& physical_device_features = physical_device.features();
-  return vk::PhysicalDeviceFeatures{.samplerAnisotropy = physical_device_features.samplerAnisotropy,
-                                    .textureCompressionETC2 = physical_device_features.textureCompressionETC2,
-                                    .textureCompressionASTC_LDR = physical_device_features.textureCompressionASTC_LDR,
-                                    .textureCompressionBC = physical_device_features.textureCompressionBC};
+vk::UniqueDevice CreateDevice(const vk::PhysicalDevice& physical_device, const Device::CreateInfo& create_info) {
+  const auto& [queue_families, enabled_extensions, enabled_features] = create_info;
+  const auto device_queue_create_infos = GetDeviceQueueCreateInfos(queue_families);
+
+  auto device = physical_device.createDeviceUnique(
+      vk::DeviceCreateInfo{.queueCreateInfoCount = static_cast<std::uint32_t>(device_queue_create_infos.size()),
+                           .pQueueCreateInfos = device_queue_create_infos.data(),
+                           .enabledExtensionCount = static_cast<std::uint32_t>(enabled_extensions.size()),
+                           .ppEnabledExtensionNames = enabled_extensions.data(),
+                           .pEnabledFeatures = &enabled_features});
+
+#if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1
+  VULKAN_HPP_DEFAULT_DISPATCHER.init(*device);
+#endif
+
+  return device;
 }
 
 }  // namespace
 
-namespace vktf {
-
-Device::Device(const PhysicalDevice& physical_device) {
-  static constexpr std::array kDeviceExtensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-  const auto device_queue_create_info = GetDeviceQueueCreateInfo(physical_device.queue_family_indices());
-  const auto enabled_features = GetEnabledFeatures(physical_device);
-
-  device_ = physical_device->createDeviceUnique(
-      vk::DeviceCreateInfo{.queueCreateInfoCount = static_cast<std::uint32_t>(device_queue_create_info.size()),
-                           .pQueueCreateInfos = device_queue_create_info.data(),
-                           .enabledExtensionCount = static_cast<std::uint32_t>(kDeviceExtensions.size()),
-                           .ppEnabledExtensionNames = kDeviceExtensions.data(),
-                           .pEnabledFeatures = &enabled_features});
-
-#if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1
-  VULKAN_HPP_DEFAULT_DISPATCHER.init(*device_);
-#endif
-}
+Device::Device(const vk::PhysicalDevice physical_device, const CreateInfo& create_info)
+    : device_{CreateDevice(physical_device, create_info)} {}
 
 }  // namespace vktf
