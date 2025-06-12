@@ -25,6 +25,7 @@ export module model;
 
 import descriptor_pool;
 import gltf_asset;
+import graphics_pipeline;
 import ktx_texture;
 import log;
 import material;
@@ -146,11 +147,11 @@ const Value& Get(const Key* const gltf_element, const GltfResourceMap<Key, Value
 template <typename Key, typename Value>
 std::vector<Value> GetValues(GltfResourceMap<Key, Value>&& gltf_resource_map) {
   // clang-format off
-    auto values = gltf_resource_map
-                  | std::views::values
-                  | std::views::filter([](auto& value) { return static_cast<bool>(value); }) // skip unsupported values
-                  | std::views::as_rvalue
-                  | std::ranges::to<std::vector>();
+  auto values = gltf_resource_map
+                | std::views::values
+                | std::views::filter([](auto& value) { return static_cast<bool>(value); })  // skip unsupported values
+                | std::views::as_rvalue
+                | std::ranges::to<std::vector>();
   // clang-format on
   gltf_resource_map.clear();  // empty resource map after its values have been moved
   return values;
@@ -656,7 +657,7 @@ void Render(const Node& node, const vk::CommandBuffer command_buffer, const vk::
     using ModelTransform = decltype(node.global_transform);
     command_buffer.pushConstants<ModelTransform>(pipeline_layout,
                                                  vk::ShaderStageFlagBits::eVertex,
-                                                 0,  // TODO: avoid hardcoded push constant offset
+                                                 offsetof(GraphicsPipeline::PushConstants, model_transform),
                                                  node.global_transform);
 
     for (const auto& primitive : *mesh) {

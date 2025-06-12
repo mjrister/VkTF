@@ -11,6 +11,7 @@ target_sources(graphics PUBLIC FILE_SET CXX_MODULES
                                      engine.cppm
                                      glslang_compiler.cppm
                                      gltf_asset.cppm
+                                     graphics_pipeline.cppm
                                      image.cppm
                                      instance.cppm
                                      ktx_texture.cppm
