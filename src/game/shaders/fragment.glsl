@@ -7,6 +7,8 @@ struct Light {
 
 const float kPi = 3.1415927;
 const float kPointLightRadius = 0.1;
+const float kEpsilon = 1.0e-7;
+
 const uint kBaseColorSamplerIndex = 0;
 const uint kMetallicRoughnessSamplerIndex = 1;
 const uint kNormalSamplerIndex = 2;
@@ -84,14 +86,14 @@ float GetMicrofacetVisibility(const float alpha2, const vec3 light_direction, co
   const float h_dot_v = dot(halfway_direction, view_direction);
   const float n_dot_l = dot(normal, light_direction);
   const float n_dot_v = dot(normal, view_direction);
-  return step(0.0, h_dot_l) / (abs(n_dot_l) + sqrt(alpha2 + (1.0 - alpha2) * n_dot_l * n_dot_l)) *
-         step(0.0, h_dot_v) / (abs(n_dot_v) + sqrt(alpha2 + (1.0 - alpha2) * n_dot_v * n_dot_v));
+  return step(0.0, h_dot_l) / (abs(n_dot_l) + sqrt(alpha2 + (1.0 - alpha2) * n_dot_l * n_dot_l) + kEpsilon) *
+         step(0.0, h_dot_v) / (abs(n_dot_v) + sqrt(alpha2 + (1.0 - alpha2) * n_dot_v * n_dot_v) + kEpsilon);
 }
 
 float GetMicrofacetDistribution(const float alpha2, const vec3 normal, const vec3 halfway_direction) {
   const float n_dot_h = dot(normal, halfway_direction);
   const float d = n_dot_h * n_dot_h * (alpha2 - 1.0) + 1.0;
-  return step(0.0, n_dot_h) * alpha2 / (kPi * d * d);
+  return step(0.0, n_dot_h) * alpha2 / (kPi * d * d + kEpsilon);
 }
 
 // implementation based on https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#implementation
@@ -99,17 +101,17 @@ vec3 GetMaterialBrdf(const vec4 base_color, const vec2 metallic_roughness, const
                      const vec3 normal, const vec3 view_direction) {
   const vec3 halfway_direction = normalize(light_direction + view_direction);
   const float metallic_factor = metallic_roughness.x;
-  const vec3 f0 = mix(vec3(0.04), base_color.rgb, metallic_factor);
-  const vec3 fresnel_approximation = GetFresnelApproximation(f0, view_direction, halfway_direction);
-  const vec3 diffuse_brdf = (1.0 - fresnel_approximation) / kPi * mix(base_color.rgb, vec3(0.0), metallic_factor);
-
   const float roughness_factor = metallic_roughness.y;
   const float alpha = roughness_factor * roughness_factor;
   const float alpha2 = alpha * alpha;
-  const float microfacet_visibility = GetMicrofacetVisibility(alpha2, light_direction, normal, view_direction,
-                                                              halfway_direction);
-  const float microfacet_distribution = GetMicrofacetDistribution(alpha2, normal, halfway_direction);
-  const vec3 specular_brdf = fresnel_approximation * microfacet_visibility * microfacet_distribution;
+
+  const vec3 f0 = mix(vec3(0.04), base_color.rgb, metallic_factor);
+  const vec3 F = GetFresnelApproximation(f0, view_direction, halfway_direction);
+  const float V = GetMicrofacetVisibility(alpha2, light_direction, normal, view_direction, halfway_direction);
+  const float D = GetMicrofacetDistribution(alpha2, normal, halfway_direction);
+
+  const vec3 diffuse_brdf = (1.0 - F) / kPi * mix(base_color.rgb, vec3(0.0), metallic_factor);
+  const vec3 specular_brdf = F * V * D;
 
   return diffuse_brdf + specular_brdf;
 }
