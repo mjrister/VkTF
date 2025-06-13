@@ -32,7 +32,7 @@ layout(set = 1, binding = 1) uniform sampler2D material_samplers[kMaterialSample
 
 layout(location = 0) in Fragment {
   vec3 position;
-  vec2 texture_coordinates_0;
+  vec2 texcoord_0;
   mat3 normal_transform;
 } fragment;
 
@@ -43,7 +43,7 @@ vec3 GetViewDirection() {
 }
 
 vec4 GetSampledImageColor(const uint sampler_index) {
-  return texture(material_samplers[sampler_index], fragment.texture_coordinates_0);
+  return texture(material_samplers[sampler_index], fragment.texcoord_0);
 }
 
 vec4 GetBaseColor() {
