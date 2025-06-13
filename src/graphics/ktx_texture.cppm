@@ -44,7 +44,7 @@ ktx_transcode_fmt_e SelectKtxTranscodeFormat(ktxTexture2& ktx_texture2,
                                              const vk::PhysicalDeviceFeatures& physical_device_features,
                                              [[maybe_unused]] Log& log) {
   const auto components = ktxTexture2_GetNumComponents(&ktx_texture2);
-  if (components != 3 && components != 4) {  // TODO: add support for one and two component images
+  if (components != 3 && components != 4) {  // TODO: add support for single and dual channel images
     throw std::runtime_error{std::format("Unsupported image format with {} components", components)};
   }
 
@@ -57,7 +57,6 @@ ktx_transcode_fmt_e SelectKtxTranscodeFormat(ktxTexture2& ktx_texture2,
     case KHR_DF_MODEL_ETC1S:
       if (has_etc2_support) return has_alpha ? KTX_TTF_ETC2_RGBA : KTX_TTF_ETC1_RGB;
       if (has_bc_support) return KTX_TTF_BC7_RGBA;
-      if (has_astc_support) return KTX_TTF_ASTC_4x4_RGBA;
       break;
     case KHR_DF_MODEL_UASTC:
       if (has_astc_support) return KTX_TTF_ASTC_4x4_RGBA;
@@ -72,7 +71,6 @@ ktx_transcode_fmt_e SelectKtxTranscodeFormat(ktxTexture2& ktx_texture2,
   log(Severity::kInfo) << std::format("No supported texture compression format could be found. Decompressing to {}",
                                       ktxTranscodeFormatString(KTX_TTF_RGBA32));
 #endif
-
   return KTX_TTF_RGBA32;  // fallback to RGBA32 if no supported transcode format is found
 }
 
