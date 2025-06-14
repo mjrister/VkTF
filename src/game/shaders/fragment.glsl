@@ -6,7 +6,7 @@ struct Light {
 };
 
 const float kPi = 3.1415927;
-const float kPointLightRadius = 0.1;
+const float kPointLightRadius = 0.1; // 10 cm
 const float kEpsilon = 1.0e-7;
 
 const uint kBaseColorSamplerIndex = 0;
