@@ -78,9 +78,10 @@ float GetLightAttenuation(const float light_distance, const float has_position) 
 }
 
 vec3 GetLightDirection(const Light light, out float light_attenuation) {
-  const vec3 light_direction = light.world_position.xyz - (light.world_position.w * fragment.world_position);
+  const float is_point_light = float(light.world_position.w != 0.0);
+  const vec3 light_direction = light.world_position.xyz - (is_point_light * fragment.world_position);
   const float light_distance = max(length(light_direction), kPointLightRadius); // avoid singularity near light source
-  light_attenuation = GetLightAttenuation(light_distance, light.world_position.w);
+  light_attenuation = GetLightAttenuation(light_distance, is_point_light);
   return light_direction / light_distance;
 }
 
