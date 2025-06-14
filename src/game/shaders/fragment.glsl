@@ -1,7 +1,7 @@
 #version 460
 
 struct Light {
-  vec4 position;  // represents normalized light direction when w-component is zero
+  vec4 world_position;  // represents normalized light direction when w-component is zero
   vec4 color;
 };
 
@@ -17,7 +17,7 @@ const uint kMaterialSamplerCount = 3;
 layout (constant_id = 0) const uint kLightCount = 1;
 
 layout(push_constant) uniform PushConstants {
-  layout(offset = 64) vec3 view_position;
+  layout(offset = 64) vec3 camera_world_position;
 } push_constants;
 
 layout(set = 0, binding = 1) uniform Lights {
@@ -33,15 +33,16 @@ layout(set = 1, binding = 0) uniform MaterialProperties {
 layout(set = 1, binding = 1) uniform sampler2D material_samplers[kMaterialSamplerCount];
 
 layout(location = 0) in Fragment {
-  vec3 position;
+  vec3 world_position;
+  vec3 world_normal;
+  vec4 world_tangent;
   vec2 texcoord_0;
-  mat3 normal_transform;
 } fragment;
 
 layout(location = 0) out vec4 fragment_color;
 
 vec3 GetViewDirection() {
-  return normalize(push_constants.view_position - fragment.position);
+  return normalize(push_constants.camera_world_position - fragment.world_position);
 }
 
 vec4 GetSampledImageColor(const uint sampler_index) {
@@ -57,9 +58,9 @@ vec2 GetMetallicRoughness() {
 }
 
 mat3 GetNormalTransform() {
-  const vec3 tangent = normalize(fragment.normal_transform[0]);
-  const vec3 bitangent = normalize(fragment.normal_transform[1]);
-  const vec3 normal = normalize(fragment.normal_transform[2]);
+  const vec3 normal = normalize(fragment.world_normal);
+  const vec3 tangent = normalize(fragment.world_tangent.xyz);
+  const vec3 bitangent = normalize(cross(normal, tangent)) * fragment.world_tangent.w;
   return mat3(tangent, bitangent, normal);
 }
 
@@ -77,9 +78,9 @@ float GetLightAttenuation(const float light_distance, const float has_position) 
 }
 
 vec3 GetLightDirection(const Light light, out float light_attenuation) {
-  const vec3 light_direction = light.position.xyz - (light.position.w * fragment.position);
+  const vec3 light_direction = light.world_position.xyz - (light.world_position.w * fragment.world_position);
   const float light_distance = max(length(light_direction), kPointLightRadius); // avoid singularity near light source
-  light_attenuation = GetLightAttenuation(light_distance, light.position.w);
+  light_attenuation = GetLightAttenuation(light_distance, light.world_position.w);
   return light_direction / light_distance;
 }
 

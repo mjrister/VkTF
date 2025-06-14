@@ -16,14 +16,10 @@ layout(location = 3) in vec2 texcoord_0;
 
 layout(location = 0) out Fragment {
   vec3 world_position;
+  vec3 world_normal;
+  vec4 world_tangent;
   vec2 texcoord_0;
-  mat3 normal_transform;
 } fragment;
-
-mat3 GetNormalTransform(const mat4 model_transform) {
-  const vec3 bitangent = cross(normal, tangent.xyz) * tangent.w;  // tangent and bitangent assumed to be unit length
-  return mat3(model_transform) * mat3(tangent.xyz, bitangent, normal);  // model transform assumed to be orthogonal
-}
 
 void main() {
   const mat4 model_transform = push_constants.model_transform;
@@ -32,8 +28,9 @@ void main() {
   const vec4 world_position = model_transform * vec4(position, 1.0);
 
   fragment.world_position = world_position.xyz;
+  fragment.world_normal = mat3(model_transform) * normal;
+  fragment.world_tangent = model_transform * tangent;
   fragment.texcoord_0 = texcoord_0;
-  fragment.normal_transform = GetNormalTransform(model_transform);
 
   gl_Position = projection_transform * view_transform * world_position;
 }
