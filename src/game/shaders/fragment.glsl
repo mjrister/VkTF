@@ -56,10 +56,18 @@ vec2 GetMetallicRoughness() {
   return material_properties.metallic_roughness_factor * GetSampledImageColor(kMetallicRoughnessSamplerIndex).bg;
 }
 
+mat3 GetNormalTransform() {
+  const vec3 tangent = normalize(fragment.normal_transform[0]);
+  const vec3 bitangent = normalize(fragment.normal_transform[1]);
+  const vec3 normal = normalize(fragment.normal_transform[2]);
+  return mat3(tangent, bitangent, normal);
+}
+
 vec3 GetNormal() {
+  const mat3 normal_transform = GetNormalTransform();
   vec3 normal = 2.0 * GetSampledImageColor(kNormalSamplerIndex).rgb - 1.0;  // convert RGB values from [0, 1] to [-1, 1]
   normal.xy *= vec2(material_properties.normal_scale);
-  return normalize(fragment.normal_transform * normal);
+  return normalize(normal_transform * normal);
 }
 
 float GetLightAttenuation(const float light_distance, const float has_position) {
