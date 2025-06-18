@@ -389,7 +389,7 @@ GltfResourceMap<gltf::Material, UniqueMaterial> CreateMaterials(
     const GltfResourceMap<gltf::Material, StagingModel::Material>& staging_materials,
     const GltfResourceMap<gltf::Sampler, vk::UniqueSampler>& samplers,
     const std::vector<vk::DescriptorSet>& descriptor_sets) {
-  // descriptor sets are preallocated based on the number of supported materials
+  // descriptor sets are allocated based on the number of supported materials
   assert(descriptor_sets.size() == CountSupportedMaterials(staging_materials | std::views::values));
   std::size_t descriptor_set_index = 0;
 
@@ -662,7 +662,7 @@ void Render(const Node& node, const vk::CommandBuffer command_buffer, const vk::
 
     for (const auto& primitive : *mesh) {
       if (const auto* const material = primitive.material(); material != nullptr) {
-        // TODO: avoid per-primitive material descriptor set bindings
+        // TODO: avoid per-primitive material descriptor set binding
         using enum vk::PipelineBindPoint;
         command_buffer.bindDescriptorSets(eGraphics, pipeline_layout, 1, material->descriptor_set(), nullptr);
       }
