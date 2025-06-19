@@ -3,7 +3,7 @@ add_executable(game main.cpp)
 target_sources(game PRIVATE FILE_SET CXX_MODULES
                             FILES game.cppm)
 
-target_link_libraries(game PRIVATE graphics)
+target_link_libraries(game PRIVATE engine)
 
 # create a symlink to the assets directory to avoid copying large source files to the binary directory
 set(ASSETS_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/assets)
