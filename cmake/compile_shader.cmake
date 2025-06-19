@@ -2,7 +2,8 @@ find_package(glslang CONFIG REQUIRED)
 get_target_property(GLSLANG_STANDALONE glslang::glslang-standalone LOCATION)
 
 if(CMAKE_BUILD_TYPE STREQUAL Debug)
-  set(GLSLANG_FLAGS -Od -g)
+  # TODO: use -gVS and enable VK_KHR_shader_non_semantic_info when optional device extension support is added
+  set(GLSLANG_FLAGS -Od -g --enhanced-msgs --error-column)
 else()
   set(GLSLANG_FLAGS -Os)
 endif()
@@ -14,10 +15,12 @@ function(compile_shader GLSL_FILENAME GLSL_STAGE)
 
   add_custom_command(OUTPUT  ${SPIRV_BINARY_FILEPATH} ${GLSL_BINARY_FILEPATH}
                      COMMAND ${GLSLANG_STANDALONE} -S ${GLSL_STAGE}
-                                                   -V -o ${SPIRV_BINARY_FILEPATH}
+                                                   # TODO: use vulkan1.4 when glslang 15.3 is available in vcpkg
+                                                   --target-env vulkan1.3
+                                                   -o ${SPIRV_BINARY_FILEPATH}
                                                    ${GLSLANG_FLAGS}
                                                    ${GLSL_SOURCE_FILEPATH}
-                     # create a symlink to the original source file to allow runtime shader compilation
+                     # create a symlink to the original source file to enable runtime shader compilation
                      COMMAND ${CMAKE_COMMAND} -E create_symlink ${GLSL_SOURCE_FILEPATH} ${GLSL_BINARY_FILEPATH}
                      DEPENDS ${GLSL_SOURCE_FILEPATH}
                      COMMENT "Compiling ${GLSL_SOURCE_FILEPATH}")
