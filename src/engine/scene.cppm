@@ -250,8 +250,8 @@ void Scene::Update(HostVisibleBuffer& camera_uniform_buffer, HostVisibleBuffer& 
   }
 
   camera_uniform_buffer.Copy<CameraTransforms>(
-      CameraTransforms{.view_transform = camera_.view_transform(),
-                       .projection_transform = camera_.projection_transform()});
+      CameraTransforms{.view_transform = camera_.GetViewTransform(),
+                       .projection_transform = camera_.GetProjectionTransform()});
 
   assert(light_count_ == world_lights.size());  // ensure all scene lights are accounted for
   lights_uniform_buffer.Copy<WorldLight>(world_lights);
@@ -264,11 +264,11 @@ void Scene::Render(const vk::CommandBuffer command_buffer, const vk::DescriptorS
   const auto graphics_pipeline_layout = graphics_pipeline_.layout();
   command_buffer.bindDescriptorSets(eGraphics, graphics_pipeline_layout, 0, global_descriptor_set, nullptr);
 
-  using CameraWorldPosition = decltype(GraphicsPipeline::PushConstants::camera_world_position);
-  command_buffer.pushConstants<CameraWorldPosition>(graphics_pipeline_layout,
-                                                    vk::ShaderStageFlagBits::eFragment,
-                                                    offsetof(GraphicsPipeline::PushConstants, camera_world_position),
-                                                    camera_.GetPosition());
+  using ViewPosition = decltype(GraphicsPipeline::PushConstants::view_position);
+  command_buffer.pushConstants<ViewPosition>(graphics_pipeline_layout,
+                                             vk::ShaderStageFlagBits::eFragment,
+                                             offsetof(GraphicsPipeline::PushConstants, view_position),
+                                             camera_.position());
 
   for (const auto& model : models_) {
     model.Render(command_buffer, graphics_pipeline_layout);

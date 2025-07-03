@@ -6,14 +6,14 @@ struct WorldLight {
 };
 
 const float kPi = 3.1415927;
-const float kEpsilon = 1.0e-7;  // improves numerical stability by avoiding division by zero
+const float kEpsilon = 1.0e-7;
 const uint kBaseColorSamplerIndex = 0;
 const uint kMetallicRoughnessSamplerIndex = 1;
 const uint kNormalSamplerIndex = 2;
 const uint kMaterialSamplerCount = 3;
 
 layout(push_constant) uniform PushConstants {
-  layout(offset = 64) vec3 camera_world_position;
+  layout(offset = 64) vec3 view_position;
 } push_constants;
 
 layout (constant_id = 0) const uint kLightCount = 1;
@@ -40,7 +40,7 @@ layout(location = 0) in Fragment {
 layout(location = 0) out vec4 fragment_color;
 
 vec3 GetViewDirection() {
-  return normalize(push_constants.camera_world_position - fragment.world_position);
+  return normalize(push_constants.view_position - fragment.world_position);
 }
 
 vec4 GetSampledImageColor(const uint sampler_index) {
@@ -55,9 +55,9 @@ vec2 GetMetallicRoughness() {
   return material_properties.metallic_roughness_factor * GetSampledImageColor(kMetallicRoughnessSamplerIndex).bg;
 }
 
-mat3 GetNormalTransform() {
-  // the normal transform is constructed here to ensure basis vectors remain orthonormal which can otherwise break down
-  // due to fragment interpolation during rasterization if constructed in the vertex shader
+mat3 GetTbnTransform() {
+  // the TBN transform is constructed here to ensure basis vectors remain orthonormal which can otherwise
+  // break down due to fragment interpolation during rasterization if constructed in the vertex shader
   const vec3 normal = normalize(fragment.world_normal);
   const vec3 tangent = normalize(fragment.world_tangent.xyz);
   const vec3 bitangent = normalize(cross(normal, tangent)) * fragment.world_tangent.w;
@@ -65,24 +65,24 @@ mat3 GetNormalTransform() {
 }
 
 vec3 GetNormal() {
-  const mat3 normal_transform = GetNormalTransform();
   vec3 normal = 2.0 * GetSampledImageColor(kNormalSamplerIndex).rgb - 1.0;  // convert RGB values from [0, 1] to [-1, 1]
   normal.xy *= vec2(material_properties.normal_scale);
-  return normalize(normal_transform * normal);
+  const mat3 tbn_transform = GetTbnTransform();
+  return normalize(tbn_transform * normal);
 }
 
-float GetLightAttenuation(const float light_distance, const float is_point_light) {
+float GetLightAttenuation(const float light_distance, const float has_position) {
   const float kDirectionalLightAttenuation = 1.0;  // do not attenuate directional lights
   const float point_light_attenuation = 1.0 / (light_distance * light_distance);
-  return mix(kDirectionalLightAttenuation, point_light_attenuation, is_point_light);
+  return mix(kDirectionalLightAttenuation, point_light_attenuation, has_position);
 }
 
 vec3 GetLightDirection(const WorldLight world_light, out float light_attenuation) {
   const float kPointLightRadius = 0.1;
-  const float is_point_light = float(world_light.position.w != 0.0);
-  const vec3 light_direction = world_light.position.xyz - (is_point_light * fragment.world_position);
-  const float light_distance = max(length(light_direction), kPointLightRadius);  // avoid signularity near light source
-  light_attenuation = GetLightAttenuation(light_distance, is_point_light);
+  const float has_position = float(world_light.position.w != 0.0);
+  const vec3 light_direction = world_light.position.xyz - (has_position * fragment.world_position);
+  const float light_distance = max(length(light_direction), kPointLightRadius);
+  light_attenuation = GetLightAttenuation(light_distance, has_position);
   return light_direction / light_distance;
 }
 

@@ -50,7 +50,7 @@ void HandleMouseEvents(const vktf::Window& window, vktf::Camera& camera) {
   if (prev_left_click_position.has_value()) {
     static constexpr auto kDragSpeed = 0.00390625f;
     const auto drag_direction = kDragSpeed * (left_click_position - *prev_left_click_position);
-    camera.Rotate(vktf::EulerAngles{.pitch = -drag_direction.y, .yaw = -drag_direction.x});
+    camera.Rotate(-drag_direction.y, -drag_direction.x);
   }
 
   prev_left_click_position = left_click_position;
