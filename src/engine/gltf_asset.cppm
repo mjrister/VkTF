@@ -539,8 +539,8 @@ void ValidateOptionalAttribute(const std::size_t position_count, const std::opti
 }
 
 template <typename... Attribute>
-void ValidateOptionalAttribute(const std::size_t position_count, const std::optional<Attribute>&... attribute) {
-  (ValidateOptionalAttribute(position_count, attribute), ...);
+void ValidateOptionalAttributes(const std::size_t position_count, const std::optional<Attribute>&... attributes) {
+  (ValidateOptionalAttribute(position_count, attributes), ...);
 }
 
 std::optional<VertexAttributes> CreateAttributes(const std::span<const cgltf_attribute> cgltf_attributes, Log& log) {
@@ -581,7 +581,7 @@ std::optional<VertexAttributes> CreateAttributes(const std::span<const cgltf_att
   return position_attribute.transform(
       [&normal_attribute, &tangent_attribute, &texcoord_0_attribute](auto& position_attribute_value) {
         const auto position_count = position_attribute_value.size();
-        ValidateOptionalAttribute(position_count, normal_attribute, tangent_attribute, texcoord_0_attribute);
+        ValidateOptionalAttributes(position_count, normal_attribute, tangent_attribute, texcoord_0_attribute);
 
         return VertexAttributes{.position = std::move(position_attribute_value),
                                 .normal = std::move(normal_attribute),
@@ -715,24 +715,27 @@ std::vector<const Node*> GetChildren(const cgltf_node& cgltf_parent_node,
 CgltfResourceMap<cgltf_node, const Node> CreateNodes(const std::span<const cgltf_node> cgltf_nodes,
                                                      const CgltfResourceMap<cgltf_mesh, const Mesh>& meshes,
                                                      const CgltfResourceMap<cgltf_light, const Light>& lights) {
-  auto mutable_nodes =
-      cgltf_nodes  // first pass: create nodes without establishing parent-child relationships in a node hierarchy
-      | std::views::transform([&meshes, &lights](const auto& cgltf_node) {
-          return std::pair{&cgltf_node,
-                           std::make_unique<Node>(GetName(cgltf_node),
-                                                  GetLocalTransform(cgltf_node),
-                                                  Get(cgltf_node.mesh, meshes),
-                                                  Get(cgltf_node.light, lights))};
-        })
-      | std::ranges::to<std::unordered_map>();
+  // create nodes without establishing parent-child relationships in the node hierarchy
+  auto mutable_nodes = cgltf_nodes  //
+                       | std::views::transform([&meshes, &lights](const auto& cgltf_node) {
+                           return std::pair{&cgltf_node,
+                                            std::make_unique<Node>(GetName(cgltf_node),
+                                                                   GetLocalTransform(cgltf_node),
+                                                                   Get(cgltf_node.mesh, meshes),
+                                                                   Get(cgltf_node.light, lights))};
+                         })
+                       | std::ranges::to<std::unordered_map>();
 
-  return mutable_nodes  // second pass: assign children after all nodes have been created
-         | std::views::transform([&mutable_nodes](auto& key_value_pair) {
+  // assign child pointers after all nodes have been created
+  for (auto& [cgltf_node, mutable_node] : mutable_nodes) {
+    mutable_node->children = GetChildren(*cgltf_node, mutable_nodes);
+  }
+
+  // convert to const pointers after all nodes have been completely initialized
+  return mutable_nodes  //
+         | std::views::transform([](auto& key_value_pair) {
              auto& [cgltf_node, mutable_node] = key_value_pair;
-             mutable_node->children = GetChildren(*cgltf_node, mutable_nodes);
-             return std::pair{cgltf_node,
-                              // convert to const pointer now that the node is fully initialized
-                              std::unique_ptr<const Node>(std::move(mutable_node))};
+             return std::pair{cgltf_node, std::unique_ptr<const Node>(std::move(mutable_node))};
            })
          | std::ranges::to<std::unordered_map>();
 }
