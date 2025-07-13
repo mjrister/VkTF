@@ -418,26 +418,31 @@ GltfResourceMap<gltf::Material, UniqueMaterial> CreateMaterials(
 // Staging Meshes
 // =====================================================================================================================
 
-std::vector<Vertex> CreateVertices(const gltf::VertexAttributes::Position& position_attribute,
-                                   const gltf::VertexAttributes::Normal& normal_attribute,
-                                   const gltf::VertexAttributes::Tangent& tangent_attribute,
-                                   const gltf::VertexAttributes::TexCoord0& texcoord_0_attribute) {
+using PositionAttribute = gltf::VertexAttributes::Position;
+using NormalAttribute = gltf::VertexAttributes::Normal;
+using TangentAttribute = gltf::VertexAttributes::Tangent;
+using TexCoord0Attribute = gltf::VertexAttributes::TexCoord0;
+
+std::vector<Vertex> CreateVertices(const PositionAttribute::Data& position_data,
+                                   const NormalAttribute::Data& normal_data,
+                                   const TangentAttribute::Data& tangent_data,
+                                   const TexCoord0Attribute::Data& texcoord_0_data) {
   return std::views::zip_transform(
              [](const auto position, const auto& normal, const auto& tangent, const auto& texcoord_0) {
                return Vertex{.position = position, .normal = normal, .tangent = tangent, .texcoord_0 = texcoord_0};
              },
-             position_attribute,
-             normal_attribute,
-             tangent_attribute,
-             texcoord_0_attribute)
+             position_data,
+             normal_data,
+             tangent_data,
+             texcoord_0_data)
          | std::ranges::to<std::vector>();
 }
 
 std::optional<std::string_view> FindMissingAttributeName(const gltf::VertexAttributes& vertex_attributes) {
   const auto& [_, normal_attribute, tangent_attribute, texcoord_0_attribute] = vertex_attributes;
-  if (!normal_attribute.has_value()) return gltf::VertexAttributes::kNormalName;
-  if (!tangent_attribute.has_value()) return gltf::VertexAttributes::kTangentName;
-  if (!texcoord_0_attribute.has_value()) return gltf::VertexAttributes::kTexCoord0Name;
+  if (!normal_attribute.data.has_value()) return NormalAttribute::kName;
+  if (!tangent_attribute.data.has_value()) return TangentAttribute::kName;
+  if (!texcoord_0_attribute.data.has_value()) return TexCoord0Attribute::kName;
   return std::nullopt;
 }
 
@@ -473,16 +478,17 @@ std::optional<StagingPrimitive> CreateStagingPrimitive(
   }
 
   return std::visit(
-      [&allocator, &vertex_attributes]<typename T>(const T& indices) {
-        using IndexType = typename T::value_type;
+      [&allocator, &vertex_attributes]<typename Indices>(const Indices& indices) {
         const auto& [position_attribute, normal_attribute, tangent_attribute, texcoord_0_attribute] = vertex_attributes;
+        using IndexType = typename Indices::value_type;
 
         return StagingPrimitive{
             allocator,
-            StagingPrimitive::CreateInfo<IndexType>{
-                .vertices =
-                    CreateVertices(position_attribute, *normal_attribute, *tangent_attribute, *texcoord_0_attribute),
-                .indices = indices}};
+            StagingPrimitive::CreateInfo<IndexType>{.vertices = CreateVertices(position_attribute.data,
+                                                                               *normal_attribute.data,
+                                                                               *tangent_attribute.data,
+                                                                               *texcoord_0_attribute.data),
+                                                    .indices = indices}};
       },
       *indices_variant);
 }
@@ -693,10 +699,10 @@ Model::Model(const vma::Allocator& allocator, const vk::CommandBuffer command_bu
   const auto& device = allocator.device();
   const auto& staging_materials = staging_model.materials();
   const auto& staging_meshes = staging_model.meshes();
-  const auto& descriptor_sets = material_descriptor_pool_->descriptor_sets();
+  const auto& material_descriptor_sets = material_descriptor_pool_->descriptor_sets();
 
   auto samplers = CreateSamplers(device, gltf_asset.samplers, sampler_anisotropy);
-  auto materials = CreateMaterials(allocator, command_buffer, staging_materials, samplers, descriptor_sets);
+  auto materials = CreateMaterials(allocator, command_buffer, staging_materials, samplers, material_descriptor_sets);
   auto meshes = CreateMeshes(allocator, command_buffer, staging_meshes, materials);
   auto lights = CreateLights(gltf_asset.lights);
   auto nodes = CreateNodes(gltf_asset.nodes, meshes, lights);

@@ -66,25 +66,34 @@ export struct [[nodiscard]] Material {
 export using UniqueMaterial = std::unique_ptr<const Material>;
 
 export struct [[nodiscard]] VertexAttributes {
-  template <typename T, glm::length_t N>
-    requires std::constructible_from<glm::vec<N, T>>
-  using Attribute = std::vector<glm::vec<N, T>>;
+  struct Position {
+    static constexpr std::string_view kName = "POSITION";
+    using Data = std::vector<glm::vec3>;
+    Data data;
+  };
 
-  static constexpr std::string_view kPositionName = "POSITION";
-  using Position = Attribute<float, 3>;
+  struct Normal {
+    static constexpr std::string_view kName = "NORMAL";
+    using Data = std::vector<glm::vec3>;
+    std::optional<Data> data;
+  };
+
+  struct Tangent {
+    static constexpr std::string_view kName = "TANGENT";
+    using Data = std::vector<glm::vec4>;
+    std::optional<Data> data;
+  };
+
+  struct TexCoord0 {
+    static constexpr std::string_view kName = "TEXCOORD_0";
+    using Data = std::vector<glm::vec2>;
+    std::optional<Data> data;
+  };
+
   Position position;
-
-  static constexpr std::string_view kNormalName = "NORMAL";
-  using Normal = Attribute<float, 3>;
-  std::optional<Normal> normal;
-
-  static constexpr std::string_view kTangentName = "TANGENT";
-  using Tangent = Attribute<float, 4>;
-  std::optional<Tangent> tangent;
-
-  static constexpr std::string_view kTexCoord0Name = "TEXCOORD_0";
-  using TexCoord0 = Attribute<float, 2>;
-  std::optional<TexCoord0> texcoord_0;
+  Normal normal;
+  Tangent tangent;
+  TexCoord0 texcoord_0;
 };
 
 export struct [[nodiscard]] Primitive {
@@ -495,79 +504,90 @@ CgltfResourceMap<cgltf_material, const Material> CreateMaterials(
 // Meshes
 // =====================================================================================================================
 
+template <typename T, glm::length_t N>
+  requires std::constructible_from<glm::vec<N, T>>
+using AttributeData = std::vector<glm::vec<N, T>>;
+
 template <glm::length_t N>
-VertexAttributes::Attribute<float, N> UnpackFloats(const cgltf_accessor& cgltf_accessor) {
+AttributeData<float, N> UnpackFloats(const cgltf_accessor& cgltf_accessor) {
   if (const auto component_count = cgltf_num_components(cgltf_accessor.type); component_count != N) {
     throw std::runtime_error{std::format("Invalid glTF primitive attribute {} with bad component count {}",
                                          GetNameOrDefault(cgltf_accessor),
                                          component_count)};
   }
-  VertexAttributes::Attribute<float, N> attribute(cgltf_accessor.count);
+  AttributeData<float, N> attribute_data(cgltf_accessor.count);
   if (const auto float_count = N * cgltf_accessor.count;
-      cgltf_accessor_unpack_floats(&cgltf_accessor, glm::value_ptr(attribute.front()), float_count) == 0) {
+      cgltf_accessor_unpack_floats(&cgltf_accessor, glm::value_ptr(attribute_data.front()), float_count) == 0) {
     throw std::runtime_error{std::format("Failed to unpack floats for accessor {}", GetNameOrDefault(cgltf_accessor))};
   }
-  return attribute;
+  return attribute_data;
 }
 
-template <typename Attribute>
+template <glm::length_t N>
 bool TryUnpackFloats(const cgltf_attribute& cgltf_attribute,
                      const std::string_view attribute_name,
-                     std::optional<Attribute>& attribute) {
+                     std::optional<AttributeData<float, N>>& attribute_data) {
   if (const auto cgltf_attribute_name = GetName(cgltf_attribute);
       !cgltf_attribute_name.has_value() || attribute_name != *cgltf_attribute_name) {
     // attribute sets share the same attribute type so their name must be checked to ensure data is unpacked correctly
     return false;
   }
-  if (attribute.has_value()) {
+  if (attribute_data.has_value()) {
     // the glTF specification uses attribute names as JSON keys which must be unique for a glTF primitive
     throw std::runtime_error{std::format("Duplicate glTF primitive attribute {}", attribute_name)};
   }
   assert(cgltf_attribute.data != nullptr);  // assume valid cgltf accessor pointer
-  static constexpr auto kComponentCount = Attribute::value_type::length();
-  attribute = UnpackFloats<kComponentCount>(*cgltf_attribute.data);
+  attribute_data = UnpackFloats<N>(*cgltf_attribute.data);
   return true;
 }
 
-template <typename Attribute>
-void ValidateOptionalAttribute(const std::size_t position_count, const std::optional<Attribute>& attribute) {
-  if (attribute.has_value() && position_count != attribute->size()) {
+template <typename AttributeData>
+void ValidateOptionalAttribute(const std::size_t position_count, const std::optional<AttributeData>& attribute_data) {
+  if (attribute_data.has_value() && position_count != attribute_data->size()) {
     // the glTF specification requires all primitive attributes to have the same accessor count
     throw std::runtime_error{
-        std::format("Invalid glTF primitive attribute with bad accessor count {}", attribute->size())};
+        std::format("Invalid glTF primitive attribute with bad accessor count {}", attribute_data->size())};
   }
 }
 
-template <typename... Attribute>
-void ValidateOptionalAttributes(const std::size_t position_count, const std::optional<Attribute>&... attributes) {
-  (ValidateOptionalAttribute(position_count, attributes), ...);
+template <typename... AttributeData>
+void ValidateOptionalAttributes(const std::size_t position_count,
+                                const std::optional<AttributeData>&... attribute_data) {
+  (ValidateOptionalAttribute(position_count, attribute_data), ...);
 }
 
 std::optional<VertexAttributes> CreateAttributes(const std::span<const cgltf_attribute> cgltf_attributes, Log& log) {
-  std::optional<VertexAttributes::Position> position_attribute;
-  std::optional<VertexAttributes::Normal> normal_attribute;
-  std::optional<VertexAttributes::Tangent> tangent_attribute;
-  std::optional<VertexAttributes::TexCoord0> texcoord_0_attribute;
+  using Position = VertexAttributes::Position;
+  std::optional<Position::Data> position_data;
+
+  using Normal = VertexAttributes::Normal;
+  std::optional<Normal::Data> normal_data;
+
+  using Tangent = VertexAttributes::Tangent;
+  std::optional<Tangent::Data> tangent_data;
+
+  using TexCoord0 = VertexAttributes::TexCoord0;
+  std::optional<TexCoord0::Data> texcoord_0_data;
 
   for (const auto& cgltf_attribute : cgltf_attributes) {
     switch (cgltf_attribute.type) {
       case cgltf_attribute_type_position:
-        if (TryUnpackFloats(cgltf_attribute, VertexAttributes::kPositionName, position_attribute)) {
+        if (TryUnpackFloats(cgltf_attribute, Position::kName, position_data)) {
           continue;
         }
         break;
       case cgltf_attribute_type_normal:
-        if (TryUnpackFloats(cgltf_attribute, VertexAttributes::kNormalName, normal_attribute)) {
+        if (TryUnpackFloats(cgltf_attribute, Normal::kName, normal_data)) {
           continue;
         }
         break;
       case cgltf_attribute_type_tangent:
-        if (TryUnpackFloats(cgltf_attribute, VertexAttributes::kTangentName, tangent_attribute)) {
+        if (TryUnpackFloats(cgltf_attribute, Tangent::kName, tangent_data)) {
           continue;
         }
         break;
       case cgltf_attribute_type_texcoord:
-        if (TryUnpackFloats(cgltf_attribute, VertexAttributes::kTexCoord0Name, texcoord_0_attribute)) {
+        if (TryUnpackFloats(cgltf_attribute, TexCoord0::kName, texcoord_0_data)) {
           continue;
         }
         break;
@@ -578,16 +598,15 @@ std::optional<VertexAttributes> CreateAttributes(const std::span<const cgltf_att
     log(Severity::kError) << std::format("Unsupported primitive attribute {}", GetNameOrDefault(cgltf_attribute));
   }
 
-  return position_attribute.transform(
-      [&normal_attribute, &tangent_attribute, &texcoord_0_attribute](auto& position_attribute_value) {
-        const auto position_count = position_attribute_value.size();
-        ValidateOptionalAttributes(position_count, normal_attribute, tangent_attribute, texcoord_0_attribute);
+  return position_data.transform([&normal_data, &tangent_data, &texcoord_0_data](auto& position_data_value) {
+    const auto position_count = position_data_value.size();
+    ValidateOptionalAttributes(position_count, normal_data, tangent_data, texcoord_0_data);
 
-        return VertexAttributes{.position = std::move(position_attribute_value),
-                                .normal = std::move(normal_attribute),
-                                .tangent = std::move(tangent_attribute),
-                                .texcoord_0 = std::move(texcoord_0_attribute)};
-      });
+    return VertexAttributes{.position = Position{.data = std::move(position_data_value)},
+                            .normal = Normal{.data = std::move(normal_data)},
+                            .tangent = Tangent{.data = std::move(tangent_data)},
+                            .texcoord_0 = TexCoord0{.data = std::move(texcoord_0_data)}};
+  });
 }
 
 template <typename T>
