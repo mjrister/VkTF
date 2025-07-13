@@ -25,6 +25,7 @@ module;
 
 export module gltf_asset;
 
+import aabb;
 import log;
 
 namespace vktf::gltf {
@@ -70,6 +71,7 @@ export struct [[nodiscard]] VertexAttributes {
     static constexpr std::string_view kName = "POSITION";
     using Data = std::vector<glm::vec3>;
     Data data;
+    Aabb aabb;
   };
 
   struct Normal {
