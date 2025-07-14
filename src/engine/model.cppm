@@ -530,21 +530,22 @@ UniqueMesh CreateMesh(const vma::Allocator& allocator,
                       const GltfResourceMap<gltf::Material, UniqueMaterial>& materials) {
   assert(gltf_mesh.primitives.size() == staging_mesh.size());  // guaranteed by staging mesh construction
 
-  auto primitives =
-      std::views::zip(gltf_mesh.primitives, staging_mesh)  //
-      | std::views::filter([](const auto& key_value_pair) {
-          const auto& [_, staging_primitive] = key_value_pair;
-          return staging_primitive.has_value();
-        })
-      | std::views::transform([&allocator, command_buffer, &materials](const auto& key_value_pair) {
-          const auto& [gltf_primitive, staging_primitive] = key_value_pair;
-          const auto& material = Get(gltf_primitive.material, materials);
-          assert(material != nullptr);  // guaranteed by staging primitive construction
-          return Primitive{allocator,
-                           command_buffer,
-                           Primitive::CreateInfo{.staging_primitive = *staging_primitive, .material = material.get()}};
-        })
-      | std::ranges::to<std::vector>();
+  auto primitives = std::views::zip(gltf_mesh.primitives, staging_mesh)  //
+                    | std::views::filter([](const auto& key_value_pair) {
+                        const auto& [_, staging_primitive] = key_value_pair;
+                        return staging_primitive.has_value();
+                      })
+                    | std::views::transform([&allocator, command_buffer, &materials](const auto& key_value_pair) {
+                        const auto& [gltf_primitive, staging_primitive] = key_value_pair;
+                        const auto& material = Get(gltf_primitive.material, materials);
+                        assert(material != nullptr);  // guaranteed by staging primitive construction
+                        return Primitive{allocator,
+                                         command_buffer,
+                                         Primitive::CreateInfo{.staging_primitive = *staging_primitive,
+                                                               .aabb = gltf_primitive.attributes.position.aabb,
+                                                               .material = material.get()}};
+                      })
+                    | std::ranges::to<std::vector>();
 
   return primitives.empty() ? nullptr : std::make_unique<Mesh>(std::move(primitives));
 }

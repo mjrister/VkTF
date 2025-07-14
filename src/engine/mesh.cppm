@@ -9,6 +9,7 @@ module;
 
 export module mesh;
 
+import aabb;
 import buffer;
 import data_view;
 import material;
@@ -71,11 +72,13 @@ export class [[nodiscard]] Primitive {
 public:
   struct [[nodiscard]] CreateInfo {
     const StagingPrimitive& staging_primitive;
+    const Aabb& aabb;
     const Material* material = nullptr;
   };
 
   Primitive(const vma::Allocator& allocator, vk::CommandBuffer command_buffer, const CreateInfo& create_info);
 
+  [[nodiscard]] const Aabb& aabb() const noexcept { return aabb_; }
   [[nodiscard]] const Material* material() const noexcept { return material_; }
 
   void Render(const vk::CommandBuffer command_buffer) const {
@@ -89,6 +92,7 @@ private:
   Buffer index_buffer_;
   vk::IndexType index_type_;
   std::uint32_t index_count_;
+  Aabb aabb_;
   const Material* material_;
 };
 
@@ -113,6 +117,7 @@ Primitive::Primitive(const vma::Allocator& allocator,
                                             vk::BufferUsageFlagBits::eIndexBuffer)},
       index_type_{create_info.staging_primitive.index_type()},
       index_count_{create_info.staging_primitive.index_count()},
+      aabb_{create_info.aabb},
       material_{create_info.material} {}
 
 }  // namespace vktf

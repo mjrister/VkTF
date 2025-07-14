@@ -277,15 +277,6 @@ std::vector<std::unique_ptr<Value>> GetValues(CgltfResourceMap<Key, Value>&& cgl
   return values;
 }
 
-template <typename T, glm::length_t N>
-  requires std::constructible_from<glm::vec<N, T>>
-glm::vec<N, T> ToVec(const T (&src_array)[N]) {  // NOLINT(*-c-arrays): defines an explicit conversion from a c-array
-  glm::vec<N, T> dst_vec{};
-  static_assert(sizeof(src_array) == sizeof(dst_vec));
-  std::ranges::copy(src_array, glm::value_ptr(dst_vec));
-  return dst_vec;
-}
-
 template <typename T>
   requires std::convertible_to<decltype(T::name), const char*>
 std::optional<std::string> GetName(const T& cgltf_element) {
@@ -475,7 +466,7 @@ std::optional<PbrMetallicRoughness> GetPbrMetallicRoughness(
                metallic_factor,
                roughness_factor] = cgltf_material.pbr_metallic_roughness;
 
-  return PbrMetallicRoughness{.base_color_factor = ToVec(base_color_factor),
+  return PbrMetallicRoughness{.base_color_factor = glm::make_vec4(base_color_factor),
                               .base_color_texture = Get(base_color_texture_view.texture, textures),
                               .metallic_factor = metallic_factor,
                               .roughness_factor = roughness_factor,
@@ -561,6 +552,7 @@ void ValidateOptionalAttributes(const std::size_t position_count,
 std::optional<VertexAttributes> CreateAttributes(const std::span<const cgltf_attribute> cgltf_attributes, Log& log) {
   using Position = VertexAttributes::Position;
   std::optional<Position::Data> position_data;
+  Aabb position_aabb;
 
   using Normal = VertexAttributes::Normal;
   std::optional<Normal::Data> normal_data;
@@ -575,6 +567,8 @@ std::optional<VertexAttributes> CreateAttributes(const std::span<const cgltf_att
     switch (cgltf_attribute.type) {
       case cgltf_attribute_type_position:
         if (TryUnpackFloats(cgltf_attribute, Position::kName, position_data)) {
+          position_aabb.min = glm::make_vec3(cgltf_attribute.data->min);
+          position_aabb.max = glm::make_vec3(cgltf_attribute.data->max);
           continue;
         }
         break;
@@ -600,15 +594,16 @@ std::optional<VertexAttributes> CreateAttributes(const std::span<const cgltf_att
     log(Severity::kError) << std::format("Unsupported primitive attribute {}", GetNameOrDefault(cgltf_attribute));
   }
 
-  return position_data.transform([&normal_data, &tangent_data, &texcoord_0_data](auto& position_data_value) {
-    const auto position_count = position_data_value.size();
-    ValidateOptionalAttributes(position_count, normal_data, tangent_data, texcoord_0_data);
+  return position_data.transform(
+      [&position_aabb, &normal_data, &tangent_data, &texcoord_0_data](auto& position_data_v) {
+        const auto position_count = position_data_v.size();
+        ValidateOptionalAttributes(position_count, normal_data, tangent_data, texcoord_0_data);
 
-    return VertexAttributes{.position = Position{.data = std::move(position_data_value)},
-                            .normal = Normal{.data = std::move(normal_data)},
-                            .tangent = Tangent{.data = std::move(tangent_data)},
-                            .texcoord_0 = TexCoord0{.data = std::move(texcoord_0_data)}};
-  });
+        return VertexAttributes{.position = Position{.data = std::move(position_data_v), .aabb = position_aabb},
+                                .normal = Normal{.data = std::move(normal_data)},
+                                .tangent = Tangent{.data = std::move(tangent_data)},
+                                .texcoord_0 = TexCoord0{.data = std::move(texcoord_0_data)}};
+      });
 }
 
 template <typename T>
@@ -701,7 +696,7 @@ std::optional<Light::Type> GetLightType(const cgltf_light& cgltf_light, Log& log
 
 UniqueLight CreateLight(const cgltf_light& cgltf_light, Log& log) {
   if (const auto light_type = GetLightType(cgltf_light, log); light_type.has_value()) {
-    return std::make_unique<const Light>(GetName(cgltf_light), ToVec(cgltf_light.color), *light_type);
+    return std::make_unique<const Light>(GetName(cgltf_light), glm::make_vec3(cgltf_light.color), *light_type);
   }
   return nullptr;
 }
