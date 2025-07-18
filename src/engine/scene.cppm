@@ -250,8 +250,8 @@ void Scene::Update(HostVisibleBuffer& camera_uniform_buffer, HostVisibleBuffer& 
   }
 
   camera_uniform_buffer.Copy<CameraTransforms>(
-      CameraTransforms{.view_transform = camera_.GetViewTransform(),
-                       .projection_transform = camera_.GetProjectionTransform()});
+      CameraTransforms{.view_transform = camera_.view_transform(),
+                       .projection_transform = camera_.projection_transform()});
 
   assert(light_count_ == world_lights.size());  // ensure all scene lights are accounted for
   lights_uniform_buffer.Copy<WorldLight>(world_lights);
