@@ -6,6 +6,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 import camera;
+import view_frustum;
 
 namespace {
 
@@ -28,10 +29,10 @@ constexpr auto kForward = -kBackward;
 
 constexpr glm::vec3 kPosition{0.0f, 1.0f, 2.0f};
 constexpr glm::vec3 kDirection{1.0f, 0.0f, 0.0f};
-constexpr vktf::ViewFrustum kViewFrustum{.field_of_view_y_ = kHalfPi,
-                                         .aspect_ratio_ = 16.0f / 9.0f,
-                                         .z_near_ = 0.1f,
-                                         .z_far_ = 1.0e6f};
+constexpr vktf::ViewFrustum::Properties kViewFrustumProperties{.field_of_view_y = kHalfPi,
+                                                               .aspect_ratio = 16.0f / 9.0f,
+                                                               .z_near = 0.1f,
+                                                               .z_far = 1.0e6f};
 
 // =====================================================================================================================
 // Assertions
@@ -71,7 +72,7 @@ public:
   };
 
 protected:
-  vktf::Camera camera_{kPosition, kDirection, kViewFrustum};
+  vktf::Camera camera_{kPosition, kDirection, kViewFrustumProperties};
 };
 
 TEST_F(CameraTest, HasCorrectInitialWorldPositionAndOrientation) {
@@ -86,14 +87,14 @@ TEST_F(CameraTest, HasCorrectInitialViewTransform) {
 }
 
 TEST_F(CameraTest, HasCorrectInitialProjectionTransform) {
-  const auto& [field_of_view_y, aspect_ratio, z_near, z_far] = kViewFrustum;
+  const auto& [field_of_view_y, aspect_ratio, z_near, z_far] = kViewFrustumProperties;
   auto projection_transform = glm::perspective(field_of_view_y, aspect_ratio, z_near, z_far);
   projection_transform[1][1] *= -1.0f;  // account for inverted y-axis convention in OpenGL
   ExpectNearEqual(projection_transform, camera_.projection_transform());
 }
 
 TEST(CameraDeathTest, AssertsWhenCameraDirectionIsZeroVector) {
-  EXPECT_DEBUG_DEATH({ (std::ignore = vktf::Camera{kPosition, kZeroVector, kViewFrustum}); }, "");
+  EXPECT_DEBUG_DEATH({ (std::ignore = vktf::Camera{kPosition, kZeroVector, kViewFrustumProperties}); }, "");
 }
 
 // =====================================================================================================================

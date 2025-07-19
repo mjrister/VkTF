@@ -10,18 +10,13 @@ module;
 
 export module camera;
 
-namespace vktf {
+import view_frustum;
 
-export struct [[nodiscard]] ViewFrustum {
-  float field_of_view_y_ = 0.0f;
-  float aspect_ratio_ = 0.0f;
-  float z_near_ = 0.0f;
-  float z_far_ = 0.0f;
-};
+namespace vktf {
 
 export class [[nodiscard]] Camera {
 public:
-  Camera(const glm::vec3& position, const glm::vec3& direction, const ViewFrustum& view_frustum);
+  Camera(const glm::vec3& position, const glm::vec3& direction, const ViewFrustum::Properties& view_frustum_properties);
 
   [[nodiscard]] const glm::vec3& position() const noexcept { return position_; }
   [[nodiscard]] const glm::quat& orientation() const noexcept { return orientation_; }
@@ -34,7 +29,7 @@ public:
 private:
   glm::vec3 position_;
   glm::quat orientation_;
-  ViewFrustum view_frustum_;
+  ViewFrustum::Properties view_frustum_properties_;
   mutable std::optional<glm::mat4> view_transform_;
   mutable std::optional<glm::mat4> projection_transform_;
 };
@@ -58,8 +53,8 @@ glm::mat4 GetViewTransform(const glm::vec3& position, const glm::quat& orientati
                    glm::vec4{view_translation, 1.0f}};
 }
 
-glm::mat4 GetProjectionTransform(const ViewFrustum& view_frustum) {
-  const auto& [field_of_view_y, aspect_ratio, z_near, z_far] = view_frustum;
+glm::mat4 GetProjectionTransform(const ViewFrustum::Properties& view_frustum_properties) {
+  const auto& [field_of_view_y, aspect_ratio, z_near, z_far] = view_frustum_properties;
   auto projection_transform = glm::perspective(field_of_view_y, aspect_ratio, z_near, z_far);
   projection_transform[1][1] *= -1.0f;  // account for inverted y-axis convention in OpenGL
   return projection_transform;
@@ -67,10 +62,12 @@ glm::mat4 GetProjectionTransform(const ViewFrustum& view_frustum) {
 
 }  // namespace
 
-Camera::Camera(const glm::vec3& position, const glm::vec3& direction, const ViewFrustum& view_frustum)
+Camera::Camera(const glm::vec3& position,
+               const glm::vec3& direction,
+               const ViewFrustum::Properties& view_frustum_properties)
     : position_{position},
       orientation_{glm::quatLookAt(glm::normalize(direction), kWorldUp)},
-      view_frustum_{view_frustum} {
+      view_frustum_properties_{view_frustum_properties} {
   assert(glm::length(direction) > 0.0f);
 }
 
@@ -97,7 +94,7 @@ const glm::mat4& Camera::view_transform() const {
 
 const glm::mat4& Camera::projection_transform() const {
   if (!projection_transform_.has_value()) {
-    projection_transform_ = GetProjectionTransform(view_frustum_);
+    projection_transform_ = GetProjectionTransform(view_frustum_properties_);
   }
   return *projection_transform_;
 }
