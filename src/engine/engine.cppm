@@ -273,15 +273,17 @@ std::vector<HostVisibleBuffer> CreateUniformBuffers(const vma::Allocator& alloca
 }
 
 vk::UniqueDescriptorSetLayout CreateGlobalDescriptorSetLayout(const vk::Device device) {
+  using enum vk::ShaderStageFlagBits;
+
   static constexpr std::array kDescriptorSetLayoutBindings{
       vk::DescriptorSetLayoutBinding{.binding = 0,  // camera uniform buffer
                                      .descriptorType = vk::DescriptorType::eUniformBuffer,
                                      .descriptorCount = 1,
-                                     .stageFlags = vk::ShaderStageFlagBits::eVertex},
+                                     .stageFlags = eVertex | eFragment},
       vk::DescriptorSetLayoutBinding{.binding = 1,  // lights uniform buffer
                                      .descriptorType = vk::DescriptorType::eUniformBuffer,
                                      .descriptorCount = 1,
-                                     .stageFlags = vk::ShaderStageFlagBits::eFragment}};
+                                     .stageFlags = eFragment}};
 
   return device.createDescriptorSetLayoutUnique(
       vk::DescriptorSetLayoutCreateInfo{.bindingCount = static_cast<std::uint32_t>(kDescriptorSetLayoutBindings.size()),
@@ -442,7 +444,7 @@ std::optional<Scene> Engine::Load(const std::span<const std::filesystem::path> a
                   .global_descriptor_set_layout = *global_descriptor_set_layout_,
                   .log = log}};
 
-  camera_uniform_buffers_ = CreateUniformBuffers(allocator_, sizeof(Scene::CameraTransforms));
+  camera_uniform_buffers_ = CreateUniformBuffers(allocator_, sizeof(Scene::CameraProperties));
   lights_uniform_buffers_ = CreateUniformBuffers(allocator_, sizeof(Scene::WorldLight) * scene.light_count());
   const auto& global_descriptor_sets = global_descriptor_pool_.descriptor_sets();
   UpdateGlobalDescriptorSets(*device_, global_descriptor_sets, camera_uniform_buffers_, lights_uniform_buffers_);
