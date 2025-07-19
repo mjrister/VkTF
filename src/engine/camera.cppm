@@ -13,10 +13,10 @@ export module camera;
 namespace vktf {
 
 export struct [[nodiscard]] ViewFrustum {
-  float field_of_view_y = 0.0f;
-  float aspect_ratio = 0.0f;
-  float z_near = 0.0f;
-  float z_far = 0.0f;
+  float field_of_view_y_ = 0.0f;
+  float aspect_ratio_ = 0.0f;
+  float z_near_ = 0.0f;
+  float z_far_ = 0.0f;
 };
 
 export class [[nodiscard]] Camera {

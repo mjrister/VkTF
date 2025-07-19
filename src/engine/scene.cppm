@@ -91,10 +91,10 @@ Camera CreateCamera(const vk::Extent2D viewport_extent) {
 
   return Camera{kPosition,
                 kDirection,
-                ViewFrustum{.field_of_view_y = glm::radians(45.0f),
-                            .aspect_ratio = GetAspectRatio(viewport_extent),
-                            .z_near = 0.1f,
-                            .z_far = 1.0e6f}};
+                ViewFrustum{.field_of_view_y_ = glm::radians(45.0f),
+                            .aspect_ratio_ = GetAspectRatio(viewport_extent),
+                            .z_near_ = 0.1f,
+                            .z_far_ = 1.0e6f}};
 }
 
 // =====================================================================================================================
