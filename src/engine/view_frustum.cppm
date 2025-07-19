@@ -1,5 +1,8 @@
 module;
 
+#include <algorithm>
+#include <array>
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -23,16 +26,7 @@ public:
   [[nodiscard]] bool Intersects(const Aabb& aabb) const;
 
 private:
-  struct Planes {
-    glm::vec4 left{0.0f};
-    glm::vec4 right{0.0f};
-    glm::vec4 bottom{0.0f};
-    glm::vec4 top{0.0f};
-    glm::vec4 near{0.0f};
-    glm::vec4 far{0.0f};
-  };
-
-  Planes planes_;
+  std::array<glm::vec4, 6> planes_;
 };
 
 }  // namespace vktf
@@ -51,15 +45,21 @@ glm::vec4 Normalize(const glm::vec4& plane) {
 }  // namespace
 
 ViewFrustum::ViewFrustum(const glm::mat4& view_projection_transform)
-    : planes_{Planes{.left = Normalize(view_projection_transform[3] + view_projection_transform[0]),
-                     .right = Normalize(view_projection_transform[3] - view_projection_transform[0]),
-                     .bottom = Normalize(view_projection_transform[3] + view_projection_transform[1]),
-                     .top = Normalize(view_projection_transform[3] - view_projection_transform[1]),
-                     .near = Normalize(view_projection_transform[2]),
-                     .far = Normalize(view_projection_transform[3] - view_projection_transform[2])}} {}
+    : planes_{Normalize(view_projection_transform[3] + view_projection_transform[0]),  // left plane
+              Normalize(view_projection_transform[3] - view_projection_transform[0]),  // right plane
+              Normalize(view_projection_transform[3] + view_projection_transform[1]),  // bottom plane
+              Normalize(view_projection_transform[3] - view_projection_transform[1]),  // top plane
+              Normalize(view_projection_transform[2]),                                 // near plane
+              Normalize(view_projection_transform[3] - view_projection_transform[2])}  // far plane
+{}
 
 bool ViewFrustum::Intersects(const Aabb& aabb) const {
-  return true;  // TODO
+  return std::ranges::all_of(planes_, [&aabb](const auto& plane) {
+    const glm::vec3 positive_vertex{plane.x >= 0.0f ? aabb.max.x : aabb.min.x,
+                                    plane.y >= 0.0f ? aabb.max.y : aabb.min.y,
+                                    plane.z >= 0.0f ? aabb.max.z : aabb.min.z};
+    return glm::dot(glm::vec3{plane}, positive_vertex) + plane.w >= 0.0f;
+  });
 }
 
 }  // namespace vktf
