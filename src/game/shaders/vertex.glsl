@@ -4,10 +4,10 @@ layout(push_constant) uniform PushConstants {
   mat4 model_transform;
 } push_constants;
 
-layout(set = 0, binding = 0) uniform CameraTransforms {
-  mat4 view_transform;
-  mat4 projection_transform;
-} camera_transforms;
+layout(set = 0, binding = 0) uniform CameraProperties {
+  mat4 view_projection_transform;
+  vec3 world_position;
+} camera_properties;
 
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
@@ -24,8 +24,6 @@ layout(location = 0) out Fragment {
 void main() {
   const mat4 model_transform = push_constants.model_transform;
   const mat3 model_rotation = mat3(model_transform);
-  const mat4 view_transform = camera_transforms.view_transform;
-  const mat4 projection_transform = camera_transforms.projection_transform;
   const vec4 world_position = model_transform * vec4(position, 1.0);
 
   fragment.world_position = world_position.xyz;
@@ -33,5 +31,5 @@ void main() {
   fragment.world_tangent = vec4(model_rotation * tangent.xyz, tangent.w);
   fragment.texcoord_0 = texcoord_0;
 
-  gl_Position = projection_transform * view_transform * world_position;
+  gl_Position = camera_properties.view_projection_transform * world_position;
 }

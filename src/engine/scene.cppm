@@ -29,9 +29,9 @@ namespace vktf {
 
 export class [[nodiscard]] Scene {
 public:
-  struct [[nodiscard]] CameraTransforms {
-    glm::mat4 view_transform{0.0f};
-    glm::mat4 projection_transform{0.0f};
+  struct [[nodiscard]] CameraProperties {
+    glm::mat4 view_projection_transform{0.0f};
+    glm::vec3 world_position;
   };
 
   struct [[nodiscard]] WorldLight {
@@ -249,9 +249,9 @@ void Scene::Update(HostVisibleBuffer& camera_uniform_buffer, HostVisibleBuffer& 
     model.Update(node_visitor);
   }
 
-  camera_uniform_buffer.Copy<CameraTransforms>(
-      CameraTransforms{.view_transform = camera_.GetViewTransform(),
-                       .projection_transform = camera_.GetProjectionTransform()});
+  camera_uniform_buffer.Copy<CameraProperties>(
+      CameraProperties{.view_projection_transform = camera_.projection_transform() * camera_.view_transform(),
+                       .world_position = camera_.position()});
 
   assert(light_count_ == world_lights.size());  // ensure all scene lights are accounted for
   lights_uniform_buffer.Copy<WorldLight>(world_lights);
@@ -263,12 +263,6 @@ void Scene::Render(const vk::CommandBuffer command_buffer, const vk::DescriptorS
 
   const auto graphics_pipeline_layout = graphics_pipeline_.layout();
   command_buffer.bindDescriptorSets(eGraphics, graphics_pipeline_layout, 0, global_descriptor_set, nullptr);
-
-  using ViewPosition = decltype(GraphicsPipeline::PushConstants::view_position);
-  command_buffer.pushConstants<ViewPosition>(graphics_pipeline_layout,
-                                             vk::ShaderStageFlagBits::eFragment,
-                                             offsetof(GraphicsPipeline::PushConstants, view_position),
-                                             camera_.position());
 
   for (const auto& model : models_) {
     model.Render(command_buffer, graphics_pipeline_layout);

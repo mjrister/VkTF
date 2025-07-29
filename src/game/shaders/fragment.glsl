@@ -12,11 +12,12 @@ const uint kMetallicRoughnessSamplerIndex = 1;
 const uint kNormalSamplerIndex = 2;
 const uint kMaterialSamplerCount = 3;
 
-layout(push_constant) uniform PushConstants {
-  layout(offset = 64) vec3 view_position;
-} push_constants;
-
 layout (constant_id = 0) const uint kLightCount = 1;
+
+layout(set = 0, binding = 0) uniform CameraProperties {
+  mat4 view_projection_transform;
+  vec3 world_position;
+} camera_properties;
 
 layout(set = 0, binding = 1) uniform WorldLights {
   WorldLight data[kLightCount];
@@ -40,7 +41,7 @@ layout(location = 0) in Fragment {
 layout(location = 0) out vec4 fragment_color;
 
 vec3 GetViewDirection() {
-  return normalize(push_constants.view_position - fragment.world_position);
+  return normalize(camera_properties.world_position - fragment.world_position);
 }
 
 vec4 GetSampledImageColor(const uint sampler_index) {

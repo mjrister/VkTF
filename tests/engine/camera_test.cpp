@@ -82,14 +82,14 @@ TEST_F(CameraTest, HasCorrectInitialWorldPositionAndOrientation) {
 
 TEST_F(CameraTest, HasCorrectInitialViewTransform) {
   const auto view_transform = glm::lookAt(kPosition, kPosition + kDirection, kUp);
-  ExpectNearEqual(view_transform, camera_.GetViewTransform());
+  ExpectNearEqual(view_transform, camera_.view_transform());
 }
 
 TEST_F(CameraTest, HasCorrectInitialProjectionTransform) {
   const auto& [field_of_view_y, aspect_ratio, z_near, z_far] = kViewFrustum;
   auto projection_transform = glm::perspective(field_of_view_y, aspect_ratio, z_near, z_far);
   projection_transform[1][1] *= -1.0f;  // account for inverted y-axis convention in OpenGL
-  ExpectNearEqual(projection_transform, camera_.GetProjectionTransform());
+  ExpectNearEqual(projection_transform, camera_.projection_transform());
 }
 
 TEST(CameraDeathTest, AssertsWhenCameraDirectionIsZeroVector) {
@@ -121,7 +121,7 @@ TEST_P(CameraTranslateTest, HasCorrectViewTransformWhenTranslated) {
   const auto& [position, orientation] = Translate(camera_, translation);
   const auto direction = orientation * kForward;
   const auto view_transform = glm::lookAt(position, position + direction, kUp);
-  ExpectNearEqual(view_transform, camera_.GetViewTransform());
+  ExpectNearEqual(view_transform, camera_.view_transform());
 }
 
 std::string GetDirectionName(const glm::vec3& direction) {
@@ -171,7 +171,7 @@ TEST_P(CameraRotateTest, HasCorrectViewTransformWhenRotated) {
   const auto& [position, orientation] = Rotate(camera_, euler_angles);
   const auto direction = orientation * kForward;
   const auto view_transform = glm::lookAt(position, position + direction, kUp);
-  ExpectNearEqual(view_transform, camera_.GetViewTransform());
+  ExpectNearEqual(view_transform, camera_.view_transform());
 }
 
 std::string GetAngleName(const float angle) {

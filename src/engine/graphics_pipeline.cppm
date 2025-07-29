@@ -21,7 +21,6 @@ export class [[nodiscard]] GraphicsPipeline {
 public:
   struct [[nodiscard]] PushConstants {
     glm::mat4 model_transform{0.0f};
-    glm::vec3 view_position{0.0f};
   };
 
   struct [[nodiscard]] CreateInfo {
@@ -84,10 +83,7 @@ vk::UniquePipelineLayout CreateGraphicsPipelineLayout(const vk::Device device,
   static constexpr std::array kPushConstantRanges{
       vk::PushConstantRange{.stageFlags = vk::ShaderStageFlagBits::eVertex,
                             .offset = offsetof(PushConstants, model_transform),
-                            .size = sizeof(PushConstants::model_transform)},
-      vk::PushConstantRange{.stageFlags = vk::ShaderStageFlagBits::eFragment,
-                            .offset = offsetof(PushConstants, view_position),
-                            .size = sizeof(PushConstants::view_position)}};
+                            .size = sizeof(PushConstants::model_transform)}};
 
   const std::array descriptor_set_layouts{global_descriptor_set_layout, material_descriptor_set_layout};
 
