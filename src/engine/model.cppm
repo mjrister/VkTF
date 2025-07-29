@@ -542,7 +542,9 @@ UniqueMesh CreateMesh(const vma::Allocator& allocator,
           assert(material != nullptr);  // guaranteed by staging primitive construction
           return Primitive{allocator,
                            command_buffer,
-                           Primitive::CreateInfo{.staging_primitive = *staging_primitive, .material = material.get()}};
+                           Primitive::CreateInfo{.staging_primitive = *staging_primitive,
+                                                 .bounding_box = gltf_primitive.attributes.position.bounding_box,
+                                                 .material = material.get()}};
         })
       | std::ranges::to<std::vector>();
 

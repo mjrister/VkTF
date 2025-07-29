@@ -1,7 +1,8 @@
 add_library(engine STATIC)
 
 target_sources(engine PUBLIC FILE_SET CXX_MODULES
-                             FILES buffer.cppm
+                             FILES bounding_box.cppm
+                                   buffer.cppm
                                    camera.cppm
                                    command_pool.cppm
                                    data_view.cppm
