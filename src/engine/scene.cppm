@@ -23,6 +23,7 @@ import graphics_pipeline;
 import log;
 import model;
 import queue;
+import view_frustum;
 import vma_allocator;
 
 namespace vktf {
@@ -91,10 +92,10 @@ Camera CreateCamera(const vk::Extent2D viewport_extent) {
 
   return Camera{kPosition,
                 kDirection,
-                ViewFrustum{.field_of_view_y = glm::radians(45.0f),
-                            .aspect_ratio = GetAspectRatio(viewport_extent),
-                            .z_near = 0.1f,
-                            .z_far = 1.0e6f}};
+                Camera::ViewFrustum{.field_of_view_y = glm::radians(45.0f),
+                                    .aspect_ratio = GetAspectRatio(viewport_extent),
+                                    .z_near = 0.1f,
+                                    .z_far = 1.0e6f}};
 }
 
 // =====================================================================================================================
@@ -264,8 +265,9 @@ void Scene::Render(const vk::CommandBuffer command_buffer, const vk::DescriptorS
   const auto graphics_pipeline_layout = graphics_pipeline_.layout();
   command_buffer.bindDescriptorSets(eGraphics, graphics_pipeline_layout, 0, global_descriptor_set, nullptr);
 
-  for (const auto& model : models_) {
-    model.Render(command_buffer, graphics_pipeline_layout);
+  for (const ViewFrustum view_frustum{camera_.projection_transform() * camera_.view_transform()};
+       const auto& model : models_) {
+    model.Render(command_buffer, graphics_pipeline_layout, view_frustum);
   }
 }
 
