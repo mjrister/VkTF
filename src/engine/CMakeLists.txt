@@ -26,6 +26,7 @@ target_sources(engine PUBLIC FILE_SET CXX_MODULES
                                    shader_module.cppm
                                    swapchain.cppm
                                    texture.cppm
+                                   view_frustum.cppm
                                    vma_allocator.cppm
                                    window.cppm)
 

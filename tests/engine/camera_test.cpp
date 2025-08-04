@@ -28,10 +28,10 @@ constexpr auto kForward = -kBackward;
 
 constexpr glm::vec3 kPosition{0.0f, 1.0f, 2.0f};
 constexpr glm::vec3 kDirection{1.0f, 0.0f, 0.0f};
-constexpr vktf::ViewFrustum kViewFrustum{.field_of_view_y = kHalfPi,
-                                         .aspect_ratio = 16.0f / 9.0f,
-                                         .z_near = 0.1f,
-                                         .z_far = 1.0e6f};
+constexpr vktf::Camera::ViewFrustum kViewFrustum{.field_of_view_y = kHalfPi,
+                                                 .aspect_ratio = 16.0f / 9.0f,
+                                                 .z_near = 0.1f,
+                                                 .z_far = 1.0e6f};
 
 // =====================================================================================================================
 // Assertions

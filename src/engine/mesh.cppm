@@ -2,6 +2,7 @@ module;
 
 #include <concepts>
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -72,13 +73,11 @@ export class [[nodiscard]] Primitive {
 public:
   struct [[nodiscard]] CreateInfo {
     const StagingPrimitive& staging_primitive;
-    const BoundingBox& bounding_box;
     const Material* material = nullptr;
   };
 
   Primitive(const vma::Allocator& allocator, vk::CommandBuffer command_buffer, const CreateInfo& create_info);
 
-  [[nodiscard]] const BoundingBox& bounding_box() const noexcept { return bounding_box_; }
   [[nodiscard]] const Material* material() const noexcept { return material_; }
 
   void Render(const vk::CommandBuffer command_buffer) const {
@@ -92,11 +91,20 @@ private:
   Buffer index_buffer_;
   vk::IndexType index_type_;
   std::uint32_t index_count_;
-  BoundingBox bounding_box_;
   const Material* material_;
 };
 
-export using Mesh = std::vector<Primitive>;
+export class Mesh {
+public:
+  Mesh(std::vector<Primitive> primitives, const BoundingBox& bounding_box);
+
+  [[nodiscard]] const std::vector<Primitive>& primitives() const { return primitives_; }
+  [[nodiscard]] const BoundingBox& bounding_box() const { return bounding_box_; }
+
+private:
+  std::vector<Primitive> primitives_;
+  BoundingBox bounding_box_;
+};
 
 }  // namespace vktf
 
@@ -117,7 +125,9 @@ Primitive::Primitive(const vma::Allocator& allocator,
                                             vk::BufferUsageFlagBits::eIndexBuffer)},
       index_type_{create_info.staging_primitive.index_type()},
       index_count_{create_info.staging_primitive.index_count()},
-      bounding_box_{create_info.bounding_box},
       material_{create_info.material} {}
+
+Mesh::Mesh(std::vector<Primitive> primitives, const BoundingBox& bounding_box)
+    : primitives_{std::move(primitives)}, bounding_box_{bounding_box} {}
 
 }  // namespace vktf

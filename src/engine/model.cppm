@@ -7,6 +7,7 @@ module;
 #include <cstdint>
 #include <filesystem>
 #include <future>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -23,6 +24,7 @@ module;
 
 export module model;
 
+import bounding_box;
 import descriptor_pool;
 import gltf_asset;
 import graphics_pipeline;
@@ -30,6 +32,7 @@ import ktx_texture;
 import log;
 import material;
 import mesh;
+import view_frustum;
 import vma_allocator;
 
 namespace vktf {
@@ -88,7 +91,9 @@ public:
     }
   }
 
-  void Render(vk::CommandBuffer command_buffer, vk::PipelineLayout pipeline_layout) const;
+  void Render(vk::CommandBuffer command_buffer,
+              vk::PipelineLayout pipeline_layout,
+              const ViewFrustum& view_frustum) const;
 
 private:
   template <std::invocable<const Node&> Fn>
@@ -523,6 +528,10 @@ GltfResourceMap<gltf::Mesh, StagingModel::Mesh> CreateStagingMeshes(
 
 using UniqueMesh = std::unique_ptr<const Mesh>;
 
+BoundingBox Union(const BoundingBox& lhs, const BoundingBox& rhs) {
+  return BoundingBox{.min = glm::min(lhs.min, rhs.min), .max = glm::max(lhs.max, rhs.max)};
+}
+
 UniqueMesh CreateMesh(const vma::Allocator& allocator,
                       const vk::CommandBuffer command_buffer,
                       const gltf::Mesh& gltf_mesh,
@@ -530,25 +539,27 @@ UniqueMesh CreateMesh(const vma::Allocator& allocator,
                       const GltfResourceMap<gltf::Material, UniqueMaterial>& materials) {
   assert(gltf_mesh.primitives.size() == staging_mesh.size());  // guaranteed by staging mesh construction
 
-  auto primitives =
-      std::views::zip(gltf_mesh.primitives, staging_mesh)  //
-      | std::views::filter([](const auto& key_value_pair) {
-          const auto& [_, staging_primitive] = key_value_pair;
-          return staging_primitive.has_value();
-        })
-      | std::views::transform([&allocator, command_buffer, &materials](const auto& key_value_pair) {
-          const auto& [gltf_primitive, staging_primitive] = key_value_pair;
-          const auto& material = Get(gltf_primitive.material, materials);
-          assert(material != nullptr);  // guaranteed by staging primitive construction
-          return Primitive{allocator,
-                           command_buffer,
-                           Primitive::CreateInfo{.staging_primitive = *staging_primitive,
-                                                 .bounding_box = gltf_primitive.attributes.position.bounding_box,
-                                                 .material = material.get()}};
-        })
-      | std::ranges::to<std::vector>();
+  std::vector<Primitive> primitives;
+  primitives.reserve(gltf_mesh.primitives.size());
 
-  return primitives.empty() ? nullptr : std::make_unique<Mesh>(std::move(primitives));
+  BoundingBox bounding_box{.min = glm::vec3{std::numeric_limits<float>::max()},
+                           .max = glm::vec3{std::numeric_limits<float>::min()}};
+
+  for (const auto& [gltf_primitive, staging_primitive] : std::views::zip(gltf_mesh.primitives, staging_mesh)) {
+    if (!staging_primitive.has_value()) continue;  // skip unsupported mesh primitive
+
+    const auto& primitive_bounding_box = gltf_primitive.attributes.position.bounding_box;
+    bounding_box = Union(bounding_box, primitive_bounding_box);
+
+    const auto& material = Get(gltf_primitive.material, materials);
+    assert(material != nullptr);  // guaranteed by staging primitive construction
+
+    primitives.emplace_back(allocator,
+                            command_buffer,
+                            Primitive::CreateInfo{.staging_primitive = *staging_primitive, .material = material.get()});
+  }
+
+  return primitives.empty() ? nullptr : std::make_unique<Mesh>(std::move(primitives), bounding_box);
 }
 
 GltfResourceMap<gltf::Mesh, UniqueMesh> CreateMeshes(
@@ -660,27 +671,46 @@ std::vector<Node*> GetRootNodes(const gltf::Scene& gltf_scene, const GltfResourc
 // Rendering
 // =====================================================================================================================
 
-void Render(const Node& node, const vk::CommandBuffer command_buffer, const vk::PipelineLayout pipeline_layout) {
-  if (const auto* const mesh = node.mesh; mesh != nullptr) {
-    using ModelTransform = decltype(node.global_transform);
-    command_buffer.pushConstants<ModelTransform>(pipeline_layout,
-                                                 vk::ShaderStageFlagBits::eVertex,
-                                                 offsetof(GraphicsPipeline::PushConstants, model_transform),
-                                                 node.global_transform);
+void Render(const Mesh& mesh,
+            const glm::mat4& model_transform,
+            const vk::CommandBuffer command_buffer,
+            const vk::PipelineLayout pipeline_layout,
+            const ViewFrustum& view_frustum) {
+  if (const auto& world_bounding_box = Transform(mesh.bounding_box(), model_transform);
+      !view_frustum.Intersects(world_bounding_box)) {
+    return;  // skip mesh primitive outside the view frustum
+  }
 
-    for (const auto& primitive : *mesh) {
-      if (const auto* const material = primitive.material(); material != nullptr) {
-        // TODO: avoid per-primitive material descriptor set binding
-        using enum vk::PipelineBindPoint;
-        command_buffer.bindDescriptorSets(eGraphics, pipeline_layout, 1, material->descriptor_set(), nullptr);
-      }
+  using ModelTransform = decltype(GraphicsPipeline::PushConstants::model_transform);
+  command_buffer.pushConstants<ModelTransform>(pipeline_layout,
+                                               vk::ShaderStageFlagBits::eVertex,
+                                               offsetof(GraphicsPipeline::PushConstants, model_transform),
+                                               model_transform);
+
+  for (const auto& primitive : mesh.primitives()) {
+    if (const auto* const material = primitive.material(); material != nullptr) {
+      // TODO: avoid per-primitive material descriptor set binding
+      command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                        pipeline_layout,
+                                        1,
+                                        material->descriptor_set(),
+                                        nullptr);
       primitive.Render(command_buffer);
     }
+  }
+}
+
+void Render(const Node& node,
+            const vk::CommandBuffer command_buffer,
+            const vk::PipelineLayout pipeline_layout,
+            const ViewFrustum& view_frustum) {
+  if (const auto* const mesh = node.mesh; mesh != nullptr) {
+    Render(*mesh, node.global_transform, command_buffer, pipeline_layout, view_frustum);
   }
 
   for (const auto& child_node : node.children) {
     assert(child_node != nullptr);  // guaranteed by node construction
-    Render(*child_node, command_buffer, pipeline_layout);
+    Render(*child_node, command_buffer, pipeline_layout, view_frustum);
   }
 }
 
@@ -718,10 +748,12 @@ Model::Model(const vma::Allocator& allocator, const vk::CommandBuffer command_bu
   nodes_ = GetValues(std::move(nodes));
 }
 
-void Model::Render(const vk::CommandBuffer command_buffer, const vk::PipelineLayout pipeline_layout) const {
+void Model::Render(const vk::CommandBuffer command_buffer,
+                   const vk::PipelineLayout pipeline_layout,
+                   const ViewFrustum& view_frustum) const {
   for (const auto* const root_node : root_nodes_) {
     assert(root_node != nullptr);  // guaranteed by root node construction
-    vktf::Render(*root_node, command_buffer, pipeline_layout);
+    vktf::Render(*root_node, command_buffer, pipeline_layout, view_frustum);
   }
 }
 
