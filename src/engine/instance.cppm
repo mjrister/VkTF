@@ -14,16 +14,33 @@ export module instance;
 
 namespace vktf {
 
+/**
+ * \brief An abstraction for a Vulkan instance.
+ * \details This abstraction handles function pointer initialization via dynamic loading (if enabled), validation of
+ *          required instance layers and extensions, and the lifetime management of a Vulkan instance.
+ */
 export class [[nodiscard]] Instance {
 public:
+  /** \brief Parameters used to create a Vulkan instance. */
   struct [[nodiscard]] CreateInfo {
+    /** \brief Application info to provide to the Vulkan implementation. */
     const vk::ApplicationInfo& application_info;
+
+    /** \brief Instance layers required by the application. */
     const std::vector<const char*>& required_layers;
+
+    /** \brief Instance extensions required by the application. */
     const std::vector<const char*>& required_extensions;
   };
 
+  /**
+   * \brief Constructs a Vulkan instance.
+   * \param create_info \copybrief Instance::CreateInfo
+   * \throws std::runtime_error Thrown if a required instance layer or extension is missing.
+   */
   explicit Instance(const CreateInfo& create_info);
 
+  /** \brief Gets the underlying Vulkan instance handle. */
   [[nodiscard]] vk::Instance operator*() const noexcept { return *instance_; }
 
 private:
