@@ -18,19 +18,40 @@ import queue;
 namespace vktf {
 struct RankedPhysicalDevice;
 
+/**
+ * \brief An abstraction for a Vulkan physical device.
+ * \details This abstraction enumerates over all Vulkan physical devices and selects the one that supports the minimum
+ *          application requirements and provides the best performance characteristics.
+ */
 export class [[nodiscard]] PhysicalDevice {
 public:
+  /** \brief Parameters used to create a Vulkan physical device. */
   struct [[nodiscard]] CreateInfo {
+    /** \brief The Vulkan surface to present images to. */
     vk::SurfaceKHR surface;
+
+    /** \brief Device extensions required by the application. */
     const std::vector<const char*>& required_extensions;
   };
 
+  /**
+   * \brief Constructs a Vulkan physical device.
+   * \param instance The Vulkan instance used to enumerate over available physical devices.
+   * \param create_info \copybrief PhysicalDevice::CreateInfo
+   * \throws std::runtime_error Thrown if no supported physical device is found.
+   */
   PhysicalDevice(vk::Instance instance, const CreateInfo& create_info);
 
+  /** \brief Gets the underlying Vulkan physical device handle. */
   [[nodiscard]] vk::PhysicalDevice operator*() const noexcept { return physical_device_; }
 
+  /** \brief Gets the available features for this physical device. */
   [[nodiscard]] const vk::PhysicalDeviceFeatures& features() const noexcept { return physical_device_features_; }
+
+  /** \brief Gets the hardware limits for this physical device. */
   [[nodiscard]] const vk::PhysicalDeviceLimits& limits() const noexcept { return physical_device_limits_; }
+
+  /** \brief Gets the selected queue families for this physical device. */
   [[nodiscard]] const QueueFamilies& queue_families() const noexcept { return queue_families_; }
 
 private:
