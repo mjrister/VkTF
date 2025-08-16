@@ -18,19 +18,40 @@ import queue;
 namespace vktf {
 struct RankedPhysicalDevice;
 
+/**
+ * \brief An abstraction for a Vulkan physical device.
+ * \details This abstraction enumerates over all Vulkan physical devices and selects the one that supports the minimum
+ *          application requirements and provides the best performance characteristics.
+ */
 export class [[nodiscard]] PhysicalDevice {
 public:
+  /** \brief Parameters used to create a \ref PhysicalDevice. */
   struct [[nodiscard]] CreateInfo {
+    /** \brief The surface to present images to. */
     vk::SurfaceKHR surface;
+
+    /** \brief The device extensions required by the application. */
     const std::vector<const char*>& required_extensions;
   };
 
+  /**
+   * \brief Constructs a \ref PhysicalDevice.
+   * \param instance The instance used to enumerate over available physical devices.
+   * \param create_info \copybrief PhysicalDevice::CreateInfo
+   * \throws std::runtime_error Thrown if no supported physical device is found.
+   */
   PhysicalDevice(vk::Instance instance, const CreateInfo& create_info);
 
+  /** \brief Gets the underlying Vulkan physical device handle. */
   [[nodiscard]] vk::PhysicalDevice operator*() const noexcept { return physical_device_; }
 
+  /** \brief Gets the available features for this physical device. */
   [[nodiscard]] const vk::PhysicalDeviceFeatures& features() const noexcept { return physical_device_features_; }
+
+  /** \brief Gets the hardware limits for this physical device. */
   [[nodiscard]] const vk::PhysicalDeviceLimits& limits() const noexcept { return physical_device_limits_; }
+
+  /** \brief Gets the selected queue families for this physical device. */
   [[nodiscard]] const QueueFamilies& queue_families() const noexcept { return queue_families_; }
 
 private:
@@ -97,7 +118,7 @@ std::optional<QueueFamilies> FindQueueFamilies(const vk::PhysicalDevice physical
     return std::nullopt;
   }
 
-  return QueueFamilies{.graphics_queue_family = *graphics_queue_family, .present_queue_family = *present_queue_family};
+  return QueueFamilies{.graphics_family = *graphics_queue_family, .present_family = *present_queue_family};
 }
 
 RankedPhysicalDevice GetRankedPhysicalDevice(const vk::PhysicalDevice physical_device,
