@@ -13,17 +13,38 @@ import queue;
 
 namespace vktf {
 
+/** \brief An abstraction for a Vulkan device. */
 export class [[nodiscard]] Device {
 public:
+  /** \brief Parameters used to create a \ref Device. */
   struct [[nodiscard]] CreateInfo {
+    /** \brief The queue families the device will submit work to. */
     const QueueFamilies& queue_families;
+
+    /**
+     * \brief The device extensions to enable for the application.
+     * \warning These extensions are assumed to be validated by \ref PhysicalDevice::CreateInfo::required_extensions.
+     */
     const std::vector<const char*>& enabled_extensions;
+
+    /**
+     * \brief The device features to enable for the application.
+     * \warning These features are assumed to be a valid subset of \ref PhysicalDevice::features.
+     */
     const vk::PhysicalDeviceFeatures& enabled_features;
   };
 
+  /**
+   * \brief Constructs a \ref Device.
+   * \param physical_device The physical device to create the logical device from.
+   * \param create_info \copybrief Device::CreateInfo
+   */
   Device(vk::PhysicalDevice physical_device, const CreateInfo& create_info);
 
+  /** \brief Gets the underlying Vulkan device handle. */
   [[nodiscard]] vk::Device operator*() const noexcept { return *device_; }
+
+  /** \brief Gets a pointer to the underlying Vulkan device handle. */
   [[nodiscard]] const vk::Device* operator->() const noexcept { return device_.operator->(); }
 
 private:
