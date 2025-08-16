@@ -16,7 +16,8 @@ export struct [[nodiscard]] QueueFamily {
 
 export struct [[nodiscard]] QueueFamilies {
   QueueFamily graphics_queue_family;
-  QueueFamily present_queue_family;
+  QueueFamily graphics_family;
+  QueueFamily present_family;
 };
 
 export class [[nodiscard]] Queue {

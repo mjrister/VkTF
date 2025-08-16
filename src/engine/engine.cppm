@@ -395,10 +395,10 @@ Engine::Engine(const Window& window)
                                        depth_attachment_.image_view())},
       graphics_queue_{
           *device_,
-          Queue::CreateInfo{.queue_family = physical_device_.queue_families().graphics_queue_family, .queue_index = 0}},
+          Queue::CreateInfo{.queue_family = physical_device_.queue_families().graphics_family, .queue_index = 0}},
       present_queue_{
           *device_,
-          Queue::CreateInfo{.queue_family = physical_device_.queue_families().present_queue_family, .queue_index = 0}},
+          Queue::CreateInfo{.queue_family = physical_device_.queue_families().present_family, .queue_index = 0}},
       render_command_pool_{
           *device_,
           CommandPool::CreateInfo{.command_pool_create_flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,

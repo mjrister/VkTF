@@ -83,7 +83,7 @@ std::optional<QueueFamilies> FindQueueFamilies(const vk::PhysicalDevice physical
     const auto has_present_support = physical_device.getSurfaceSupportKHR(queue_family.index, surface) == vk::True;
 
     if (has_graphics_support && has_present_support) {  // prefer combined graphics and present queue family
-      return QueueFamilies{.graphics_queue_family = queue_family, .present_queue_family = queue_family};
+      return QueueFamilies{.graphics_family = queue_family, .present_family = queue_family};
     }
     if (!graphics_queue_family.has_value() && has_graphics_support) {
       graphics_queue_family = queue_family;
