@@ -14,14 +14,29 @@ import vma_allocator;
 
 namespace vktf {
 
+/**
+ * @brief An abstraction for a Vulkan buffer.
+ * @see [VkBuffer](https://registry.khronos.org/vulkan/specs/latest/man/html/VkBuffer.html)
+ */
 export class [[nodiscard]] Buffer {
 public:
+  /** @brief The parameters for creating a @ref Buffer. */
   struct [[nodiscard]] CreateInfo {
+    /** @brief The size of the buffer in bytes. */
     vk::DeviceSize size_bytes = 0;
+
+    /** @brief Bitwise flags indicating how the buffer will be used. */
     vk::BufferUsageFlags usage_flags;
+
+    /** @brief The parameters for how to allocate memory for the buffer. */
     const VmaAllocationCreateInfo& allocation_create_info;
   };
 
+  /**
+   * @brief Creates a @ref Buffer.
+   * @param allocator The allocator for creating the buffer.
+   * @param create_info @copybrief Buffer::CreateInfo
+   */
   Buffer(const vma::Allocator& allocator, const CreateInfo& create_info);
 
   Buffer(const Buffer&) = delete;
@@ -30,12 +45,21 @@ public:
   Buffer& operator=(const Buffer&) = delete;
   Buffer& operator=(Buffer&& buffer) noexcept;
 
+  /** @brief Frees the underlying memory for this buffer. */
   virtual ~Buffer() noexcept;
 
+  /** @brief Gets the underlying Vulkan buffer handle. */
   [[nodiscard]] vk::Buffer operator*() const noexcept { return buffer_; }
 
+  /** @brief Gets the size of the buffer in bytes. */
   [[nodiscard]] vk::DeviceSize size_bytes() const noexcept { return size_bytes_; }
 
+  /**
+   * @brief Records copy commands to transfer data from a source buffer to this buffer.
+   * @param src_buffer The source buffer to copy data from.
+   * @param command_buffer The command buffer to record copy commands.
+   * @warning The caller is responsible for submitting @ref command_buffer to a Vulkan queue to begin execution.
+   */
   void Copy(const Buffer& src_buffer, const vk::CommandBuffer command_buffer);
 
 protected:
@@ -48,13 +72,28 @@ protected:
   vk::BufferUsageFlags usage_flags_;
 };
 
+/**
+ * @brief An abstraction for a Vulkan buffer with host-visible memory.
+ * @details This class represents a buffer residing in host-visible memory for data that must be accessible by both the
+ *          host and device such as intermediate staging buffers to transfer data to device-local memory or uniform
+ *          buffers that require frequent write/read access.
+ */
 export class [[nodiscard]] HostVisibleBuffer final : public Buffer {
 public:
+  /** @brief The parameters to create a @ref HostVisibleBuffer. */
   struct [[nodiscard]] CreateInfo {
-    const vk::DeviceSize size_bytes = 0;
-    const vk::BufferUsageFlags usage_flags;
+    /** @brief @copybrief Buffer::CreateInfo::size_bytes */
+    vk::DeviceSize size_bytes = 0;
+
+    /** @brief @copybrief Buffer::CreateInfo::usage_flags */
+    vk::BufferUsageFlags usage_flags;
   };
 
+  /**
+   * @brief Creates a @ref HostVisibleBuffer.
+   * @param allocator The allocator for creating the buffer.
+   * @param create_info @copybrief HostVisibleBuffer::CreateInfo
+   */
   HostVisibleBuffer(const vma::Allocator& allocator, const CreateInfo& create_info);
 
   HostVisibleBuffer(const HostVisibleBuffer&) = delete;
@@ -63,11 +102,33 @@ public:
   HostVisibleBuffer& operator=(const HostVisibleBuffer&) = delete;
   HostVisibleBuffer& operator=(HostVisibleBuffer&& host_visible_buffer) noexcept;
 
+  /** @brief Unmaps (if necessary) and frees the underlying memory for this buffer. */
   ~HostVisibleBuffer() noexcept override { UnmapMemory(); }
 
+  /**
+   * @brief Maps the memory for this buffer allowing data to be written to it by the host.
+   * @warning This must be called before invoking @ref HostVisibleBuffer::Copy.
+   * @note If this buffer is already mapped, this function does nothing.
+   */
   void MapMemory();
+
+  /**
+   * @brief Unmaps the memory for this buffer releasing system resources used to maintain that mapping.
+   * @warning This function should be called when the host is done writing data to this buffer.
+   * @note If this buffer is already unmapped, this function does nothing.
+   */
   void UnmapMemory() noexcept;
 
+  /**
+   * @brief Copies data to this buffer.
+   * @details This function provides a unified, type-safe interface for copying arbitrary data to a host-visible buffer
+   *          which is useful in situations that require working with one or many elements such as a uniform buffer
+   *          representing a single structure of related properties (e.g., camera transformations) or a range of
+   *          homogeneous data types (e.g., world-space lights).
+   * @tparam T The type of the data to copy. When a range, it represents the type of each element in the range.
+   * @param data_view A view of the data to copy.
+   * @warning @ref HostVisibleBuffer::MapMemory must be called before invoking this function.
+   */
   template <typename T>
   void Copy(const DataView<T> data_view) {
     assert(mapped_memory_ != nullptr);

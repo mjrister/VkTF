@@ -12,10 +12,24 @@ import bounding_box;
 
 namespace vktf {
 
+/**
+ * @brief A view frustum for use in culling.
+ * @details This class enables view frustum culling, a performance optimization that prevents rendering a mesh when not
+ *          visible in the camera's view.
+ */
 export class [[nodiscard]] ViewFrustum {
 public:
+  /**
+   * @brief Creates a @ref ViewFrustum.
+   * @param view_projection_transform The view-projection matrix used to derive the view frustum planes in world space.
+   */
   explicit ViewFrustum(const glm::mat4& view_projection_transform);
 
+  /**
+   * @brief Tests if a bounding box intersects with the view frustum.
+   * @param bounding_box The bounding box to test for intersection with the view frustum.
+   * @return @c true if the bounding box intersects with the view frustum, @c false otherwise.
+   */
   [[nodiscard]] bool Intersects(const BoundingBox& bounding_box) const;
 
 private:
@@ -53,9 +67,10 @@ ViewFrustum::ViewFrustum(const glm::mat4& view_projection_transform)
 
 bool ViewFrustum::Intersects(const BoundingBox& bounding_box) const {
   return std::ranges::all_of(planes_, [&bounding_box](const auto& plane) {
-    const glm::vec4 positive_vertex{plane.x >= 0.0f ? bounding_box.max.x : bounding_box.min.x,
-                                    plane.y >= 0.0f ? bounding_box.max.y : bounding_box.min.y,
-                                    plane.z >= 0.0f ? bounding_box.max.z : bounding_box.min.z,
+    const glm::vec3 normal{plane.x, plane.y, plane.z};
+    const glm::vec4 positive_vertex{normal.x >= 0.0f ? bounding_box.max.x : bounding_box.min.x,
+                                    normal.y >= 0.0f ? bounding_box.max.y : bounding_box.min.y,
+                                    normal.z >= 0.0f ? bounding_box.max.z : bounding_box.min.z,
                                     1.0f};
     return glm::dot(plane, positive_vertex) >= 0.0f;
   });
