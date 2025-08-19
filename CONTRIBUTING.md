@@ -12,7 +12,7 @@ In addition to the dependencies listed in the [Requirements](README.md#Requireme
 
 ## Pre-commit
 
-This project uses [pre-commit](https://pre-commit.com) to integrate essential [git hooks](https://git-scm.com/book/en/v2/Customizing-Git-Git-Hooks) that will validate project requirements prior to checking in. After following the installation instructions, run `pre-commit install` from the root directory which enable pre-commit hooks defined in [.pre-commit-config.yaml](.pre-commit-config.yaml).
+This project uses [pre-commit](https://pre-commit.com) to integrate essential [git hooks](https://git-scm.com/book/en/v2/Customizing-Git-Git-Hooks) that will validate project requirements prior to checking in. After following the installation instructions, run `pre-commit install` from the root directory which enables pre-commit hooks defined in [.pre-commit-config.yaml](.pre-commit-config.yaml).
 
 ## Code Style
 

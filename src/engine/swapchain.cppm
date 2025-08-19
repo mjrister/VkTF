@@ -16,21 +16,46 @@ import queue;
 
 namespace vktf {
 
+/**
+ * @brief An abstraction for a Vulkan swapchain.
+ * @details This class handles determining the swapchain image count, format, and present mode based on physical device
+ *           characteristics in addition to managing the lifetime of a Vulkan swapchain.
+ * @see https://registry.khronos.org/vulkan/specs/latest/man/html/VkSwapchainKHR.html VkSwapchainKHR
+ */
 export class [[nodiscard]] Swapchain {
 public:
+  /** @brief The parameters for creating a @ref Swapchain. */
   struct [[nodiscard]] CreateInfo {
+    /** @brief The framebuffer extent to determine swapchain image dimensions. */
     vk::Extent2D framebuffer_extent;
+
+    /** @brief The surface to present images to. */
     vk::SurfaceKHR surface;
+
+    /** @brief The physical device to determine swapchain properties. */
     vk::PhysicalDevice physical_device;
+
+    /** @brief The queue families to configure the swapchain image sharing mode between queues. */
     const QueueFamilies& queue_families;
   };
 
+  /**
+   * @brief Creates a @ref Swapchain.
+   * @param device The device for creating the swapchain.
+   * @param create_info @copybrief Swapchain::CreateInfo
+   */
   Swapchain(vk::Device device, const CreateInfo& create_info);
 
+  /** @brief Gets the underlying Vulkan swapchain handle. */
   [[nodiscard]] vk::SwapchainKHR operator*() const noexcept { return *swapchain_; }
 
+  /** @brief Gets the swapchain image format. */
   [[nodiscard]] vk::Format image_format() const noexcept { return image_format_; }
+
+  /** @brief Gets the swapchain image extent. */
   [[nodiscard]] vk::Extent2D image_extent() const noexcept { return image_extent_; }
+
+  /** @brief Gets the swapchain image views. */
   [[nodiscard]] const std::vector<vk::UniqueImageView>& image_views() const noexcept { return image_views_; }
 
 private:

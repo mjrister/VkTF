@@ -9,18 +9,36 @@ export module command_pool;
 
 namespace vktf {
 
+/**
+ * @brief An abstraction for a Vulkan Command Pool.
+ * @details This class handles creating a command pool and allocating a fixed number of command buffers.
+ * @see https://registry.khronos.org/vulkan/specs/latest/man/html/VkCommandPool.html VkCommandPool
+ */
 export class [[nodiscard]] CommandPool {
 public:
+  /** @brief The parameters for creating a @ref CommandPool. */
   struct [[nodiscard]] CreateInfo {
+    /** @brief The bitmask indicating how the command pool should be created. */
     vk::CommandPoolCreateFlags command_pool_create_flags;
+
+    /** @brief The queue family index that allocated command buffers must be submitted to. */
     std::uint32_t queue_family_index = 0;
+
+    /** @brief The number of command buffers to allocate for the command pool. */
     std::uint32_t command_buffer_count = 0;
   };
 
+  /**
+   * @brief Creates a @ref CommandPool.
+   * @param device The device for creating the command pool.
+   * @param create_info @copybrief CommandPool::CreateInfo
+   */
   CommandPool(vk::Device device, const CreateInfo& create_info);
 
+  /** @brief Gets the underlying Vulkan command pool handle. */
   [[nodiscard]] vk::CommandPool operator*() const noexcept { return *command_pool_; }
 
+  /** @brief Gets the command buffers allocated for this command pool. */
   [[nodiscard]] const std::vector<vk::CommandBuffer>& command_buffers() const noexcept { return command_buffers_; }
 
 private:

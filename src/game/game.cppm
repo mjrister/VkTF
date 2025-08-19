@@ -17,7 +17,15 @@ import window;
 
 namespace game {
 
-export void Start();
+/**
+ * @brief Starts the application.
+ * @details This application is a narrowly scoped Vulkan glTF Renderer (VkTF) for assets that support the PBR metallic-
+ *          roughness workflow. It implements simple camera controls using mouse movement to orient the viewer and WASD
+ *          keys to move through the scene. Press ESC to exit the application.
+ * @note This file is primarily intended to demonstrate how to use core Engine APIs to load and render a scene composed
+ *       of multiple glTF files.
+ */
+export void Start();  // TODO: Add support for loading arbitrary glTF files using command line arguments
 
 }  // namespace game
 
