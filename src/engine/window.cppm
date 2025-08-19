@@ -18,27 +18,73 @@ namespace vktf {
 
 using UniqueGlfwWindow = std::unique_ptr<GLFWwindow, decltype(&glfwDestroyWindow)>;
 
+/**
+ * @brief An abstraction for a GLFW window.
+ * @see https://www.glfw.org/documentation GLFW Documentation
+ */
 export class [[nodiscard]] Window {
 public:
+  /**
+   * @brief Creates a @ref Window.
+   * @param title The UTF-8 window title.
+   * @throws std::runtime_error Thrown if GLFW initialization fails.
+   */
   explicit Window(const char* title);
 
+  /**
+   * @brief Gets the size of the framebuffer in pixels.
+   * @return An extent containing the width and height of the framebuffer.
+   */
   [[nodiscard]] vk::Extent2D GetFramebufferExtent() const noexcept;
+
+  /**
+   * @brief Gets the cursor position in screen coordinates relative to the top-left window corner.
+   * @return A 2D vector representing the (x,y) cursor position.
+   */
   [[nodiscard]] glm::vec2 GetCursorPosition() const noexcept;
 
+  /**
+   * @brief Checks if a key is currently pressed.
+   * @param key The GLFW key to check (e.g., @c GLFW_KEY_ESCAPE).
+   * @return @c true if @ref key is pressed, otherwise @c false.
+   */
   [[nodiscard]] bool IsKeyPressed(const int key) const noexcept {
     return glfwGetKey(glfw_window_.get(), key) == GLFW_PRESS;
   }
 
+  /**
+   * @brief Checks if a mouse button is currently pressed.
+   * @param button The GLFW mouse button to check (e.g., @c GLFW_MOUSE_BUTTON_LEFT).
+   * @return @c true if @ref button is pressed, otherwise @c false.
+   */
   [[nodiscard]] bool IsMouseButtonPressed(const int button) const noexcept {
     return glfwGetMouseButton(glfw_window_.get(), button) == GLFW_PRESS;
   }
 
+  /**
+   * @brief Checks if the window close flag has been set.
+   * @return @c true if the window close flag has been set, otherwise @c false.
+   */
   [[nodiscard]] bool IsClosed() const noexcept { return glfwWindowShouldClose(glfw_window_.get()) == GLFW_TRUE; }
+
+  /** @brief Sets the window close flag. */
   void Close() const noexcept { glfwSetWindowShouldClose(glfw_window_.get(), GLFW_TRUE); }
 
+  /** @brief Polls window events and processes registered callbacks. */
   static void Update() noexcept { glfwPollEvents(); }
 
-  [[nodiscard]] static std::vector<const char*> GetInstanceExtensions();
+  /**
+   * @brief Gets the Vulkan instance extensions required for creating a window surface.
+   * @return A list of C-strings for required instance extensions whose lifetimes are managed by GLFW.
+   * @throws std::runtime_error Thrown if no window instance extensions are found.
+   */
+  [[nodiscard]] static std::vector<const char*> GetRequiredInstanceExtensions();
+
+  /**
+   * @brief Creates a Vulkan surface.
+   * @param instance The instance for creating the Vulkan surface.
+   * @return A unique smart handle for a Vulkan surface.
+   */
   [[nodiscard]] vk::UniqueSurfaceKHR CreateSurface(vk::Instance instance) const;
 
 private:
@@ -108,20 +154,6 @@ UniqueGlfwWindow CreateGlfwWindow(const char* const title) {
 
 Window::Window(const char* const title) : glfw_window_{CreateGlfwWindow(title)} {}
 
-std::vector<const char*> Window::GetInstanceExtensions() {
-  std::uint32_t required_extension_count = 0;
-  const auto** required_extensions = glfwGetRequiredInstanceExtensions(&required_extension_count);
-  if (required_extensions == nullptr) throw std::runtime_error{"No window surface instance extensions"};
-  return std::vector(required_extensions, required_extensions + required_extension_count);
-}
-
-vk::UniqueSurfaceKHR Window::CreateSurface(const vk::Instance instance) const {
-  VkSurfaceKHR surface = nullptr;
-  const auto result = glfwCreateWindowSurface(instance, glfw_window_.get(), nullptr, &surface);
-  vk::detail::resultCheck(static_cast<vk::Result>(result), "Window surface creation failed");
-  return vk::UniqueSurfaceKHR{surface, instance};
-}
-
 vk::Extent2D Window::GetFramebufferExtent() const noexcept {
   auto width = 0;
   auto height = 0;
@@ -134,6 +166,20 @@ glm::vec2 Window::GetCursorPosition() const noexcept {
   auto y = 0.0;
   glfwGetCursorPos(glfw_window_.get(), &x, &y);
   return glm::vec2{static_cast<float>(x), static_cast<float>(y)};
+}
+
+std::vector<const char*> Window::GetRequiredInstanceExtensions() {
+  std::uint32_t required_extension_count = 0;
+  const auto** required_extensions = glfwGetRequiredInstanceExtensions(&required_extension_count);
+  if (required_extensions == nullptr) throw std::runtime_error{"No window surface instance extensions"};
+  return std::vector(required_extensions, required_extensions + required_extension_count);
+}
+
+vk::UniqueSurfaceKHR Window::CreateSurface(const vk::Instance instance) const {
+  VkSurfaceKHR surface = nullptr;
+  const auto result = glfwCreateWindowSurface(instance, glfw_window_.get(), nullptr, &surface);
+  vk::detail::resultCheck(static_cast<vk::Result>(result), "Window surface creation failed");
+  return vk::UniqueSurfaceKHR{surface, instance};
 }
 
 }  // namespace vktf

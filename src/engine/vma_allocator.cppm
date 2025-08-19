@@ -12,18 +12,38 @@ namespace vktf::vma {
 
 using UniqueAllocator = std::unique_ptr<VmaAllocator_T, decltype(&vmaDestroyAllocator)>;
 
+/**
+ * @brief An abstraction for a Vulkan Memory Allocator (VMA) allocator.
+ * @details This class handles the initial setup and lifetime management of a VMA allocator.
+ * @warning This class retains a non-owning handle to a Vulkan device. The caller is response for ensuring it remains
+ *          valid for the entire lifetime of this abstraction.
+ * @see https://gpuopen.com/vulkan-memory-allocator/ Vulkan Memory Allocator
+ */
 export class [[nodiscard]] Allocator {
 public:
+  /** @brief The parameters for creating an @ref Allocator. */
   struct [[nodiscard]] CreateInfo {
+    /** @brief The Vulkan instance. */
     vk::Instance instance;
+
+    /** @brief The Vulkan physical device. */
     vk::PhysicalDevice physical_device;
+
+    /** @brief The Vulkan API version enabled for the application. */
     std::uint32_t vulkan_api_version = 0;
   };
 
+  /**
+   * @brief Creates an @ref Allocator.
+   * @param device The device for allocating memory.
+   * @param create_info @copybrief Allocator::CreateInfo
+   */
   Allocator(vk::Device device, const CreateInfo& create_info);
 
+  /** @brief Gets the underlying VMA allocator handle. */
   [[nodiscard]] VmaAllocator operator*() const noexcept { return allocator_.get(); }
 
+  /** @brief Gets the Vulkan device. */
   [[nodiscard]] vk::Device device() const noexcept { return device_; }
 
 private:
@@ -31,15 +51,18 @@ private:
   UniqueAllocator allocator_;
 };
 
+/** @brief A VmaAllocationCreateInfo that specifies an allocation should have its own memory block. */
 export constexpr VmaAllocationCreateInfo kDedicatedMemoryAllocationCreateInfo{
     .flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
     .usage = VMA_MEMORY_USAGE_AUTO,
     .priority = 1.0f};
 
+/** @brief A VmaAllocationCreateInfo that specifies an allocation should prefer sequential write host-visible memory. */
 export constexpr VmaAllocationCreateInfo kHostVisibleAllocationCreateInfo{
     .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
     .usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST};
 
+/** @brief A VmaAllocationCreateInfo that specifies an allocation should prefer device-local memory. */
 export constexpr VmaAllocationCreateInfo kDeviceLocalAllocationCreateInfo{.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
 
 }  // namespace vktf::vma

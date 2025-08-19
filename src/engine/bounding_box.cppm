@@ -10,11 +10,26 @@ export module bounding_box;
 
 namespace vktf {
 
+/**
+ * @brief An axis-aligned bounding box.
+ * @details An axis-aligned bounding box (AABB) represents the minimum extent needed to enclose a set of vertices for
+ *          intersection tests. This can be efficiently represented using two points for the minimum and maximum corners
+ *          of the bounding box from which all other properties of the bounding box can be derived.
+ */
 export struct [[nodiscard]] BoundingBox {
+  /** @brief The minimum point of the axis-aligned bounding box. */
   glm::vec3 min{0.0f};
+
+  /** @brief The maximum point of the axis-aligned bounding box. */
   glm::vec3 max{0.0f};
 };
 
+/**
+ * @brief Transforms an axis-aligned bounding box to a new coordinate space.
+ * @param bounding_box The bounding box to transform.
+ * @param transform The transform matrix defining the basis vectors for the new coordinate space.
+ * @return A new axis-aligned bounding box representing @p bounding_box transformed by the matrix @p transform.
+ */
 export [[nodiscard]] BoundingBox Transform(const BoundingBox& bounding_box, const glm::mat4& transform);
 
 }  // namespace vktf

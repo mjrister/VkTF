@@ -19,16 +19,36 @@ import log;
 
 namespace vktf {
 
+/**
+ * @brief An abstraction for a Vulkan shader module.
+ * @details This class handles creating a SPIR-V shader module from a file on disk. Files ending in @c .spv are loaded
+ *          as SPIR-V binaries. Otherwise the file is treated as GLSL source code that is compiled at runtime.
+ * @see https://registry.khronos.org/vulkan/specs/latest/man/html/VkShaderModule.html VkShaderModule
+ */
 export class [[nodiscard]] ShaderModule {
 public:
+  /** @brief The parameters for creating a @ref ShaderModule. */
   struct [[nodiscard]] CreateInfo {
+    /** @brief The filepath to the shader representing either a SPIR-V binary or GLSL source code. */
     const std::filesystem::path& shader_filepath;
+
+    /** @brief The stage the shader module will be used for. */
     const vk::ShaderStageFlagBits shader_stage{};
+
+    /** @brief The log for writing messages when creating a shader module. */
     Log& log;
   };
 
+  /**
+   * @brief Creates a @ref ShaderModule.
+   * @param device The device for creating the shader module.
+   * @param create_info @copybrief ShaderModule::CreateInfo
+   * @throws std::runtime_error Thrown if the file at @ref ShaderModule::CreateInfo::shader_filepath is not a valid
+   *                            SPIR-V binary or GLSL shader.
+   */
   ShaderModule(vk::Device device, const CreateInfo& create_info);
 
+  /** @brief Gets the underlying Vulkan shader module handle. */
   [[nodiscard]] vk::ShaderModule operator*() const noexcept { return *shader_module_; }
 
 private:
@@ -42,6 +62,8 @@ module :private;
 namespace vktf {
 
 namespace {
+
+constexpr std::size_t kSpirvWordSize = sizeof(SpirvWord);
 
 std::vector<SpirvWord> ReadSpirvFile(const std::filesystem::path& spirv_filepath) {
   std::ifstream spirv_ifstream;
