@@ -14,26 +14,65 @@ import vma_allocator;
 
 namespace vktf::pbr_metallic_roughness {
 
+/** @brief A structure representing constant PBR material properties. */
 export struct [[nodiscard]] MaterialProperties {
+  /**
+   * @brief The base color factor for a material.
+   * @details If @ref base_color_texture is specified, this value acts as a linear multiplier with the sampled texel;
+   *          otherwise, it defines the absolute base color value for the material.
+   */
   glm::vec4 base_color_factor{0.0f};
+
+  /**
+   * @brief The metallic-roughness factor for a material.
+   * @details The x-component is the metallic factor and the y-component is the roughness factor. If a material has a
+   *          metallic-roughness texture, this value acts as a linear multiplier with the sampled texel; otherwise, it
+   *          defines the absolute metallic-roughness value for the material.
+   */
   glm::vec2 metallic_roughness_factor{0.0f};
+
+  /** @brief The amount to scale sampled normals in the x/y directions. */
   float normal_scale = 0.0f;
 };
 
+/**
+ * @brief A PBR material in host-visible memory.
+ * @details This class handles creating host-visible staging buffers with image and properties data for a PBR material.
+ */
 export class [[nodiscard]] StagingMaterial {
 public:
+  /** @brief The parameters for creating a @ref StagingMaterial. */
   struct [[nodiscard]] CreateInfo {
+    /** @brief @copybrief MaterialProperties */
     const MaterialProperties& material_properties;
+
+    /** @brief The base color KTX texture. */
     const ktxTexture2& base_color_ktx_texture;
+
+    /** @brief The metallic-roughness KTX texture. */
     const ktxTexture2& metallic_roughness_ktx_texture;
+
+    /** @brief The normal map KTX texture. */
     const ktxTexture2& normal_ktx_texture;
   };
 
+  /**
+   * @brief Creates a @ref StagingMaterial.
+   * @param allocator The allocator for creating staging buffers.
+   * @param create_info @copybrief StagingMaterial::CreateInfo
+   */
   StagingMaterial(const vma::Allocator& allocator, const CreateInfo& create_info);
 
+  /** @brief Gets the properties staging buffer. */
   [[nodiscard]] const HostVisibleBuffer& properties_buffer() const noexcept { return properties_buffer_; }
+
+  /** @brief Gets the base color staging texture. */
   [[nodiscard]] const StagingTexture& base_color_texture() const noexcept { return base_color_texture_; }
+
+  /** @brief Gets the metallic-roughness staging texture. */
   [[nodiscard]] const StagingTexture& metallic_roughness_texture() const { return metallic_roughness_texture_; }
+
+  /** @brief Gets the normal map staging texture. */
   [[nodiscard]] const StagingTexture& normal_texture() const noexcept { return normal_texture_; }
 
 private:
@@ -43,18 +82,41 @@ private:
   StagingTexture normal_texture_;
 };
 
+/**
+ * @brief A PBR material in device-local memory.
+ * @details This class handles creating device-local images and buffers for a PBR material, recording copy commands to
+ *          transfer data from host-visible staging buffers, and assigning a descriptor set to bind material resources.
+ */
 export class [[nodiscard]] Material {
 public:
+  /** @brief The parameters for creating a @ref Material. */
   struct [[nodiscard]] CreateInfo {
+    /** @brief The staging material to copy to device-local memory. */
     const StagingMaterial& staging_material;
+
+    /** @brief The sampler for the base color texture. */
     vk::Sampler base_color_sampler;
+
+    /** @brief The sampler for the metallic-roughness texture. */
     vk::Sampler metallic_roughness_sampler;
+
+    /** @brief The sampler for the normal map texture. */
     vk::Sampler normal_sampler;
+
+    /** @brief The descriptor set to update with this material's resources. */
     vk::DescriptorSet descriptor_set;
   };
 
+  /**
+   * @brief Creates a @ref Material.
+   * @param allocator The allocator for creating device-local buffers and images.
+   * @param command_buffer The command buffer for recording copy commands.
+   * @param create_info @copybrief Material::CreateInfo
+   * @warning The caller is responsible for submitting @p command_buffer to a Vulkan queue to begin execution.
+   */
   Material(const vma::Allocator& allocator, vk::CommandBuffer command_buffer, const CreateInfo& create_info);
 
+  /** @brief Gets the material descriptor set. */
   [[nodiscard]] vk::DescriptorSet descriptor_set() const noexcept { return descriptor_set_; }
 
 private:

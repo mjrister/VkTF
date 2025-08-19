@@ -37,20 +37,42 @@ import vma_allocator;
 
 namespace vktf {
 
+/**
+ * @brief A model in host-visible memory.
+ * @details This class handles creating host-visible staging buffers with texture, material, and mesh data from a glTF
+ *          asset containing hierarchical scene data.
+ */
 export class [[nodiscard]] StagingModel {
 public:
+  /** @brief A type alias for an optional staging material. */
   using Material = std::optional<pbr_metallic_roughness::StagingMaterial>;
+
+  /** @brief A type alias for a vector of optional staging primitives. */
   using Mesh = std::vector<std::optional<StagingPrimitive>>;
 
+  /** @brief The parameters to create a @ref StagingModel. */
   struct [[nodiscard]] CreateInfo {
+    /** @brief The glTF asset to copy to host-visible memory. */
     const gltf::Asset& gltf_asset;
+
+    /** @brief The physical device features for determining the transcode target of basis universal KTX textures. */
     const vk::PhysicalDeviceFeatures& physical_device_features;
+
+    /** @brief The log for writing messages when creating a staging model. */
     Log& log;
   };
 
+  /**
+   * @brief Creates a @ref StagingModel.
+   * @param allocator The allocator for creating staging buffers.
+   * @param create_info @copybrief StagingModel::CreateInfo
+   */
   explicit StagingModel(const vma::Allocator& allocator, const CreateInfo& create_info);
 
+  /** @brief Gets a map of staging materials by glTF material key. */
   [[nodiscard]] const std::unordered_map<const gltf::Material*, Material>& materials() const { return materials_; }
+
+  /** @brief Gets a map of staging meshes by glTF mesh key. */
   [[nodiscard]] const std::unordered_map<const gltf::Mesh*, Mesh>& meshes() const noexcept { return meshes_; }
 
 private:
@@ -58,31 +80,86 @@ private:
   std::unordered_map<const gltf::Mesh*, Mesh> meshes_;
 };
 
+/**
+ * @brief A model in device-local memory.
+ * @details The class handles creating device-local resource for textures, materials, and meshes from a glTF asset
+ *          containing hierarchical scene data.
+ */
 export class [[nodiscard]] Model {
 public:
+  /** @brief A punctual light originating from an infinitely small point in space. */
   struct [[nodiscard]] Light {
+    /** @brief The punctual light type. */
     enum class Type : std::uint8_t { kDirectional, kPoint };  // TODO: add support for spot lights
+
+    /** @brief The linear-space light color. */
     glm::vec3 color{0.0f};
+
+    /** @brief The light type (e.g., directional, point). */
     Type type = Type::kDirectional;
   };
 
+  /** @brief A hierarchical graph node. */
   struct [[nodiscard]] Node {
+    /** @brief The local transform representing the node position and orientation relative to its parent.  */
     glm::mat4 local_transform{0.0f};
-    glm::mat4 global_transform{0.0f};  // cached per update to avoid unnecessary recalculation
+
+    /**
+     * @brief The global transform representing the world-space node position and orientation.
+     * @note This property is calculated once per frame by @ref Model::Update.
+     */
+    glm::mat4 global_transform{0.0f};
+
+    /** @brief The non-owning pointer to the node mesh. */
     const Mesh* mesh = nullptr;
+
+    /** @brief The non-owning pointer to the node light. S*/
     const Light* light = nullptr;
+
+    /** @brief A list of non-owning pointers to the node children. */
     std::vector<Node*> children;
   };
 
+  /** @brief The parameters for creating a @ref Model. */
   struct [[nodiscard]] CreateInfo {
+    /** @brief The glTF asset for importing hierarchical scene data.  */
     const gltf::Asset& gltf_asset;
+
+    /** @brief The staging model to copy to device-local memory. */
     const StagingModel& staging_model;
+
+    /**
+     * @brief The descriptor set layout for all model materials.
+     * @note Because this project has not yet implemented dynamic pipeline generation, all model materials must conform
+     *       to a fixed descriptor set layout that requires PBR base color, metallic-roughness, and normal textures.
+     */
     vk::DescriptorSetLayout material_descriptor_set_layout;
-    std::optional<float> sampler_anisotropy;  // feature enabled when value is set
+
+    /**
+     * @brief The anisotropy for sampling textures.
+     * @note A value of @c std::nullopt indicates this feature is not enabled.
+     */
+    std::optional<float> sampler_anisotropy;
   };
 
+  /**
+   * @brief Creates a @ref Model.
+   * @param allocator The allocator for creating device-local buffers and images.
+   * @param command_buffer The command buffer for recording copy commands.
+   * @param create_info @copybrief Model::CreateInfo
+   * @throws std::runtime_error Thrown if @ref Model::CreateInfo::gltf_asset does not contain scene data.
+   * @warning The caller is responsible for submitting @p command_buffer to a Vulkan queue to begin execution.
+   */
   Model(const vma::Allocator& allocator, vk::CommandBuffer command_buffer, const CreateInfo& create_info);
 
+  /**
+   * @brief Updates each node in the model.
+   * @details This function traverses the node hierarchy, updates the global transform for each node, and invokes a node
+   *          visitor on each node to allow the caller to respond to updates after the node and all its children have
+   *          been updated (i.e., post-order traversal).
+   * @tparam Fn The callable function type for @p node_visitor.
+   * @param node_visitor The function to be invoked on each node after its entire subtree has been updated.
+   */
   template <std::invocable<const Node&> Fn>
   void Update(Fn&& node_visitor) {
     for (auto* const root_node : root_nodes_) {
@@ -91,6 +168,14 @@ public:
     }
   }
 
+  /**
+   * @brief Records draw commands to render visible meshes in the model.
+   * @details This function traverses the node hierarchy and records draw commands for each visible mesh.
+   * @param command_buffer The command buffer for recording draw commands.
+   * @param pipeline_layout The pipeline layout for binding push constants and descriptor sets.
+   * @param view_frustum The camera view frustum for determining mesh visibility.
+   * @warning The caller is responsible for submitting @p command_buffer to a Vulkan queue to begin execution.
+   */
   void Render(vk::CommandBuffer command_buffer,
               vk::PipelineLayout pipeline_layout,
               const ViewFrustum& view_frustum) const;
@@ -423,10 +508,10 @@ GltfResourceMap<gltf::Material, UniqueMaterial> CreateMaterials(
 // Staging Meshes
 // =====================================================================================================================
 
-using PositionAttribute = gltf::VertexAttributes::Position;
-using NormalAttribute = gltf::VertexAttributes::Normal;
-using TangentAttribute = gltf::VertexAttributes::Tangent;
-using TexCoord0Attribute = gltf::VertexAttributes::TexCoord0;
+using PositionAttribute = gltf::Attributes::Position;
+using NormalAttribute = gltf::Attributes::Normal;
+using TangentAttribute = gltf::Attributes::Tangent;
+using TexCoord0Attribute = gltf::Attributes::TexCoord0;
 
 std::vector<Vertex> CreateVertices(const PositionAttribute::Data& position_data,
                                    const NormalAttribute::Data& normal_data,
@@ -443,8 +528,8 @@ std::vector<Vertex> CreateVertices(const PositionAttribute::Data& position_data,
          | std::ranges::to<std::vector>();
 }
 
-std::optional<std::string_view> FindMissingAttributeName(const gltf::VertexAttributes& vertex_attributes) {
-  const auto& [_, normal_attribute, tangent_attribute, texcoord_0_attribute] = vertex_attributes;
+std::optional<std::string_view> FindMissingAttributeName(const gltf::Attributes& attributes) {
+  const auto& [_, normal_attribute, tangent_attribute, texcoord_0_attribute] = attributes;
   if (!normal_attribute.data.has_value()) return NormalAttribute::kName;
   if (!tangent_attribute.data.has_value()) return TangentAttribute::kName;
   if (!texcoord_0_attribute.data.has_value()) return TexCoord0Attribute::kName;
@@ -458,9 +543,9 @@ std::optional<StagingPrimitive> CreateStagingPrimitive(
     const GltfResourceMap<gltf::Material, StagingModel::Material>& staging_materials,
     Log& log) {
   assert(primitive_index < gltf_mesh.primitives.size());
-  const auto& [vertex_attributes, indices_variant, gltf_material] = gltf_mesh.primitives[primitive_index];
+  const auto& [attributes, indices_variant, gltf_material] = gltf_mesh.primitives[primitive_index];
 
-  if (const auto attribute_name = FindMissingAttributeName(vertex_attributes); attribute_name.has_value()) {
+  if (const auto attribute_name = FindMissingAttributeName(attributes); attribute_name.has_value()) {
     log(Severity::kError) << std::format("Failed to create mesh primitive {}[{}] with missing {} attribute",
                                          GetName(gltf_mesh),
                                          primitive_index,
@@ -483,8 +568,8 @@ std::optional<StagingPrimitive> CreateStagingPrimitive(
   }
 
   return std::visit(
-      [&allocator, &vertex_attributes]<typename Indices>(const Indices& indices) {
-        const auto& [position_attribute, normal_attribute, tangent_attribute, texcoord_0_attribute] = vertex_attributes;
+      [&allocator, &attributes]<typename Indices>(const Indices& indices) {
+        const auto& [position_attribute, normal_attribute, tangent_attribute, texcoord_0_attribute] = attributes;
         using IndexType = typename Indices::value_type;
 
         return StagingPrimitive{
@@ -554,10 +639,10 @@ UniqueMesh CreateMesh(const vma::Allocator& allocator,
     const auto& material = Get(gltf_primitive.material, materials);
     assert(material != nullptr);  // guaranteed by staging primitive construction
 
-    primitives.emplace_back(
-        allocator,
-        command_buffer,
-        Primitive::CreateInfo{.staging_primitive = *staging_primitive, .descriptor_set = material->descriptor_set()});
+    primitives.emplace_back(allocator,
+                            command_buffer,
+                            Primitive::CreateInfo{.staging_primitive = *staging_primitive,
+                                                  .material_descriptor_set = material->descriptor_set()});
   }
 
   return primitives.empty() ? nullptr : std::make_unique<Mesh>(std::move(primitives), bounding_box);
@@ -690,8 +775,11 @@ void Render(const Mesh& mesh,
 
   for (const auto& primitive : mesh.primitives()) {
     // TODO: avoid per-primitive material descriptor set binding
-    const auto descriptor_set = primitive.descriptor_set();
-    command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout, 1, descriptor_set, nullptr);
+    command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                      pipeline_layout,
+                                      1,
+                                      primitive.material_descriptor_set(),
+                                      nullptr);
     primitive.Render(command_buffer);
   }
 }
