@@ -17,26 +17,56 @@ import shader_module;
 
 namespace vktf {
 
+/**
+ * @brief An abstraction for a Vulkan graphics pipeline.
+ * @details This class handles the creation of a fixed graphics pipeline and corresponding graphics pipeline layout.
+ * @note This project does not yet support dynamic graphics pipeline generation to handle variable vertex attribute and
+ *       descriptor set layouts. As a result, assets are expected to conform to a fixed pipeline layout to be supported.
+ * @see https://registry.khronos.org/vulkan/specs/latest/man/html/VkPipeline.html VkPipeline
+ */
 export class [[nodiscard]] GraphicsPipeline {
 public:
+  /** @brief A structure representing shader push constants. */
   struct [[nodiscard]] PushConstants {
+    /** @brief The model transform that converts a local-space vertex position into world-space coordinates. */
     glm::mat4 model_transform{0.0f};
   };
 
+  /** @brief The parameters for creating a @ref GraphicsPipeline. */
   struct [[nodiscard]] CreateInfo {
+    /** @brief The descriptor set layout for top-level descriptor sets bound once per frame (e.g., camera, lights). */
     vk::DescriptorSetLayout global_descriptor_set_layout;
+
+    /** @brief The descriptor set layout for PBR metallic-roughness materials. */
     vk::DescriptorSetLayout material_descriptor_set_layout;
+
+    /** @brief The viewport and scissor extent.  */
     vk::Extent2D viewport_extent;
+
+    /** @brief The number of samples for multisample anti-aliasing (MSAA). */
     vk::SampleCountFlagBits msaa_sample_count = vk::SampleCountFlagBits::e1;
+
+    /** @brief The render pass for the graphics pipeline. */
     vk::RenderPass render_pass;
+
+    /** @brief The number of lights to use as specialization constant in the fragment shader. */
     std::uint32_t light_count = 0;
+
+    /** @brief The log for writing messages when creating a graphics pipeline. */
     Log& log;
   };
 
+  /**
+   * @brief Creates a @ref GraphicsPipeline.
+   * @param device The device for creating the graphics pipeline.
+   * @param create_info @copybrief GraphicsPipeline::CreateInfo
+   */
   GraphicsPipeline(vk::Device device, const CreateInfo& create_info);
 
+  /** @brief Gets the underlying Vulkan pipeline handle. */
   [[nodiscard]] vk::Pipeline operator*() const noexcept { return *pipeline_; }
 
+  /** @brief Gets the underlying Vulkan pipeline layout handle. */
   [[nodiscard]] vk::PipelineLayout layout() const noexcept { return *pipeline_layout_; }
 
 private:

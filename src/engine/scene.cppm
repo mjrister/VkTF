@@ -28,36 +28,105 @@ import vma_allocator;
 
 namespace vktf {
 
+/**
+ * @brief A scene consisting of multiple glTF assets.
+ * @details This class handles loading multiple glTF assets that combine together to form a cohesive scene and manages
+ *          global resources that are common to all models in the scene (e.g., cameras, lights). When constructed, it
+ *          handles the creation and submission of command buffers to copy glTF asset resources to device-local memory.
+ *          It also provides high-level APIs for updating and rendering the scene on a per-frame basis.
+ */
 export class [[nodiscard]] Scene {
 public:
+  /** @brief A structure representing properties for the active camera in the scene. */
   struct [[nodiscard]] CameraProperties {
+    /** @brief The view-projection matrix that transforms a world-space vertex position into clip-space coordinates. */
     glm::mat4 view_projection_transform{0.0f};
+
+    /** @brief The world-space position of the camera. */
     glm::vec3 world_position;
   };
 
+  /** @brief A light in world-space. */
   struct [[nodiscard]] WorldLight {
-    glm::vec4 position{0.0f};  // represents normalized light direction when w-component is zero
+    /**
+     * @brief The light position in world-space.
+     * @attention This property represents the normalized light direction in world-space when the w-component is zero.
+     */
+    glm::vec4 position{0.0f};
+
+    /**
+     * @brief The RGB light color.
+     * @attention The alpha component is padded to conform to std140 layout requirements.
+     */
     glm::vec4 color{0.0f};
   };
 
+  /** @brief The parameters for creating a @ref Scene. */
   struct [[nodiscard]] CreateInfo {
+    /** @brief The glTF assets to load. */
     const std::vector<gltf::Asset>& gltf_assets;
+
+    /** @brief The queue for submitting command buffers that require transfer capabilities. */
     const Queue& transfer_queue;
+
+    /** @brief The physical device features for determining the transcode target of basis universal KTX textures. */
     const vk::PhysicalDeviceFeatures& physical_device_features;
+
+    /**
+     * @brief The anisotropy for sampling textures.
+     * @note A value of @c std::nullopt indicates this feature is not enabled.
+     */
     std::optional<float> sampler_anisotropy;
+
+    /** @brief The fixed viewport and scissor extent for creating graphics pipelines. */
     vk::Extent2D viewport_extent;
+
+    /** @brief The fixed multisample anti-aliasing (MSAA) sample count for creating graphics pipelines. */
     vk::SampleCountFlagBits msaa_sample_count = vk::SampleCountFlagBits::e1;
+
+    /** @brief The fixed render pass for creating graphics pipelines. */
     vk::RenderPass render_pass;
+
+    /**
+     * @brief The fixed descriptor set layout for global scene resources (e.g., cameras, lights).
+     * @note Global descriptor sets are frame-dependent and therefore managed by @ref Engine.
+     */
     vk::DescriptorSetLayout global_descriptor_set_layout;
+
+    /** @brief The log for writing messages when creating the scene. */
     Log& log;
   };
 
+  /**
+   * @brief Creates a @ref Scene.
+   * @param allocator The allocator for creating buffers and images.
+   * @param create_info @copybrief Scene::CreateInfo.
+   */
   Scene(const vma::Allocator& allocator, const CreateInfo& create_info);
 
+  /** @brief Gets the active camera in the scene. */
   [[nodiscard]] auto& camera(this auto& self) noexcept { return self.camera_; }
+
+  /** @brief Gets the number of lights in the scene. */
   [[nodiscard]] std::uint32_t light_count() const noexcept { return light_count_; }
 
+  /**
+   * @brief Updates each node in the scene.
+   * @details This function traverses the scene graph, updates global transforms for each node in the scene, and copies
+   *          global scene data to frame-dependent resources managed by @ref Engine.
+   * @param camera_uniform_buffer The camera properties uniform buffer for the current frame.
+   * @param lights_uniform_buffer The world-space lights uniform buffer for the current frame.
+   */
   void Update(HostVisibleBuffer& camera_uniform_buffer, HostVisibleBuffer& lights_uniform_buffer);
+
+  /**
+   * @brief Records draw commands to render models in the scene.
+   * @details This function binds compatible graphics pipelines and descriptor sets, traverses the scene graph, and
+   *          and records draw commands to render each model in the scene.
+   * @param command_buffer The command buffer for recording draw commands.
+   * @param global_descriptor_set The global descriptor set to bind for the current frame.
+   * @warning The caller is responsible for submitting @p command_buffer to a Vulkan queue to begin execution.
+   */
   void Render(vk::CommandBuffer command_buffer, vk::DescriptorSet global_descriptor_set) const;
 
 private:
@@ -114,7 +183,7 @@ void EmplaceWorldLight(const Model::Node& node, std::vector<WorldLight>& world_l
   const auto& light = node.light;
   if (light == nullptr) return;
 
-  static constexpr auto kAlphaPadding = 1.0f;  // alpha padding applied to conform to std140 layout requirements
+  static constexpr auto kAlphaPadding = 1.0f;
   const glm::vec4 light_color{light->color, kAlphaPadding};
 
   switch (const auto& world_transform = node.global_transform; light->type) {

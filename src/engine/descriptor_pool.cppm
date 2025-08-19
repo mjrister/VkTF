@@ -9,16 +9,33 @@ export module descriptor_pool;
 
 namespace vktf {
 
+/**
+ * @brief An abstraction for a Vulkan Descriptor Pool.
+ * @details This class handles creating a descriptor pool and allocating a fixed number of descriptor sets.
+ * @see https://registry.khronos.org/vulkan/specs/latest/man/html/VkDescriptorPool.html VkDescriptorPool
+ */
 export class [[nodiscard]] DescriptorPool {
 public:
+  /** @brief The parameters for creating a @ref DescriptorPool. */
   struct [[nodiscard]] CreateInfo {
+    /** @brief The descriptor pool sizes indicating the number of descriptors to allocate for each descriptor type. */
     const std::vector<vk::DescriptorPoolSize>& descriptor_pool_sizes;
+
+    /** @brief The fixed descriptor set layout for allocated descriptor sets. */
     vk::DescriptorSetLayout descriptor_set_layout;
+
+    /** @brief The number of descriptor sets to allocate for the descriptor pool. */
     std::uint32_t descriptor_set_count = 0;
   };
 
+  /**
+   * @brief Creates a @ref DescriptorPool.
+   * @param device The device for creating the descriptor pool.
+   * @param create_info @copybrief DescriptorPool::CreateInfo
+   */
   DescriptorPool(vk::Device device, const CreateInfo& create_info);
 
+  /** @brief Gets the descriptor sets allocated for this descriptor pool. */
   [[nodiscard]] const std::vector<vk::DescriptorSet>& descriptor_sets() const noexcept { return descriptor_sets_; }
 
 private:

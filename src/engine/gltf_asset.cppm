@@ -30,127 +30,287 @@ import log;
 
 namespace vktf::gltf {
 
+/** @brief A structure representing glTF sampler properties. */
 export struct [[nodiscard]] Sampler {
+  /** @brief The user-defined name for the sampler. */
   std::optional<std::string> name;
+
+  /** @brief The magnification filter for sampling nearby textures. */
   vk::Filter mag_filter;
+
+  /** @brief The minification filter for sampling distant textures. */
   vk::Filter min_filter;
+
+  /** @brief The mipmap mode for sampling texture mipmaps. */
   vk::SamplerMipmapMode mipmap_mode;
+
+  /** @brief The address mode for the u texture coordinate. */
   vk::SamplerAddressMode address_mode_u;
+
+  /** @brief The address mode for the v texture coordinate. */
   vk::SamplerAddressMode address_mode_v;
 };
 
+/** @brief A type alias for a @c unique_ptr that manages the lifetime of a @ref Sampler. */
 export using UniqueSampler = std::unique_ptr<const Sampler>;
 
+/** @brief A structure representing glTF texture properties. */
 export struct [[nodiscard]] Texture {
+  /** @brief The user-defined name for the texture. */
   std::optional<std::string> name;
+
+  /** @brief The filepath to the texture image data. */
   std::optional<std::filesystem::path> filepath;
+
+  /** @brief A non-owning pointer to the texture sampler. */
   const Sampler* sampler = nullptr;
 };
 
+/** @brief A type alias for a @c unique_ptr that manages the lifetime of a @ref Texture. */
 export using UniqueTexture = std::unique_ptr<const Texture>;
 
+/** @brief A structure representing glTF PBR metallic-roughness properties. */
 export struct [[nodiscard]] PbrMetallicRoughness {
+  /**
+   * @brief The factors for the base color of the material.
+   * @details If @ref base_color_texture is specified, this property acts as a linear multiplier with the sampled texel;
+   *          otherwise, it defines the absolute base color value for the material.
+   */
   glm::vec4 base_color_factor{0.0f};
+
+  /** @brief A non-owning pointer to the base color texture. */
   const Texture* base_color_texture = nullptr;
+
+  /**
+   * @brief The factor for the metalness of the material.
+   * @details If @ref metallic_roughness_texture is specified, this value acts as a linear multiplier with the blue (B)
+   *          channel of the sampled texel; otherwise, it defines the absolute metallic value for the material.
+   */
   float metallic_factor = 0.0f;
+
+  /**
+   * @brief The factor for the roughness of the material.
+   * @details If @ref metallic_roughness_texture is specified, this value acts as a linear multiplier with the green (G)
+   *          channel of the sampled texel; otherwise, it defines the absolute roughness value for the material.
+   */
   float roughness_factor = 0.0f;
+
+  /** @brief A non-owning pointer to the metallic-roughness texture. */
   const Texture* metallic_roughness_texture = nullptr;
 };
 
+/** @brief A structure representing glTF material properties. */
 export struct [[nodiscard]] Material {
+  /** @brief The user-defined name for the material. */
   std::optional<std::string> name;
+
+  /** @brief The PBR metallic-roughness properties for the material. */
   std::optional<PbrMetallicRoughness> pbr_metallic_roughness;
-  float normal_scale = 0.0f;  // glTF allows scaling sampled normals in the x/y directions
+
+  /** @brief The amount to scale sampled normals in the x/y directions. */
+  float normal_scale = 0.0f;
+
+  /** @brief A non-owning pointer to the normal texture. */
   const Texture* normal_texture = nullptr;
 };
 
+/** @brief A type alias for a @c unique_ptr that manages the lifetime of a @ref Material. */
 export using UniqueMaterial = std::unique_ptr<const Material>;
 
-export struct [[nodiscard]] VertexAttributes {
+/** @brief A structure representing glTF attributes for a mesh primitive. */
+export struct [[nodiscard]] Attributes {
+  /** @brief A structure representing the position glTF attribute. */
   struct Position {
+    /** @brief The name for the position glTF attribute. */
     static constexpr std::string_view kName = "POSITION";
+
+    /** @brief A type alias for a vector of 3D positions. */
     using Data = std::vector<glm::vec3>;
+
+    /** @brief The position attribute data. */
     Data data;
+
+    /** @brief The bounding box that encloses all positions in this attribute. */
     BoundingBox bounding_box;
   };
 
+  /** @brief A structure representing the normal glTF attribute. */
   struct Normal {
+    /** @brief The name for the normal glTF attribute. */
     static constexpr std::string_view kName = "NORMAL";
+
+    /** @brief A type alias for a vector of 3D normals. */
     using Data = std::vector<glm::vec3>;
+
+    /** @brief The normal attribute data. */
     std::optional<Data> data;
   };
 
+  /** @brief A structure representing the tangent glTF attribute. */
   struct Tangent {
+    /** @brief The name for the tangent glTF attribute. */
     static constexpr std::string_view kName = "TANGENT";
+
+    /**
+     * @brief A type alias for a vector of 4D tangents.
+     * @details The w-component indicates the signed handedness of the tangent basis vector.
+     */
     using Data = std::vector<glm::vec4>;
+
+    /** @brief The tangent attribute data. */
     std::optional<Data> data;
   };
 
+  /** @brief A structure representing the first texture coordinate set glTF attribute. */
   struct TexCoord0 {
+    /** @brief The name for the first texture coordinates set glTF attribute. */
     static constexpr std::string_view kName = "TEXCOORD_0";
+
+    /** @brief A type alias for a vector of 2D texture coordinates. */
     using Data = std::vector<glm::vec2>;
+
+    /** @brief The first texture coordinates set attribute data. */
     std::optional<Data> data;
   };
 
+  /** @brief The position glTF attribute. */
   Position position;
+
+  /** @brief The normal glTF attribute. */
   Normal normal;
+
+  /** @brief The tangent glTF attribute. */
   Tangent tangent;
+
+  /** @brief The first texture coordinates set glTF attribute. */
   TexCoord0 texcoord_0;
 };
 
+/** @brief A structure representing glTF mesh primitive properties. */
 export struct [[nodiscard]] Primitive {
+  /** @brief A type alias for a @c std::variant that represents variable-length vertex indices. */
   using Indices = std::variant<std::vector<std::uint8_t>, std::vector<std::uint16_t>, std::vector<std::uint32_t>>;
-  static constexpr auto kTopology = vk::PrimitiveTopology::eTriangleList;
-  VertexAttributes attributes;
+
+  /**
+   * @brief The primitive topology.
+   * @details The primitive topology defines how vertices are interpreted to form geometric primitives (e.g., points,
+   *          lines, triangles). When @ref indices is specified, sequential index values are interpreted based on the
+   *          chosen topology; otherwise, sequential vertices in @ref attributes are used instead.
+   */
+  static constexpr auto kTopology = vk::PrimitiveTopology::eTriangleList;  // TODO: add support for other topologies
+
+  /** @brief The vertex attributes (e.g., position, normal, tangent). */
+  Attributes attributes;
+
+  /** @brief The variable-length vertex indices. */
   std::optional<Indices> indices;
+
+  /** @brief A non-owning pointer to the primitive material. */
   const Material* material = nullptr;
 };
 
+/** @brief A structure representing glTF mesh properties. */
 export struct [[nodiscard]] Mesh {
+  /** @brief The user-defined name for the mesh. */
   std::optional<std::string> name;
+
+  /** @brief The glTF primitives that compose the mesh. */
   std::vector<Primitive> primitives;
 };
 
+/** @brief A type alias for a @c unique_ptr that manages the lifetime of a @ref Mesh. */
 export using UniqueMesh = std::unique_ptr<const Mesh>;
 
+/** @brief A structure representing glTF light properties. */
 export struct [[nodiscard]] Light {
-  enum class Type : std::uint8_t { kDirectional, kPoint };
+  /** @brief The glTF light type. */
+  enum class Type : std::uint8_t { kDirectional, kPoint };  // TODO: add support for glTF spot lights
+
+  /** @brief The user-defined name for the light. */
   std::optional<std::string> name;
+
+  /** @brief The linear-space light color. */
   glm::vec3 color{0.0f};
+
+  /** @brief The light type. */
   Type type = Type::kDirectional;
 };
 
+/** @brief A type alias for a @c unique_ptr that manages the lifetime of a @ref Light. */
 export using UniqueLight = std::unique_ptr<const Light>;
 
+/** @brief A structure representing glTF node properties. */
 export struct [[nodiscard]] Node {
+  /** @brief The user-defined name for the node. */
   std::optional<std::string> name;
+
+  /** @brief The local transform representing the node position and orientation relative to its parent. */
   glm::mat4 local_transform{0.0f};
+
+  /** @brief The non-owning pointer to the node mesh. */
   const Mesh* mesh = nullptr;
+
+  /** @brief The non-owning pointer to the node light. */
   const Light* light = nullptr;
+
+  /** @brief A list of non-owning pointers to the node children. */
   std::vector<const Node*> children;
 };
 
+/** @brief A type alias for a @c unique_ptr that manages the lifetime of a @ref Node. */
 export using UniqueNode = std::unique_ptr<const Node>;
 
+/** @brief A structure representing glTF scene properties. */
 export struct [[nodiscard]] Scene {
+  /** @brief The user-defined name for the scene. */
   std::optional<std::string> name;
+
+  /** @brief A list of non-owning pointers to the root nodes in the scene. */
   std::vector<const Node*> root_nodes;
 };
 
+/** @brief A type alias for a @c unique_ptr that manages the lifetime of a @ref Scene. */
 export using UniqueScene = std::unique_ptr<const Scene>;
 
+/** @brief A structure representing a top-level container for a glTF asset. */
 export struct [[nodiscard]] Asset {
+  /** @brief The filename of the glTF asset. */
   std::string name;
+
+  /** @brief A list of glTF samplers. */
   std::vector<UniqueSampler> samplers;
+
+  /** @brief A list of glTF textures. */
   std::vector<UniqueTexture> textures;
+
+  /** @brief A list of glTF materials. */
   std::vector<UniqueMaterial> materials;
+
+  /** @brief A list of glTF meshes. */
   std::vector<UniqueMesh> meshes;
+
+  /** @brief A list of glTF lights. */
   std::vector<UniqueLight> lights;
+
+  /** @brief A list of glTF nodes. */
   std::vector<UniqueNode> nodes;
+
+  /** @brief A list of glTF scenes. */
   std::vector<UniqueScene> scenes;
+
+  /** @brief A non-owning pointer to the default glTF scene. */
   const Scene* default_scene = nullptr;
 };
 
+/**
+ * @brief Loads a glTF file.
+ * @details This function parses a glTF 2.0 file to create an in-memory representation of a glTF asset.
+ * @param gltf_filepath The filepath of the glTF asset to load.
+ * @param log The log for writing messages when loading a glTF file.
+ * @return An in-memory representation of a glTF asset loaded from @ref gltf_filepath.
+ * @throws std::runtime_error Thrown if the glTF asset at @ref gltf_filepath is invalid or unsupported.
+ * @see https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html glTF 2.0 Specification
+ */
 export [[nodiscard]] Asset Load(const std::filesystem::path& gltf_filepath, Log& log);
 
 }  // namespace vktf::gltf
@@ -549,18 +709,18 @@ void ValidateOptionalAttributes(const std::size_t position_count,
   (ValidateOptionalAttribute(position_count, attribute_data), ...);
 }
 
-std::optional<VertexAttributes> CreateAttributes(const std::span<const cgltf_attribute> cgltf_attributes, Log& log) {
-  using Position = VertexAttributes::Position;
+std::optional<Attributes> CreateAttributes(const std::span<const cgltf_attribute> cgltf_attributes, Log& log) {
+  using Position = Attributes::Position;
   std::optional<Position::Data> position_data;
   BoundingBox bounding_box;
 
-  using Normal = VertexAttributes::Normal;
+  using Normal = Attributes::Normal;
   std::optional<Normal::Data> normal_data;
 
-  using Tangent = VertexAttributes::Tangent;
+  using Tangent = Attributes::Tangent;
   std::optional<Tangent::Data> tangent_data;
 
-  using TexCoord0 = VertexAttributes::TexCoord0;
+  using TexCoord0 = Attributes::TexCoord0;
   std::optional<TexCoord0::Data> texcoord_0_data;
 
   for (const auto& cgltf_attribute : cgltf_attributes) {
@@ -596,16 +756,16 @@ std::optional<VertexAttributes> CreateAttributes(const std::span<const cgltf_att
     log(Severity::kError) << std::format("Unsupported primitive attribute {}", GetNameOrDefault(cgltf_attribute));
   }
 
-  return position_data.transform([&bounding_box, &normal_data, &tangent_data, &texcoord_0_data](
-                                     auto& position_data_value) {
-    const auto position_count = position_data_value.size();
-    ValidateOptionalAttributes(position_count, normal_data, tangent_data, texcoord_0_data);
+  return position_data.transform(
+      [&bounding_box, &normal_data, &tangent_data, &texcoord_0_data](auto& position_data_value) {
+        const auto position_count = position_data_value.size();
+        ValidateOptionalAttributes(position_count, normal_data, tangent_data, texcoord_0_data);
 
-    return VertexAttributes{.position = Position{.data = std::move(position_data_value), .bounding_box = bounding_box},
-                            .normal = Normal{.data = std::move(normal_data)},
-                            .tangent = Tangent{.data = std::move(tangent_data)},
-                            .texcoord_0 = TexCoord0{.data = std::move(texcoord_0_data)}};
-  });
+        return Attributes{.position = Position{.data = std::move(position_data_value), .bounding_box = bounding_box},
+                          .normal = Normal{.data = std::move(normal_data)},
+                          .tangent = Tangent{.data = std::move(tangent_data)},
+                          .texcoord_0 = TexCoord0{.data = std::move(texcoord_0_data)}};
+      });
 }
 
 template <typename T>
@@ -660,9 +820,10 @@ UniqueMesh CreateMesh(const cgltf_mesh& cgltf_mesh,
       continue;  // skip mesh primitive with missing position attribute
     }
 
-    primitives.emplace_back(std::move(*attributes),
-                            CreateIndices(cgltf_primitive.indices),  // TODO: validate index count for primitive type
-                            Get(cgltf_primitive.material, materials));
+    primitives.emplace_back(
+        std::move(*attributes),
+        CreateIndices(cgltf_primitive.indices),  // TODO: validate index count for the primitive topology
+        Get(cgltf_primitive.material, materials));
   }
 
   return primitives.empty() ? nullptr : std::make_unique<const Mesh>(GetName(cgltf_mesh), std::move(primitives));
@@ -734,23 +895,22 @@ CgltfResourceMap<cgltf_node, const Node> CreateNodes(const std::span<const cgltf
                                                      const CgltfResourceMap<cgltf_mesh, const Mesh>& meshes,
                                                      const CgltfResourceMap<cgltf_light, const Light>& lights) {
   // create nodes without establishing parent-child relationships in the node hierarchy
-  auto mutable_nodes = cgltf_nodes  //
-                       | std::views::transform([&meshes, &lights](const auto& cgltf_node) {
-                           return std::pair{&cgltf_node,
-                                            std::make_unique<Node>(GetName(cgltf_node),
-                                                                   GetLocalTransform(cgltf_node),
-                                                                   Get(cgltf_node.mesh, meshes),
-                                                                   Get(cgltf_node.light, lights))};
-                         })
-                       | std::ranges::to<std::unordered_map>();
+  auto nodes = cgltf_nodes  //
+               | std::views::transform([&meshes, &lights](const auto& cgltf_node) {
+                   return std::pair{&cgltf_node,
+                                    std::make_unique<Node>(GetName(cgltf_node),
+                                                           GetLocalTransform(cgltf_node),
+                                                           Get(cgltf_node.mesh, meshes),
+                                                           Get(cgltf_node.light, lights))};
+                 })
+               | std::ranges::to<std::unordered_map>();
 
   // assign child pointers after all nodes have been created
-  for (auto& [cgltf_node, mutable_node] : mutable_nodes) {
-    mutable_node->children = GetChildren(*cgltf_node, mutable_nodes);
+  for (auto& [cgltf_node, node] : nodes) {
+    node->children = GetChildren(*cgltf_node, nodes);
   }
 
-  // convert to const pointers after all nodes have been completely initialized
-  return mutable_nodes  //
+  return nodes  // convert to const pointers after all nodes have been completely initialized
          | std::views::transform([](auto& key_value_pair) {
              auto& [cgltf_node, mutable_node] = key_value_pair;
              return std::pair{cgltf_node, std::unique_ptr<const Node>(std::move(mutable_node))};

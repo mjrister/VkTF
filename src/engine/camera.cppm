@@ -11,24 +11,59 @@ export module camera;
 
 namespace vktf {
 
+/**
+ * @brief A quaternion-based first person camera.
+ * @details This class implements a first person camera that uses the +x-axis for the right direction, +y-axis for the
+ *          up direction, and -z-axis for the forward direction.
+ */
 export class [[nodiscard]] Camera {
 public:
+  /** @brief A structure representing view frustum properties for perspective projection. */
   struct [[nodiscard]] ViewFrustum {
+    /** @brief The vertical field of view in radians. */
     float field_of_view_y = 0.0f;
+
+    /** @brief The ratio of the view width divided by its height. */
     float aspect_ratio = 0.0f;
+
+    /** @brief The distance to the z-near plane from the camera origin. */
     float z_near = 0.0f;
+
+    /** @brief The distance to the z-far plane from the camera origin. */
     float z_far = 0.0f;
   };
 
+  /**
+   * @brief Creates a @ref Camera.
+   * @param position The camera position in world-space.
+   * @param direction The camera forward direction in world-space.
+   * @param view_frustum @copybrief Camera::ViewFrustum.
+   */
   Camera(const glm::vec3& position, const glm::vec3& direction, const ViewFrustum& view_frustum);
 
+  /** @brief Gets the camera world-space position. */
   [[nodiscard]] const glm::vec3& position() const noexcept { return position_; }
+
+  /** @brief Gets the camera world-space orientation. */
   [[nodiscard]] const glm::quat& orientation() const noexcept { return orientation_; }
 
+  /** @brief Gets the view transform matrix. */
   [[nodiscard]] const glm::mat4& view_transform() const;
+
+  /** @brief Gets the projection transform matrix. */
   [[nodiscard]] const glm::mat4& projection_transform() const;
 
+  /**
+   * @brief Translates the camera along its local coordinate axes.
+   * @param translation The translation vector defining how far to move the camera from its current position.
+   */
   void Translate(const glm::vec3& translation);
+
+  /**
+   * @brief Rotates the camera using Euler angles.
+   * @param pitch The amount to rotate the camera around its local right axis in radians.
+   * @param yaw The amount to rotate the camera around its world up axis in radians.
+   */
   void Rotate(float pitch, float yaw);
 
 private:

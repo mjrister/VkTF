@@ -16,17 +16,39 @@ export module log;
 
 namespace vktf {
 
+/**
+ * @brief A thread-safe utility for logging messages with varying severity levels based on standard output streams.
+ * @code
+ * using Log::Severity;
+ * const auto& log = Log::Default();
+ * log(Severity::kInfo) << "Hello, world";
+ * log(Severity::kInfo).Print("The answer to life, the universe, and everything is {}", 42);
+ * @endcode
+ */
 export class [[nodiscard]] Log {
   class LineProxy;
 
 public:
+  /** @brief An enumeration representing the severity of a log message. */
   enum class Severity : uint8_t { kInfo, kWarning, kError };
 
+  /**
+   * @brief Gets the default log implementation.
+   * @details The default log implementation assigns messages with severity @ref Severity::kInfo to @c std::clog and
+   *          messages with severity @ref Severity::kWarning or @ref Severity::kError to @c std::cerr.
+   * @return A reference to the default log instance.
+   */
   [[nodiscard]] static Log& Default() {
     static Log default_log{std::clog, std::cerr, std::cerr};
     return default_log;
   }
 
+  /**
+   * @brief Creates a @ref Log.
+   * @param info_ostream The output stream for messages with severity @ref Severity::kInfo.
+   * @param warning_ostream The output stream for messages with severity @ref Severity::kWarning.
+   * @param error_ostream The output stream for messages with severity @ref Severity::kError.
+   */
   Log(std::ostream& info_ostream, std::ostream& warning_ostream, std::ostream& error_ostream);
 
   Log(const Log&) = delete;
@@ -35,8 +57,18 @@ public:
   Log& operator=(const Log&) = delete;
   Log& operator=(Log&&) noexcept = delete;
 
+  /**
+   * @brief Destroys a @ref Log.
+   * @details Flushes output streams to ensure log messages are correctly written on destruction.
+   */
   ~Log() noexcept;
 
+  /**
+   * @brief Begins a new single-line log message.
+   * @param severity The log message severity.
+   * @param source_location The source code location indicating where the log message originates from.
+   * @return A thread-safe proxy for writing single-line log messages with the provided @p severity.
+   */
   [[nodiscard]] LineProxy operator()(Severity severity,
                                      const std::source_location& source_location = std::source_location::current());
 

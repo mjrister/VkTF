@@ -17,12 +17,31 @@ import log;
 
 namespace vktf::ktx {
 
+/** @brief A type alias for a @c unique_ptr that manages the lifetime of a @c ktxTexture2. */
 export using UniqueKtxTexture2 = std::unique_ptr<ktxTexture2, void (*)(ktxTexture2*) noexcept>;
 
+/**
+ * @brief Loads a Khronos Texture (KTX) 2.0 texture.
+ * @details This function supports loading KTX textures with Basis Universal supercompression which are transcoded to
+ *          the best available image format (e.g., BC7, ASTC4x4) based on physical device characteristics at runtime.
+ * @param ktx_filepath The filepath of the KTX texture to load.
+ * @param physical_device_features The physical device features for determining the best available transcode target.
+ * @param log The log for writing messages when loading a KTX texture.
+ * @return The loaded KTX texture transcoded to the best available image format if necessary.
+ * @throws std::runtime_error Thrown if the KTX texture at @p ktx_filepath fails to load or is unsupported.
+ * @see https://github.khronos.org/KTX-Software/libktx/index.html libktx
+ */
 export [[nodiscard]] UniqueKtxTexture2 Load(const std::filesystem::path& ktx_filepath,
                                             const vk::PhysicalDeviceFeatures& physical_device_features,
                                             Log& log);
 
+/**
+ * @brief Gets the buffer image copies for a KTX texture.
+ * @details This function gets image copy subregions for mipmap images in a KTX texture for use in copying data from a
+ *          host-visible buffer to a device-local image.
+ * @param ktx_texture2 The KTX texture for getting the buffer image copies.
+ * @return A vector of buffer image copies corresponding to each mipmap in the KTX texture in descending order by size.
+ */
 export [[nodiscard]] std::vector<vk::BufferImageCopy> GetBufferImageCopies(const ktxTexture2& ktx_texture2);
 
 }  // namespace vktf::ktx

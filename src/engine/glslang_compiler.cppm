@@ -17,14 +17,21 @@ module;
 export module glslang_compiler;
 
 import log;
-
 namespace vktf {
 
+/** @brief A type alias for a standard four-byte word in a SPIR-V binary. */
 export using SpirvWord = std::uint32_t;
-export constexpr std::size_t kSpirvWordSize = sizeof(SpirvWord);
 
 namespace glslang {
 
+/**
+ * @brief Compiles a GLSL shader to a SPIR-V binary.
+ * @param glsl_shader The GLSL shader source code.
+ * @param glslang_stage The GLSL shader stage (e.g., vertex, fragment).
+ * @param log The log for writing shader compilation messages.
+ * @return A vector of four-byte words representing the SPIR-V binary.
+ * @throws std::runtime_error Thrown if shader compilation fails.
+ */
 export [[nodiscard]] std::vector<SpirvWord> Compile(const std::string& glsl_shader,
                                                     glslang_stage_t glslang_stage,
                                                     Log& log);

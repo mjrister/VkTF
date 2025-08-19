@@ -14,18 +14,41 @@ import vma_allocator;
 
 namespace vktf {
 
+/**
+ * @brief An abstraction for a Vulkan image.
+ * @see https://registry.khronos.org/vulkan/specs/latest/man/html/VkImage.html VkImage
+ */
 export class [[nodiscard]] Image {
 public:
+  /** @brief The parameters for creating a @ref Image. */
   struct [[nodiscard]] CreateInfo {
+    /** @brief The image format (e.g., BC7, ASTC4x4). */
     vk::Format format = vk::Format::eUndefined;
+
+    /** @brief The image dimensions. */
     vk::Extent2D extent;
+
+    /** @brief The number of levels of detail available for mipmap image sampling. */
     std::uint32_t mip_levels = 0;
+
+    /** @brief The number of samples for multisample antialiasing. */
     vk::SampleCountFlagBits sample_count = vk::SampleCountFlagBits::e1;
+
+    /** @brief The bit flags specifying how the image will be used. */
     vk::ImageUsageFlags usage_flags;
+
+    /** @brief The bit flags specifying the image view aspect mask.  */
     vk::ImageAspectFlagBits aspect_mask = vk::ImageAspectFlagBits::eNone;
+
+    /** @brief The parameters for allocating image memory. */
     const VmaAllocationCreateInfo& allocation_create_info;
   };
 
+  /**
+   * @brief Creates a @ref Image.
+   * @param allocator The allocator for creating the image.
+   * @param create_info @copybrief Image::CreateInfo
+   */
   Image(const vma::Allocator& allocator, const CreateInfo& create_info);
 
   Image(const Image&) = delete;
@@ -34,11 +57,22 @@ public:
   Image& operator=(const Image&) = delete;
   Image& operator=(Image&& image) noexcept;
 
+  /** @brief Frees the underlying memory and destroys the image. */
   ~Image() noexcept;
 
+  /** @brief Gets the image view. */
   [[nodiscard]] vk::ImageView image_view() const noexcept { return *image_view_; }
+
+  /** @brief Gets the image format. */
   [[nodiscard]] vk::Format format() const noexcept { return format_; }
 
+  /**
+   * @brief Records copy commands to transfer data to this image.
+   * @param src_buffer The source buffer to copy data from.
+   * @param buffer_image_copies The subregions to copy corresponding to each mipmap in @p src_buffer.
+   * @param command_buffer The command buffer for recording copy commands.
+   * @warning The caller is responsible for submitting @p command_buffer to a Vulkan queue to begin execution.
+   */
   void Copy(vk::Buffer src_buffer,
             const std::vector<vk::BufferImageCopy>& buffer_image_copies,
             vk::CommandBuffer command_buffer);

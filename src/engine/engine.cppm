@@ -39,13 +39,40 @@ namespace vktf {
 
 constexpr std::size_t kMaxRenderFrames = 2;
 
+/**
+ * @brief The core graphics engine that orchestrates Vulkan initialization and rendering.
+ * @details This class handles Vulkan initialization and defines the primary APIs for loading and rendering glTF scenes.
+ * @code
+ * const vktf::Window window{"VkTF"};
+ * vktf::Engine engine{window};
+ * if (auto maybe_scene = engine.Load({"path/to/asset0.gltf", "path/to/asset1.gltf"})) {
+ *   engine.Run(window, [&, scene = std::move(*maybe_scene)](const auto delta_time) mutable {
+ *     HandleInputEvents(window, scene, delta_time);
+ *     engine.Render(scene);
+ *   });
+ * }
+ * @endcode
+ */
 export class [[nodiscard]] Engine {
 public:
+  /**
+   * @brief Creates a @ref Engine.
+   * @details This function initializes a Vulkan application and creates resources needed for frame-in-flight rendering.
+   * @param window The application window for creating a swapchain surface.
+   */
   explicit Engine(const Window& window);
 
-  [[nodiscard]] std::optional<Scene> Load(const std::span<const std::filesystem::path> asset_filepaths,
-                                          Log& log = Log::Default());
-
+  /**
+   * @brief Begins the main application loop.
+   * @details This function enters a blocking loop that continues until the window closes. At each iteration, it updates
+   *          the delta time, polls the window for input events, and invokes a provided callback to allow an application
+   *          to handle events and render a scene on a per-frame basis.
+   * @tparam Fn The callable function type for @p main_loop.
+   * @param window The application window for processing input events.
+   * @param main_loop The main application loop that will be invoked once per frame.
+   * @note This function does not perform rendering. The caller is therefore expected to invoke @ref Engine::Render in
+   *       the @p main_loop callback.
+   */
   template <std::invocable<DeltaTime> Fn>
   void Run(const Window& window, Fn&& main_loop) const {
     for (DeltaTime delta_time; !window.IsClosed();) {
@@ -56,6 +83,25 @@ public:
     device_->waitIdle();
   }
 
+  /**
+   * @brief Loads multiple glTF assets into a combined scene for rendering.
+   * @details This function executes the entire asset loading pipeline including reading glTF files from disk, copying
+   *          meshes, materials, and textures to device-local memory, initializing frame-dependent uniform buffers for
+   *          global resources, and constructing a combined scene graph for all supported models in the scene.
+   * @param gltf_filepaths The glTF asset filepaths to load.
+   * @param log The log for writing messages when creating a scene.
+   * @return A scene containing all supported glTF assets or @c std::nullopt if none could be loaded.
+   */
+  [[nodiscard]] std::optional<Scene> Load(const std::span<const std::filesystem::path> gltf_filepaths,
+                                          Log& log = Log::Default());
+
+  /**
+   * @brief Renders a scene for the current frame.
+   * @details This function executes the entire graphics rendering pipeline for the current frame including recording
+   *          draw commands for each visible mesh in the scene, synchronizing command buffer submission to the graphics
+   *          queue, and presenting the results to the next available swapchain image.
+   * @param scene The scene to render for the current frame.
+   */
   void Render(Scene& scene);
 
 private:
@@ -349,7 +395,7 @@ void UpdateGlobalDescriptorSets(const vk::Device device,
 Engine::Engine(const Window& window)
     : instance_{Instance::CreateInfo{.application_info = vk::ApplicationInfo{.apiVersion = kVulkanApiVersion},
                                      .required_layers = kRequiredInstanceLayers,
-                                     .required_extensions = Window::GetInstanceExtensions()}},
+                                     .required_extensions = Window::GetRequiredInstanceExtensions()}},
       surface_{window.CreateSurface(*instance_)},
       physical_device_{
           *instance_,
@@ -410,11 +456,11 @@ Engine::Engine(const Window& window)
       global_descriptor_set_layout_{CreateGlobalDescriptorSetLayout(*device_)},
       global_descriptor_pool_{CreateGlobalDescriptorPool(*device_, *global_descriptor_set_layout_)} {}
 
-std::optional<Scene> Engine::Load(const std::span<const std::filesystem::path> asset_filepaths, Log& log) {
+std::optional<Scene> Engine::Load(const std::span<const std::filesystem::path> gltf_filepaths, Log& log) {
   using Severity = Log::Severity;
 
   const auto gltf_assets =
-      asset_filepaths  //
+      gltf_filepaths  //
       | std::views::filter([&log](const auto& asset_filepath) {
           if (const auto extension = asset_filepath.extension(); extension != ".gltf") {
             log(Severity::kError) << std::format("Failed to load asset {} with unsupported file extension",
@@ -491,8 +537,7 @@ void Engine::Render(Scene& scene) {
   scene.Update(camera_uniform_buffer, lights_uniform_buffer);
 
   const auto& global_descriptor_sets = global_descriptor_pool_.descriptor_sets();
-  const auto global_descriptor_set = global_descriptor_sets[current_frame_index_];
-  scene.Render(command_buffer, global_descriptor_set);
+  scene.Render(command_buffer, global_descriptor_sets[current_frame_index_]);
 
   command_buffer.endRenderPass();
   command_buffer.end();
