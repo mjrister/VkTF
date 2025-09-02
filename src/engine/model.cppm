@@ -554,9 +554,10 @@ UniqueMesh CreateMesh(const vma::Allocator& allocator,
     const auto& material = Get(gltf_primitive.material, materials);
     assert(material != nullptr);  // guaranteed by staging primitive construction
 
-    primitives.emplace_back(allocator,
-                            command_buffer,
-                            Primitive::CreateInfo{.staging_primitive = *staging_primitive, .material = material.get()});
+    primitives.emplace_back(
+        allocator,
+        command_buffer,
+        Primitive::CreateInfo{.staging_primitive = *staging_primitive, .descriptor_set = material->descriptor_set()});
   }
 
   return primitives.empty() ? nullptr : std::make_unique<Mesh>(std::move(primitives), bounding_box);
@@ -688,15 +689,10 @@ void Render(const Mesh& mesh,
                                                model_transform);
 
   for (const auto& primitive : mesh.primitives()) {
-    if (const auto* const material = primitive.material(); material != nullptr) {
-      // TODO: avoid per-primitive material descriptor set binding
-      command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                                        pipeline_layout,
-                                        1,
-                                        material->descriptor_set(),
-                                        nullptr);
-      primitive.Render(command_buffer);
-    }
+    // TODO: avoid per-primitive material descriptor set binding
+    const auto descriptor_set = primitive.descriptor_set();
+    command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout, 1, descriptor_set, nullptr);
+    primitive.Render(command_buffer);
   }
 }
 

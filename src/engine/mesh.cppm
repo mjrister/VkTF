@@ -13,7 +13,6 @@ export module mesh;
 import bounding_box;
 import buffer;
 import data_view;
-import material;
 import vma_allocator;
 
 namespace vktf {
@@ -68,17 +67,15 @@ private:
 };
 
 export class [[nodiscard]] Primitive {
-  using Material = pbr_metallic_roughness::Material;
-
 public:
   struct [[nodiscard]] CreateInfo {
     const StagingPrimitive& staging_primitive;
-    const Material* material = nullptr;
+    vk::DescriptorSet descriptor_set;
   };
 
   Primitive(const vma::Allocator& allocator, vk::CommandBuffer command_buffer, const CreateInfo& create_info);
 
-  [[nodiscard]] const Material* material() const noexcept { return material_; }
+  [[nodiscard]] vk::DescriptorSet descriptor_set() const noexcept { return descriptor_set_; }
 
   void Render(const vk::CommandBuffer command_buffer) const {
     command_buffer.bindVertexBuffers(0, *vertex_buffer_, static_cast<vk::DeviceSize>(0));
@@ -91,7 +88,7 @@ private:
   Buffer index_buffer_;
   vk::IndexType index_type_;
   std::uint32_t index_count_;
-  const Material* material_;
+  vk::DescriptorSet descriptor_set_;
 };
 
 export class Mesh {
@@ -125,7 +122,7 @@ Primitive::Primitive(const vma::Allocator& allocator,
                                             vk::BufferUsageFlagBits::eIndexBuffer)},
       index_type_{create_info.staging_primitive.index_type()},
       index_count_{create_info.staging_primitive.index_count()},
-      material_{create_info.material} {}
+      descriptor_set_{create_info.descriptor_set} {}
 
 Mesh::Mesh(std::vector<Primitive> primitives, const BoundingBox& bounding_box)
     : primitives_{std::move(primitives)}, bounding_box_{bounding_box} {}
