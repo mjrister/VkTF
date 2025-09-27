@@ -5,6 +5,7 @@ module;
 #include <limits>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <stdexcept>
 #include <unordered_set>
 #include <vector>
@@ -32,7 +33,7 @@ public:
     vk::SurfaceKHR surface;
 
     /** @brief The device extensions required by the application. */
-    const std::vector<const char*>& required_extensions;
+    std::span<const char* const> required_extensions;
   };
 
   /**
@@ -81,7 +82,7 @@ struct RankedPhysicalDevice {
 namespace {
 
 bool HasRequiredExtensions(const vk::PhysicalDevice physical_device,
-                           const std::vector<const char*>& required_extensions) {
+                           const std::span<const char* const> required_extensions) {
   const auto device_extension_properties = physical_device.enumerateDeviceExtensionProperties();
   const auto device_extensions = device_extension_properties
                                  | std::views::transform([](const auto& extension_properties) -> std::string_view {
@@ -124,7 +125,7 @@ std::optional<QueueFamilies> FindQueueFamilies(const vk::PhysicalDevice physical
 
 RankedPhysicalDevice GetRankedPhysicalDevice(const vk::PhysicalDevice physical_device,
                                              const vk::SurfaceKHR surface,
-                                             const std::vector<const char*>& required_extensions) {
+                                             const std::span<const char* const> required_extensions) {
   static const RankedPhysicalDevice kInvalidPhysicalDevice{.rank = RankedPhysicalDevice::kInvalidRank};
   if (!HasRequiredExtensions(physical_device, required_extensions)) return kInvalidPhysicalDevice;
 
@@ -142,7 +143,7 @@ RankedPhysicalDevice GetRankedPhysicalDevice(const vk::PhysicalDevice physical_d
 
 RankedPhysicalDevice SelectPhysicalDevice(const vk::Instance instance,
                                           const vk::SurfaceKHR surface,
-                                          const std::vector<const char*>& required_extensions) {
+                                          const std::span<const char* const> required_extensions) {
   const auto ranked_physical_devices =
       instance.enumeratePhysicalDevices()
       | std::views::transform([surface, required_extensions](const auto physical_device) {

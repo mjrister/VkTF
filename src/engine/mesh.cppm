@@ -2,6 +2,7 @@ module;
 
 #include <concepts>
 #include <cstdint>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -70,10 +71,10 @@ public:
   template <IndexType T>
   struct [[nodiscard]] CreateInfo {
     /** @brief The primitive vertices. */
-    const std::vector<Vertex>& vertices;
+    std::span<const Vertex> vertices;
 
     /** @brief The primitive indices. */
-    const std::vector<T>& indices;
+    std::span<const T> indices;
   };
 
   /**

@@ -2,6 +2,7 @@ module;
 
 #include <cstdint>
 #include <ranges>
+#include <span>
 #include <unordered_set>
 #include <vector>
 
@@ -30,7 +31,7 @@ public:
      * @brief The device extensions to enable for the application.
      * @warning These extensions are assumed to be validated by @ref PhysicalDevice::CreateInfo::required_extensions.
      */
-    const std::vector<const char*>& enabled_extensions;
+    std::span<const char* const> enabled_extensions;
 
     /**
      * @brief The device features to enable for the application.
