@@ -93,7 +93,7 @@ TEST_F(CameraTest, HasCorrectInitialProjectionTransform) {
 }
 
 TEST(CameraDeathTest, AssertsWhenCameraDirectionIsZeroVector) {
-  EXPECT_DEBUG_DEATH({ (std::ignore = vktf::Camera{kPosition, kZeroVector, kViewFrustum}); }, "");
+  EXPECT_DEBUG_DEATH((std::ignore = vktf::Camera{kPosition, kZeroVector, kViewFrustum}), "");
 }
 
 // =====================================================================================================================

@@ -1,5 +1,6 @@
 module;
 
+#include <cassert>
 #include <concepts>
 #include <cstddef>
 #include <ranges>
@@ -29,6 +30,9 @@ concept DataRange = std::ranges::contiguous_range<R> && std::ranges::sized_range
 export template <typename T>
 class [[nodiscard]] DataView {
 public:
+  /** @brief Creates an empty @ref DataView. */
+  constexpr DataView() noexcept = default;
+
   /**
    * @brief Creates a @ref DataView.
    * @param data The single element to create a view from.
@@ -41,7 +45,9 @@ public:
    * @param size The number of elements in @p data.
    * @warning The caller is responsible for ensuring @p data is a valid pointer with at least @p size elements.
    */
-  constexpr DataView(const T* const data, const std::size_t size) noexcept : data_{data}, size_{size} {}
+  constexpr DataView(const T* const data, const std::size_t size) noexcept : data_{data}, size_{size} {
+    assert(data != nullptr || size == 0);
+  }
 
   /**
    * @brief Creates a @ref DataView.
@@ -60,8 +66,8 @@ public:
   [[nodiscard]] constexpr std::size_t size_bytes() const noexcept { return sizeof(T) * size_; }
 
 private:
-  const T* data_;
-  std::size_t size_;
+  const T* data_ = nullptr;
+  std::size_t size_ = 0;
 };
 
 template <typename T>

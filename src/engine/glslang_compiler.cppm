@@ -17,6 +17,7 @@ module;
 export module glslang_compiler;
 
 import log;
+
 namespace vktf {
 
 /** @brief A type alias for a standard four-byte word in a SPIR-V binary. */
