@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.31)
-project(VkTF VERSION 0.1.1 LANGUAGES CXX)
+project(VkTF VERSION 0.2.0 LANGUAGES CXX)
 
 # Defining CMAKE_CXX_FLAGS and CMAKE_EXE_LINKER_FLAGS in CMake presets will overwrite default values provided by CMake.
 # To prevent this, compile and link options for a preset are defined in cache/environment variables and applied here.
