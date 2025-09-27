@@ -3,10 +3,10 @@ module;
 #include <cstdint>
 #include <format>
 #include <ranges>
+#include <span>
 #include <stdexcept>
 #include <string_view>
 #include <unordered_set>
-#include <vector>
 
 #include <vulkan/vulkan.hpp>
 
@@ -28,10 +28,10 @@ public:
     const vk::ApplicationInfo& application_info;
 
     /** @brief The instance layers required by the application. */
-    const std::vector<const char*>& required_layers;
+    std::span<const char* const> required_layers;
 
     /** @brief The instance extensions required by the application. */
-    const std::vector<const char*>& required_extensions;
+    std::span<const char* const> required_extensions;
   };
 
   /**
@@ -56,7 +56,7 @@ namespace vktf {
 
 namespace {
 
-void ValidateInstanceLayers(const std::vector<const char*>& required_layers) {
+void ValidateInstanceLayers(const std::span<const char* const> required_layers) {
   const auto instance_layer_properties = vk::enumerateInstanceLayerProperties();
   const auto instance_layers = instance_layer_properties
                                | std::views::transform([](const auto& layer_properties) -> std::string_view {
@@ -71,7 +71,7 @@ void ValidateInstanceLayers(const std::vector<const char*>& required_layers) {
   }
 }
 
-void ValidateInstanceExtensions(const std::vector<const char*>& required_extensions) {
+void ValidateInstanceExtensions(const std::span<const char* const> required_extensions) {
   const auto instance_extension_properties = vk::enumerateInstanceExtensionProperties();
   const auto instance_extensions = instance_extension_properties
                                    | std::views::transform([](const auto& extension_properties) -> std::string_view {

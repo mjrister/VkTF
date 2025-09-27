@@ -1,6 +1,7 @@
 module;
 
 #include <cstdint>
+#include <span>
 #include <vector>
 
 #include <vulkan/vulkan.hpp>
@@ -19,7 +20,7 @@ public:
   /** @brief The parameters for creating a @ref DescriptorPool. */
   struct [[nodiscard]] CreateInfo {
     /** @brief The descriptor pool sizes indicating the number of descriptors to allocate for each descriptor type. */
-    const std::vector<vk::DescriptorPoolSize>& descriptor_pool_sizes;
+    std::span<const vk::DescriptorPoolSize> descriptor_pool_sizes;
 
     /** @brief The fixed descriptor set layout for allocated descriptor sets. */
     vk::DescriptorSetLayout descriptor_set_layout;

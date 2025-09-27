@@ -33,7 +33,7 @@ public:
     const std::filesystem::path& shader_filepath;
 
     /** @brief The stage the shader module will be used for. */
-    const vk::ShaderStageFlagBits shader_stage{};
+    vk::ShaderStageFlagBits shader_stage{};
 
     /** @brief The log for writing messages when creating a shader module. */
     Log& log;

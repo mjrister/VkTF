@@ -7,6 +7,7 @@ module;
 #include <limits>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -64,7 +65,7 @@ public:
   /** @brief The parameters for creating a @ref Scene. */
   struct [[nodiscard]] CreateInfo {
     /** @brief The glTF assets to load. */
-    const std::vector<gltf::Asset>& gltf_assets;
+    std::span<const gltf::Asset> gltf_assets;
 
     /** @brief The queue for submitting command buffers that require transfer capabilities. */
     const Queue& transfer_queue;
@@ -173,7 +174,7 @@ Camera CreateCamera(const vk::Extent2D viewport_extent) {
 
 using WorldLight = Scene::WorldLight;
 
-std::uint32_t GetLightCount(const std::vector<gltf::Asset>& gltf_assets) {
+std::uint32_t GetLightCount(const std::span<const gltf::Asset> gltf_assets) {
   return std::ranges::fold_left(gltf_assets, 0u, [](const auto& light_count, const auto& gltf_asset) {
     return light_count + static_cast<std::uint32_t>(gltf_asset.lights.size());
   });
@@ -210,7 +211,7 @@ void EmplaceWorldLight(const Model::Node& node, std::vector<WorldLight>& world_l
 using StagingModelPair = std::pair<const gltf::Asset*, StagingModel>;
 
 std::vector<StagingModelPair> CreateStagingModels(const vma::Allocator& allocator,
-                                                  const std::vector<gltf::Asset>& gltf_assets,
+                                                  const std::span<const gltf::Asset> gltf_assets,
                                                   const vk::PhysicalDeviceFeatures& physical_device_features,
                                                   Log& log) {
   return gltf_assets  //
