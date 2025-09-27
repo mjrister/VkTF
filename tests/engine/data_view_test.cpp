@@ -9,6 +9,14 @@ namespace {
 
 using DataType = float;
 
+TEST(DataViewTest, IsDefaultConstructible) {
+  static constexpr vktf::DataView<int> kDataView;
+
+  static_assert(nullptr == kDataView.data());
+  static_assert(0 == kDataView.size());
+  static_assert(0 == kDataView.size_bytes());
+}
+
 TEST(DataViewTest, IsConstructibleFromSingleValue) {
   static constexpr auto kData = std::numbers::pi_v<DataType>;
   static constexpr vktf::DataView kDataView{kData};
@@ -47,6 +55,10 @@ TEST(DataViewTest, IsConstructibleFromDataRange) {
   static_assert(kData.data() == kDataView.data());
   static_assert(kData.size() == kDataView.size());
   static_assert(sizeof(DataType) * kData.size() == kDataView.size_bytes());
+}
+
+TEST(DataViewDeathTest, AssertsWhenCreatedWithNullPointerAndNonZeroSize) {
+  EXPECT_DEBUG_DEATH((std::ignore = vktf::DataView<int>{nullptr, 1}), "");
 }
 
 }  // namespace
