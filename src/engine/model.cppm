@@ -717,7 +717,7 @@ GltfResourceMap<gltf::Node, UniqueNode> CreateNodes(const std::vector<gltf::Uniq
       gltf_nodes  //
       | std::views::transform([&meshes, &lights](const auto& gltf_node) {
           assert(gltf_node != nullptr);  // guaranteed by glTF asset construction
-          const auto& [name, local_transform, gltf_mesh, gltf_light, _] = *gltf_node;
+          const auto& [name, local_transform, gltf_mesh, gltf_light, gltf_cameras, children] = *gltf_node;
           const auto& mesh = Get(gltf_mesh, meshes);
           const auto& light = Get(gltf_light, lights);
           return std::pair{gltf_node.get(),

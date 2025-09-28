@@ -239,6 +239,16 @@ export struct [[nodiscard]] Light {
 /** @brief A type alias for a @c unique_ptr that manages the lifetime of a @ref Light. */
 export using UniqueLight = std::unique_ptr<const Light>;
 
+export struct Camera {
+  std::optional<std::string> name;
+  std::optional<float> aspect_ratio;
+  float field_of_view_y = 0.0f;
+  float z_near = 0.0f;
+  std::optional<float> z_far;
+};
+
+export using UniqueCamera = std::unique_ptr<const Camera>;
+
 /** @brief A structure representing glTF node properties. */
 export struct [[nodiscard]] Node {
   /** @brief The user-defined name for the node. */
@@ -252,6 +262,8 @@ export struct [[nodiscard]] Node {
 
   /** @brief The non-owning pointer to the node light. */
   const Light* light = nullptr;
+
+  const Camera* camera = nullptr;
 
   /** @brief A list of non-owning pointers to the node children. */
   std::vector<const Node*> children;
@@ -291,6 +303,8 @@ export struct [[nodiscard]] Asset {
 
   /** @brief A list of glTF lights. */
   std::vector<UniqueLight> lights;
+
+  std::vector<UniqueCamera> cameras;
 
   /** @brief A list of glTF nodes. */
   std::vector<UniqueNode> nodes;
@@ -395,6 +409,29 @@ private:
        CASE(cgltf_light_type_point)
        CASE(cgltf_light_type_spot)
        CASE(cgltf_light_type_max_enum)
+ #undef CASE
+      // clang-format on
+      default:
+        std::unreachable();
+    }
+  }
+};
+
+template <>
+struct std::formatter<cgltf_camera_type> : std::formatter<std::string_view> {
+  [[nodiscard]] auto format(const cgltf_camera_type cgltf_camera_type, auto& format_context) const {
+    return std::formatter<std::string_view>::format(to_string(cgltf_camera_type), format_context);
+  }
+
+private:
+  static std::string_view to_string(const cgltf_camera_type cgltf_camera_type) noexcept {
+    switch (cgltf_camera_type) {
+      // clang-format off
+ #define CASE(kValue) case kValue: return #kValue;  // NOLINT(cppcoreguidelines-macro-usage)
+       CASE(cgltf_camera_type_invalid)
+       CASE(cgltf_camera_type_perspective)
+       CASE(cgltf_camera_type_orthographic)
+       CASE(cgltf_camera_type_max_enum)
  #undef CASE
       // clang-format on
       default:
@@ -872,6 +909,36 @@ CgltfResourceMap<cgltf_light, const Light> CreateLights(const std::span<const cg
 }
 
 // =====================================================================================================================
+// Cameras
+// =====================================================================================================================
+
+UniqueCamera CreateCamera(const cgltf_camera& cgltf_camera, Log& log) {
+  switch (cgltf_camera.type) {
+    case cgltf_camera_type_perspective: {
+      const auto& [has_aspect_ratio, aspect_ratio, yfov, has_zfar, zfar, znear, _] = cgltf_camera.data.perspective;
+      return std::make_unique<const Camera>(GetName(cgltf_camera),
+                                            has_aspect_ratio != 0 ? std::optional{aspect_ratio} : std::nullopt,
+                                            yfov,
+                                            znear,
+                                            has_zfar != 0 ? std::optional{zfar} : std::nullopt);
+    }
+    default:
+      log(Severity::kError) << std::format("Failed to create camera {} with unsupported type {}",
+                                           GetNameOrDefault(cgltf_camera),
+                                           cgltf_camera.type);
+      return nullptr;  // TODO: add support for other camera types
+  }
+}
+
+CgltfResourceMap<cgltf_camera, const Camera> CreateCameras(const std::span<const cgltf_camera>& cgltf_cameras,
+                                                           Log& log) {
+  return cgltf_cameras  //
+         | std::views::transform(
+             [&log](const auto& cgltf_camera) { return std::pair{&cgltf_camera, CreateCamera(cgltf_camera, log)}; })
+         | std::ranges::to<std::unordered_map>();
+}
+
+// =====================================================================================================================
 // Nodes
 // =====================================================================================================================
 
@@ -893,15 +960,17 @@ std::vector<const Node*> GetChildren(const cgltf_node& cgltf_parent_node,
 
 CgltfResourceMap<cgltf_node, const Node> CreateNodes(const std::span<const cgltf_node> cgltf_nodes,
                                                      const CgltfResourceMap<cgltf_mesh, const Mesh>& meshes,
-                                                     const CgltfResourceMap<cgltf_light, const Light>& lights) {
+                                                     const CgltfResourceMap<cgltf_light, const Light>& lights,
+                                                     const CgltfResourceMap<cgltf_camera, const Camera>& cameras) {
   // create nodes without establishing parent-child relationships in the node hierarchy
   auto nodes = cgltf_nodes  //
-               | std::views::transform([&meshes, &lights](const auto& cgltf_node) {
+               | std::views::transform([&meshes, &lights, &cameras](const auto& cgltf_node) {
                    return std::pair{&cgltf_node,
                                     std::make_unique<Node>(GetName(cgltf_node),
                                                            GetLocalTransform(cgltf_node),
                                                            Get(cgltf_node.mesh, meshes),
-                                                           Get(cgltf_node.light, lights))};
+                                                           Get(cgltf_node.light, lights),
+                                                           Get(cgltf_node.camera, cameras))};
                  })
                | std::ranges::to<std::unordered_map>();
 
@@ -962,8 +1031,11 @@ Asset Load(const std::filesystem::path& gltf_filepath, Log& log) {
   const std::span cgltf_lights{cgltf_data->lights, cgltf_data->lights_count};
   auto lights = CreateLights(cgltf_lights, log);
 
+  const std::span cgltf_cameras{cgltf_data->cameras, cgltf_data->cameras_count};
+  auto cameras = CreateCameras(cgltf_cameras, log);
+
   const std::span cgltf_nodes{cgltf_data->nodes, cgltf_data->nodes_count};
-  auto nodes = CreateNodes(cgltf_nodes, meshes, lights);
+  auto nodes = CreateNodes(cgltf_nodes, meshes, lights, cameras);
 
   const std::span cgltf_scenes{cgltf_data->scenes, cgltf_data->scenes_count};
   auto scenes = CreateScenes(cgltf_scenes, nodes);
