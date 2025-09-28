@@ -1,9 +1,12 @@
 module;
 
+#include <concepts>
 #include <cstdint>
 #include <format>
+#include <functional>
 #include <memory>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include <GLFW/glfw3.h>
@@ -30,6 +33,17 @@ public:
    * @throws std::runtime_error Thrown if GLFW initialization fails.
    */
   explicit Window(const char* title);
+
+  /**
+   * @brief Registers an event listener to handle keyboard input events.
+   * @tparam KeyEventListener The callable function type for @p key_event_listener that accepts a GLFW key
+   *                          (e.g., GLFW_KEY_ESCAPE) and action (e.g., GLFW_PRESS) as arguments.
+   * @param key_event_listener The key event listener to register.
+   */
+  template <std::invocable<int, int> KeyEventListener>
+  void AddKeyEventListener(KeyEventListener&& key_event_listener) {
+    key_event_listeners_.emplace_back(std::forward<KeyEventListener>(key_event_listener));
+  }
 
   /**
    * @brief Gets the size of the framebuffer in pixels.
@@ -88,7 +102,10 @@ public:
   [[nodiscard]] vk::UniqueSurfaceKHR CreateSurface(vk::Instance instance) const;
 
 private:
+  using KeyEventListener = std::function<void(int key, int action)>;
+
   UniqueGlfwWindow glfw_window_;
+  std::vector<KeyEventListener> key_event_listeners_;
 };
 
 }  // namespace vktf
@@ -147,12 +164,26 @@ UniqueGlfwWindow CreateGlfwWindow(const char* const title) {
   if (glfw_window == nullptr) {
     throw std::runtime_error{"GLFW window creation failed"};
   }
+
   return glfw_window;
 }
 
 }  // namespace
 
-Window::Window(const char* const title) : glfw_window_{CreateGlfwWindow(title)} {}
+Window::Window(const char* const title) : glfw_window_{CreateGlfwWindow(title)} {
+  glfwSetWindowUserPointer(glfw_window_.get(), this);
+
+  static constexpr auto kGlfwKeyCallback =
+      [](auto* glfw_window, const auto key, const auto /*scancode*/, const auto action, const auto /*modifiers*/) {
+        const auto* const window = static_cast<const Window*>(glfwGetWindowUserPointer(glfw_window));
+        assert(window != nullptr);  // the window user pointer is guaranteed to be set
+
+        for (const auto& key_event_handler : window->key_event_listeners_) {
+          key_event_handler(key, action);
+        }
+      };
+  glfwSetKeyCallback(glfw_window_.get(), kGlfwKeyCallback);
+}
 
 vk::Extent2D Window::GetFramebufferExtent() const noexcept {
   auto width = 0;

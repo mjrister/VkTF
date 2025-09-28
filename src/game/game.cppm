@@ -33,12 +33,26 @@ module :private;
 
 namespace {
 
-void HandleKeyEvents(const vktf::Window& window, vktf::Camera& camera, const vktf::DeltaTime delta_time) {
-  if (window.IsKeyPressed(GLFW_KEY_ESCAPE)) {
-    window.Close();
-    return;
-  }
+vktf::Window CreateWindow() {
+  static constexpr auto* kProjectTitle = "VkTF";
+  vktf::Window window{kProjectTitle};
 
+  window.AddKeyEventListener([&window](const auto key, const auto action) {
+    switch (key) {
+      case GLFW_KEY_ESCAPE:
+        if (action == GLFW_PRESS) {
+          window.Close();
+        }
+        break;
+      default:
+        break;
+    }
+  });
+
+  return window;
+}
+
+void HandleKeyEvents(const vktf::Window& window, vktf::Camera& camera, const vktf::DeltaTime delta_time) {
   static constexpr auto kTranslateSpeed = 6.0f;
   const auto translation_step = kTranslateSpeed * delta_time.get();
   camera.Translate(glm::vec3{translation_step * (window.IsKeyPressed(GLFW_KEY_D) - window.IsKeyPressed(GLFW_KEY_A)),
@@ -48,7 +62,6 @@ void HandleKeyEvents(const vktf::Window& window, vktf::Camera& camera, const vkt
 
 void HandleMouseEvents(const vktf::Window& window, vktf::Camera& camera) {
   static std::optional<glm::vec2> prev_left_click_position;
-
   if (!window.IsMouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT)) {
     prev_left_click_position = std::nullopt;
     return;
@@ -79,8 +92,7 @@ vktf::Scene LoadScene(vktf::Engine& engine) {
 namespace game {
 
 void Start() {
-  static constexpr auto* kWindowTitle = "VkTF";
-  const vktf::Window window{kWindowTitle};
+  const auto window = CreateWindow();
   vktf::Engine engine{window};
 
   engine.Run(window, [&window, &engine, scene = LoadScene(engine)](const auto delta_time) mutable {
