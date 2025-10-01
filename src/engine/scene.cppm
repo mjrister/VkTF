@@ -106,7 +106,16 @@ public:
   Scene(const vma::Allocator& allocator, const CreateInfo& create_info);
 
   /** @brief Gets the active camera in the scene. */
-  [[nodiscard]] auto& camera(this auto& self) noexcept { return self.camera_; }
+  [[nodiscard]] auto& camera(this auto& self) noexcept {
+    assert(self.active_camera_index_ < self.world_cameras_.size());
+    return self.world_cameras_[self.active_camera_index_];
+  }
+
+  void set_active_camera(const std::size_t camera_index) noexcept {
+    if (camera_index < world_cameras_.size()) {
+      active_camera_index_ = camera_index;
+    }
+  }
 
   /** @brief Gets the number of lights in the scene. */
   [[nodiscard]] std::uint32_t light_count() const noexcept { return light_count_; }
@@ -131,7 +140,8 @@ public:
   void Render(vk::CommandBuffer command_buffer, vk::DescriptorSet global_descriptor_set) const;
 
 private:
-  Camera camera_;
+  std::vector<Camera> world_cameras_;
+  std::size_t active_camera_index_ = 0;
   std::uint32_t light_count_;
   std::vector<Model> models_;
   vk::UniqueDescriptorSetLayout material_descriptor_set_layout_;  // TODO: avoid fixed material descriptor set layout
@@ -156,16 +166,79 @@ float GetAspectRatio(const vk::Extent2D viewport_extent) {
   return height == 0 ? 0.0f : static_cast<float>(width) / static_cast<float>(height);
 }
 
-Camera CreateCamera(const vk::Extent2D viewport_extent) {
+Camera CreateDefaultCamera(const vk::Extent2D viewport_extent) {
   static constexpr glm::vec3 kPosition{0.0f, 1.0f, 0.0f};
   static constexpr glm::vec3 kDirection{1.0f, 0.0f, 0.0f};
 
   return Camera{kPosition,
                 kDirection,
-                Camera::ViewFrustum{.field_of_view_y = glm::radians(45.0f),
-                                    .aspect_ratio = GetAspectRatio(viewport_extent),
+                Camera::ViewFrustum{.aspect_ratio = GetAspectRatio(viewport_extent),
+                                    .field_of_view_y = glm::radians(45.0f),
                                     .z_near = 0.1f,
                                     .z_far = 1.0e6f}};
+}
+
+void EmplaceWorldCameras(const gltf::Node& gltf_node,
+                         const glm::mat4& parent_transform,
+                         const vk::Extent2D viewport_extent,
+                         std::vector<Camera>& world_cameras) {
+  const auto global_transform = parent_transform * gltf_node.local_transform;
+
+  if (gltf_node.camera != nullptr) {
+    const auto& [_, aspect_ratio, field_of_view_y, z_near, z_far] = *gltf_node.camera;
+    const auto& world_position = global_transform[3];
+    const auto& world_direction = -global_transform[2];
+
+    world_cameras.emplace_back(
+        world_position,
+        world_direction,
+        Camera::ViewFrustum{.aspect_ratio = aspect_ratio.value_or(GetAspectRatio(viewport_extent)),
+                            .field_of_view_y = field_of_view_y,
+                            .z_near = z_near,
+                            .z_far = z_far});
+  }
+
+  for (const auto& child_node : gltf_node.children) {
+    assert(child_node != nullptr);  // guaranteed by glTF node construction
+    EmplaceWorldCameras(*child_node, global_transform, viewport_extent, world_cameras);
+  }
+}
+
+const gltf::Scene* GetDefaultGltfScene(const gltf::Asset& gltf_asset) {
+  if (const auto& default_scene = gltf_asset.default_scene; default_scene != nullptr) {
+    return default_scene;
+  }
+  if (const auto& gltf_scenes = gltf_asset.scenes; !gltf_scenes.empty()) {
+    return gltf_scenes.front().get();  // use first available scene when no default is specified
+  }
+  return nullptr;
+}
+
+std::vector<Camera> CreateWorldCameras(const std::span<const gltf::Asset> gltf_assets,
+                                       const vk::Extent2D viewport_extent) {
+  auto cameras = gltf_assets  //
+                 | std::views::transform([&viewport_extent](const auto& gltf_asset) {
+                     std::vector<Camera> world_cameras;
+                     world_cameras.reserve(gltf_asset.cameras.size());
+
+                     if (const auto* const default_scene = GetDefaultGltfScene(gltf_asset); default_scene != nullptr) {
+                       for (const auto* const root_node : default_scene->root_nodes) {
+                         assert(root_node != nullptr);  // guaranteed by glTF scene construction
+                         static constexpr glm::mat4 kIdentityTransform{1.0f};
+                         EmplaceWorldCameras(*root_node, kIdentityTransform, viewport_extent, world_cameras);
+                       }
+                     }
+
+                     return world_cameras;
+                   })
+                 | std::views::join  //
+                 | std::ranges::to<std::vector>();
+
+  if (cameras.empty()) {
+    cameras.emplace_back(CreateDefaultCamera(viewport_extent));
+  }
+
+  return cameras;
 }
 
 // =====================================================================================================================
@@ -263,7 +336,7 @@ vk::UniqueDescriptorSetLayout CreateMaterialDescriptorSetLayout(const vk::Device
 }  // namespace
 
 Scene::Scene(const vma::Allocator& allocator, const CreateInfo& create_info)
-    : camera_{CreateCamera(create_info.viewport_extent)},
+    : world_cameras_{CreateWorldCameras(create_info.gltf_assets, create_info.viewport_extent)},
       light_count_{GetLightCount(create_info.gltf_assets)},
       material_descriptor_set_layout_{CreateMaterialDescriptorSetLayout(allocator.device())},
       graphics_pipeline_{
@@ -320,9 +393,10 @@ void Scene::Update(HostVisibleBuffer& camera_uniform_buffer, HostVisibleBuffer& 
     model.Update(node_visitor);
   }
 
-  camera_uniform_buffer.Copy<CameraProperties>(
-      CameraProperties{.view_projection_transform = camera_.projection_transform() * camera_.view_transform(),
-                       .world_position = camera_.position()});
+  const auto& active_camera = camera();
+  camera_uniform_buffer.Copy<CameraProperties>(CameraProperties{
+      .view_projection_transform = active_camera.projection_transform() * active_camera.view_transform(),
+      .world_position = active_camera.position()});
 
   assert(light_count_ == world_lights.size());  // ensure all scene lights are accounted for
   lights_uniform_buffer.Copy<WorldLight>(world_lights);
@@ -335,7 +409,8 @@ void Scene::Render(const vk::CommandBuffer command_buffer, const vk::DescriptorS
   const auto graphics_pipeline_layout = graphics_pipeline_.layout();
   command_buffer.bindDescriptorSets(eGraphics, graphics_pipeline_layout, 0, global_descriptor_set, nullptr);
 
-  for (const ViewFrustum view_frustum{camera_.projection_transform() * camera_.view_transform()};
+  const auto& active_camera = camera();
+  for (const ViewFrustum view_frustum{active_camera.projection_transform() * active_camera.view_transform()};
        const auto& model : models_) {
     model.Render(command_buffer, graphics_pipeline_layout, view_frustum);
   }

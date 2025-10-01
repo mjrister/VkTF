@@ -33,25 +33,6 @@ module :private;
 
 namespace {
 
-vktf::Window CreateWindow() {
-  static constexpr auto* kProjectTitle = "VkTF";
-  vktf::Window window{kProjectTitle};
-
-  window.AddKeyEventListener([&window](const auto key, const auto action) {
-    switch (key) {
-      case GLFW_KEY_ESCAPE:
-        if (action == GLFW_PRESS) {
-          window.Close();
-        }
-        break;
-      default:
-        break;
-    }
-  });
-
-  return window;
-}
-
 void HandleKeyEvents(const vktf::Window& window, vktf::Camera& camera, const vktf::DeltaTime delta_time) {
   static constexpr auto kTranslateSpeed = 6.0f;
   const auto translation_step = kTranslateSpeed * delta_time.get();
@@ -92,10 +73,54 @@ vktf::Scene LoadScene(vktf::Engine& engine) {
 namespace game {
 
 void Start() {
-  const auto window = CreateWindow();
+  static constexpr auto* kProjectTitle = "VkTF";
+  vktf::Window window{kProjectTitle};
   vktf::Engine engine{window};
+  auto scene = LoadScene(engine);
 
-  engine.Run(window, [&window, &engine, scene = LoadScene(engine)](const auto delta_time) mutable {
+  window.AddKeyEventListener([&window, &scene](const auto key, const auto action) {
+    if (action != GLFW_PRESS) return;
+
+    switch (key) {
+      case GLFW_KEY_ESCAPE:
+        window.Close();
+        break;
+      case GLFW_KEY_0:
+        scene.set_active_camera(0);
+        break;
+      case GLFW_KEY_1:
+        scene.set_active_camera(1);
+        break;
+      case GLFW_KEY_2:
+        scene.set_active_camera(2);
+        break;
+      case GLFW_KEY_3:
+        scene.set_active_camera(3);
+        break;
+      case GLFW_KEY_4:
+        scene.set_active_camera(4);
+        break;
+      case GLFW_KEY_5:
+        scene.set_active_camera(5);
+        break;
+      case GLFW_KEY_6:
+        scene.set_active_camera(6);
+        break;
+      case GLFW_KEY_7:
+        scene.set_active_camera(7);
+        break;
+      case GLFW_KEY_8:
+        scene.set_active_camera(8);
+        break;
+      case GLFW_KEY_9:
+        scene.set_active_camera(9);
+        break;
+      default:
+        break;
+    }
+  });
+
+  engine.Run(window, [&window, &engine, &scene](const auto delta_time) mutable {
     auto& camera = scene.camera();
     HandleKeyEvents(window, camera, delta_time);
     HandleMouseEvents(window, camera);

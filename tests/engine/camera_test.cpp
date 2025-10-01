@@ -28,8 +28,8 @@ constexpr auto kForward = -kBackward;
 
 constexpr glm::vec3 kPosition{0.0f, 1.0f, 2.0f};
 constexpr glm::vec3 kDirection{1.0f, 0.0f, 0.0f};
-constexpr vktf::Camera::ViewFrustum kViewFrustum{.field_of_view_y = kHalfPi,
-                                                 .aspect_ratio = 16.0f / 9.0f,
+constexpr vktf::Camera::ViewFrustum kViewFrustum{.aspect_ratio = 16.0f / 9.0f,
+                                                 .field_of_view_y = kHalfPi,
                                                  .z_near = 0.1f,
                                                  .z_far = 1.0e6f};
 
@@ -86,8 +86,9 @@ TEST_F(CameraTest, HasCorrectInitialViewTransform) {
 }
 
 TEST_F(CameraTest, HasCorrectInitialProjectionTransform) {
-  const auto& [field_of_view_y, aspect_ratio, z_near, z_far] = kViewFrustum;
-  auto projection_transform = glm::perspective(field_of_view_y, aspect_ratio, z_near, z_far);
+  const auto& [aspect_ratio, field_of_view_y, z_near, z_far] = kViewFrustum;
+  // TODO: verify infinite perspective
+  auto projection_transform = glm::perspective(field_of_view_y, aspect_ratio, z_near, *z_far);
   projection_transform[1][1] *= -1.0f;  // account for inverted y-axis convention in OpenGL
   ExpectNearEqual(projection_transform, camera_.projection_transform());
 }

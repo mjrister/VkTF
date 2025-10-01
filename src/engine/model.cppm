@@ -113,7 +113,7 @@ public:
     /** @brief The non-owning pointer to the node mesh. */
     const Mesh* mesh = nullptr;
 
-    /** @brief The non-owning pointer to the node light. S*/
+    /** @brief The non-owning pointer to the node light. */
     const Light* light = nullptr;
 
     /** @brief A list of non-owning pointers to the node children. */
@@ -182,8 +182,8 @@ public:
 
 private:
   template <std::invocable<const Node&> Fn>
-  static void Update(Node& node, const glm::mat4& global_transform, Fn&& node_visitor) {
-    node.global_transform = global_transform * node.local_transform;
+  static void Update(Node& node, const glm::mat4& parent_transform, Fn&& node_visitor) {
+    node.global_transform = parent_transform * node.local_transform;
 
     for (const auto& child_node : node.children) {
       assert(child_node != nullptr);  // guaranteed by node construction
@@ -717,7 +717,7 @@ GltfResourceMap<gltf::Node, UniqueNode> CreateNodes(const std::vector<gltf::Uniq
       gltf_nodes  //
       | std::views::transform([&meshes, &lights](const auto& gltf_node) {
           assert(gltf_node != nullptr);  // guaranteed by glTF asset construction
-          const auto& [name, local_transform, gltf_mesh, gltf_light, gltf_cameras, children] = *gltf_node;
+          const auto& [name, local_transform, gltf_mesh, gltf_cameras, gltf_light, children] = *gltf_node;
           const auto& mesh = Get(gltf_mesh, meshes);
           const auto& light = Get(gltf_light, lights);
           return std::pair{gltf_node.get(),

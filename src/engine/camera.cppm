@@ -20,17 +20,20 @@ export class [[nodiscard]] Camera {
 public:
   /** @brief A structure representing view frustum properties for perspective projection. */
   struct [[nodiscard]] ViewFrustum {
-    /** @brief The vertical field of view in radians. */
-    float field_of_view_y = 0.0f;
-
     /** @brief The ratio of the view width divided by its height. */
     float aspect_ratio = 0.0f;
+
+    /** @brief The vertical field of view in radians. */
+    float field_of_view_y = 0.0f;
 
     /** @brief The distance to the z-near plane from the camera origin. */
     float z_near = 0.0f;
 
-    /** @brief The distance to the z-far plane from the camera origin. */
-    float z_far = 0.0f;
+    /**
+     * @brief The distance to the z-far plane from the camera origin.
+     * @note A value of @c std::nullopt indicates an infinite z-far plane.
+     */
+    std::optional<float> z_far;
   };
 
   /**
@@ -94,8 +97,9 @@ glm::mat4 GetViewTransform(const glm::vec3& position, const glm::quat& orientati
 }
 
 glm::mat4 GetProjectionTransform(const Camera::ViewFrustum& view_frustum) {
-  const auto& [field_of_view_y, aspect_ratio, z_near, z_far] = view_frustum;
-  auto projection_transform = glm::perspective(field_of_view_y, aspect_ratio, z_near, z_far);
+  const auto& [aspect_ratio, field_of_view_y, z_near, z_far] = view_frustum;
+  auto projection_transform = z_far.has_value() ? glm::perspective(field_of_view_y, aspect_ratio, z_near, *z_far)
+                                                : glm::infinitePerspective(field_of_view_y, aspect_ratio, z_near);
   projection_transform[1][1] *= -1.0f;  // account for inverted y-axis convention in OpenGL
   return projection_transform;
 }
