@@ -8,11 +8,11 @@ This project requires CMake 3.31 and a compiler that supports the C++23 language
 
 ### Vulkan
 
-This project requires a graphics driver with Vulkan 1.4 support. Because it uses [Vulkan-Hpp](https://github.com/KhronosGroup/Vulkan-Hpp) which provides a dynamic loader implementation, it is unnecessary to manually link against `vulkan-1.lib`. It is therefore not required to download the [Vulkan SDK](https://www.lunarg.com/vulkan-sdk/) for release builds, however, it is still required for debug builds which enable [validation layers](https://vulkan.lunarg.com/doc/view/latest/windows/validation_layers.html) by default.
+This project requires a graphics driver with Vulkan 1.3 support and is built with [Vulkan-Hpp](https://github.com/KhronosGroup/Vulkan-Hpp) which uses a dynamic loading implementation to avoid statically linking against `vulkan-1.lib`. Therefore, it's not required to install the [Vulkan SDK](https://www.lunarg.com/vulkan-sdk/) for release builds; however, it's still required for debug builds which enable [validation layers](https://vulkan.lunarg.com/doc/view/latest/windows/validation_layers.html) by default.
 
 ### Package Management
 
-This project uses [`vcpkg`](https://vcpkg.io) to manage external dependencies.  To get started, run `git submodule update --init` to clone `vcpkg` as a git submodule. Upon completion, CMake will integrate with `vcpkg` to download, compile, and link external libraries specified in the [vcpkg.json](vcpkg.json) manifest when building the project.
+This project uses [`vcpkg`](https://vcpkg.io) to manage external dependencies. To get started, run `git submodule update --init` to clone `vcpkg` as a git submodule. Upon completion, CMake will integrate with `vcpkg` to download, compile, and link external libraries specified in the [vcpkg.json](vcpkg.json) manifest when building the project.
 
 ### Address Sanitizer
 
