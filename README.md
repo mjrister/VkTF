@@ -1,6 +1,21 @@
+
 # VkTF
 
-A Vulkan glTF Physically Based Renderer written in C++23.
+A cross-platform, physically based Vulkan glTF renderer written in C++23.
+
+## Features
+
+* Cross-platform Vulkan renderer written in C++23 with a focus on performance, type safety, and a modular architecture
+* Physically based rendering (PBR) based on the metallic-roughness workflow
+* Data-oriented [glTF 2.0](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html) asset loading pipeline with support for loading multiple models to create a combined scene
+* Multithreaded [KTX 2.0](https://www.khronos.org/ktx/) loading with support for transcoding [Basis Universal](https://github.com/BinomialLLC/basis_universal) supercompressed textures at runtime
+* Runtime GLSL shader compilation using [glslang](https://github.com/KhronosGroup/glslang) with support for loading precompiled SPIR-V binaries
+* Robust memory management with [Vulkan Memory Allocator (VMA)](https://gpuopen.com/vulkan-memory-allocator/)
+* Quaternion based first-person camera implementation
+* View frustum culling
+* Normal mapping
+* Multisample anti-aliasing (MSAA)
+* Configurable and thread-safe logging implementation
 
 ## Requirements
 
