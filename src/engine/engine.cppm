@@ -45,10 +45,10 @@ constexpr std::size_t kMaxRenderFrames = 2;
  * @code
  * const vktf::Window window{"VkTF"};
  * vktf::Engine engine{window};
- * if (auto maybe_scene = engine.Load({"path/to/asset0.gltf", "path/to/asset1.gltf"})) {
- *   engine.Run(window, [&, scene = std::move(*maybe_scene)](const auto delta_time) mutable {
- *     HandleInputEvents(window, scene, delta_time);
- *     engine.Render(scene);
+ * if (auto scene = engine.Load({"path/to/asset0.gltf", "path/to/asset1.gltf"})) {
+ *   engine.Run(window, [&](const auto delta_time) mutable {
+ *     HandleInputEvents(window, *scene, delta_time);
+ *     engine.Render(*scene);
  *   });
  * }
  * @endcode
