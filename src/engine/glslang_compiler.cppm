@@ -115,7 +115,7 @@ constexpr auto kGlslangMessages =
     GLSLANG_MSG_SPV_RULES_BIT | GLSLANG_MSG_VULKAN_RULES_BIT;
 
 template <typename Fn, typename T>
-  requires std::same_as<std::invoke_result_t<Fn, T* const>, const char*>
+  requires std::same_as<std::invoke_result_t<Fn, T*>, const char*>
 void Print(Log& log, const Severity severity, Fn glslang_get_message, T* const glslang_element) {
   if (const auto* const message = glslang_get_message(glslang_element); message != nullptr) {
     if (const auto length = std::strlen(message); length > 0) {
