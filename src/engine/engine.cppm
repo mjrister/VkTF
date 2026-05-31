@@ -137,7 +137,7 @@ namespace vktf {
 
 namespace {
 
-constexpr auto kVulkanApiVersion = vk::ApiVersion14;
+constexpr auto kVulkanApiVersion = vk::ApiVersion13;
 
 constexpr std::initializer_list<const char*> kRequiredInstanceLayers{
 #ifndef NDEBUG
@@ -492,6 +492,7 @@ std::optional<Scene> Engine::Load(const std::span<const std::filesystem::path> g
 
   camera_uniform_buffers_ = CreateUniformBuffers(allocator_, sizeof(Scene::CameraProperties));
   lights_uniform_buffers_ = CreateUniformBuffers(allocator_, sizeof(Scene::WorldLight) * scene.light_count());
+
   const auto& global_descriptor_sets = global_descriptor_pool_.descriptor_sets();
   UpdateGlobalDescriptorSets(*device_, global_descriptor_sets, camera_uniform_buffers_, lights_uniform_buffers_);
 
